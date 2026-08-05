@@ -1,8 +1,8 @@
 import os
 import json
 import asyncio
-from typing import Optional
-from fastapi import FastAPI, HTTPException
+from typing import Optional, List
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -32,24 +32,46 @@ app.mount("/output", StaticFiles(directory=OUTPUT_DIR), name="output")
 class ChatRequest(BaseModel):
     message: str
     num_shots: Optional[int] = 3
+    mode: Optional[str] = "i2v_chaining"
+    reference_assets_b64: Optional[List[str]] = None
 
 class GenerateRequest(BaseModel):
     prompt: str
     num_shots: Optional[int] = 3
     mode: Optional[str] = "i2v_chaining"
+    reference_assets_b64: Optional[List[str]] = None
+
+@app.post("/api/stream")
+async def stream_pipeline_post_endpoint(req: GenerateRequest):
+    """POST streaming endpoint supporting prompt, mode, shots, and reference asset uploads."""
+    return await stream_pipeline(
+        prompt=req.prompt,
+        shots=req.num_shots or 3,
+        mode=req.mode or "i2v_chaining",
+        reference_assets_b64=req.reference_assets_b64 or []
+    )
 
 @app.get("/api/stream")
-async def stream_pipeline_endpoint(prompt: str, shots: Optional[int] = 3, mode: Optional[str] = "i2v_chaining"):
-    """Streams real-time SSE events for each agent step using native ADK Runner execution."""
+async def stream_pipeline_get_endpoint(prompt: str, shots: Optional[int] = 3, mode: Optional[str] = "i2v_chaining"):
+    """GET SSE streaming endpoint for backwards compatibility."""
+    return await stream_pipeline(prompt=prompt, shots=shots or 3, mode=mode or "i2v_chaining", reference_assets_b64=[])
+
+async def stream_pipeline(prompt: str, shots: int, mode: str, reference_assets_b64: List[str]):
+    """Core SSE generator executing all 7 agent stages with complete parameter support."""
     async def event_generator():
         client = get_genai_client()
         num_shots = max(1, min(10, shots or 3))
-        state = PipelineState(original_intent=prompt, num_shots=num_shots, mode=mode or "i2v_chaining")
+        state = PipelineState(
+            original_intent=prompt,
+            num_shots=num_shots,
+            mode=mode if mode in ["reference", "i2v_chaining"] else "i2v_chaining",
+            reference_assets_b64=reference_assets_b64 or []
+        )
         config = Config()
         agents = create_adk_agents(config)
 
         # Step 1: OrchestratorAgent Initialization
-        yield f"data: {json.dumps({'step': 1, 'agent': 'OrchestratorAgent', 'action': 'INITIATE_PIPELINE', 'details': {'prompt': prompt, 'num_shots': state.num_shots, 'mode': state.mode}})}\n\n"
+        yield f"data: {json.dumps({'step': 1, 'agent': 'OrchestratorAgent', 'action': 'INITIATE_PIPELINE', 'details': {'prompt': prompt, 'num_shots': state.num_shots, 'mode': state.mode, 'reference_assets_count': len(state.reference_assets_b64)}})}\n\n"
         await asyncio.sleep(0.3)
 
         # Step 2: ScreenwriterAgent via ADK Runner
@@ -58,7 +80,7 @@ async def stream_pipeline_endpoint(prompt: str, shots: Optional[int] = 3, mode: 
 
         try:
             screenplay_prompt = (
-                f"User request: '{state.original_intent}'. "
+                f"User request: '{state.original_intent}'. Mode: {state.mode}.\n"
                 f"Generate a {state.num_shots}-scene video storyboard with custom quality evaluation criteria for each scene. "
                 f"Return ONLY a JSON list of {state.num_shots} items, where each item has keys: "
                 "'scene_number' (int 1 to N), 'description' (str), 'camera_angle' (str), 'evaluation_criteria' (str)."
@@ -130,7 +152,7 @@ async def stream_pipeline_endpoint(prompt: str, shots: Optional[int] = 3, mode: 
                     optimized_shot_prompt = shot.prompt
 
                 # Step 6: GeminiOmniFlash
-                yield f"data: {json.dumps({'step': 6, 'agent': 'GeminiOmniFlash', 'action': 'RENDER_CLIP', 'details': {'shot_index': shot.shot_index, 'mode': state.mode, 'has_input_image': prev_frame_b64 is not None}})}\n\n"
+                yield f"data: {json.dumps({'step': 6, 'agent': 'GeminiOmniFlash', 'action': 'RENDER_CLIP', 'details': {'shot_index': shot.shot_index, 'mode': state.mode, 'has_input_image': prev_frame_b64 is not None or len(state.reference_assets_b64) > 0}})}\n\n"
 
                 if state.mode == "i2v_chaining":
                     video_bytes = generate_omni_clip(
@@ -148,7 +170,7 @@ async def stream_pipeline_endpoint(prompt: str, shots: Optional[int] = 3, mode: 
                 with open(clip_filename, "wb") as f:
                     f.write(video_bytes)
 
-                # Step 7: QualityRaterAgent via ADK Runner (Passes Orchestrator criteria & MP4 video bytes)
+                # Step 7: QualityRaterAgent via ADK Runner
                 eval_result = evaluate_clip_quality(
                     shot.shot_index,
                     optimized_shot_prompt,
@@ -189,9 +211,10 @@ async def stream_pipeline_endpoint(prompt: str, shots: Optional[int] = 3, mode: 
         yield f"data: {json.dumps({'step': 9, 'agent': 'FFMPEGStitcherTool', 'action': 'CONCATENATE_CLIPS', 'details': {'clips_count': len(generated_clip_paths), 'output_path': state.stitched_video_path, 'final_duration': f'{len(generated_clip_paths)*10}s'}})}\n\n"
         await asyncio.sleep(0.3)
 
-        # Final Event payload with media output URLs
+        # Final Event payload with full media output URLs and shot metadata
         final_payload = {
             "status": "complete",
+            "mode": state.mode,
             "stitched_video_url": f"/output/{video_filename}",
             "shots": [
                 {
@@ -239,7 +262,7 @@ async def serve_index():
             justify-content: center;
         }
         .container {
-            max-width: 1200px;
+            max-width: 1280px;
             width: 100%;
         }
         header {
@@ -265,7 +288,7 @@ async def serve_index():
             gap: 24px;
             margin-bottom: 24px;
         }
-        @media (max-width: 900px) {
+        @media (max-width: 960px) {
             .grid-2 { grid-template-columns: 1fr; }
         }
         .card {
@@ -335,10 +358,11 @@ async def serve_index():
         }
         .label { font-size: 11px; color: var(--muted-text); text-align: center; font-weight: 500; }
 
-        /* Input Group */
-        .input-group {
+        /* Form Controls & Layout */
+        .form-row {
             display: flex;
             gap: 12px;
+            margin-bottom: 14px;
             align-items: center;
         }
         input[type="text"] {
@@ -350,7 +374,7 @@ async def serve_index():
             color: #fff;
             font-size: 15px;
         }
-        select {
+        select, input[type="file"] {
             padding: 14px 14px;
             border-radius: 10px;
             border: 1px solid var(--border-color);
@@ -359,6 +383,54 @@ async def serve_index():
             font-size: 14px;
             cursor: pointer;
         }
+        .mode-box {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 14px;
+        }
+        .mode-option {
+            flex: 1;
+            padding: 12px 16px;
+            border-radius: 10px;
+            border: 1px solid var(--border-color);
+            background: #090d16;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+        .mode-option.selected {
+            border-color: var(--accent);
+            background: rgba(99, 102, 241, 0.15);
+        }
+        .mode-option input { cursor: pointer; }
+
+        /* Reference Image Uploader */
+        .ref-upload-container {
+            display: none;
+            margin-bottom: 14px;
+            padding: 14px;
+            background: #090d16;
+            border: 1px dashed var(--border-color);
+            border-radius: 10px;
+        }
+        .ref-upload-container.visible { display: block; }
+        .preview-thumbs {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+            flex-wrap: wrap;
+        }
+        .thumb-img {
+            width: 60px;
+            height: 60px;
+            border-radius: 6px;
+            object-fit: cover;
+            border: 1px solid var(--accent);
+        }
+
         button {
             padding: 14px 28px;
             border-radius: 10px;
@@ -372,6 +444,14 @@ async def serve_index():
         }
         button:hover { background-color: var(--accent-hover); transform: translateY(-1px); }
         button:disabled { background-color: #475569; cursor: not-allowed; transform: none; }
+        .btn-secondary {
+            background-color: #334155;
+            padding: 8px 16px;
+            font-size: 13px;
+            border-radius: 6px;
+        }
+        .btn-secondary:hover { background-color: #475569; }
+
         .spinner {
             display: none;
             text-align: center;
@@ -383,7 +463,7 @@ async def serve_index():
 
         /* Trajectory Audit Log Feed */
         .trajectory-feed {
-            height: 320px;
+            height: 380px;
             overflow-y: auto;
             border: 1px solid var(--border-color);
             border-radius: 10px;
@@ -426,7 +506,7 @@ async def serve_index():
         video { width: 100%; border-radius: 10px; background: #000; margin-top: 12px; }
         .shots-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
             gap: 16px;
             margin-top: 16px;
         }
@@ -436,9 +516,10 @@ async def serve_index():
             border-radius: 10px;
             border: 1px solid var(--border-color);
         }
-        .shot-card h4 { margin: 0 0 8px 0; color: #38bdf8; font-size: 16px; }
+        .shot-card h4 { margin: 0 0 8px 0; color: #38bdf8; font-size: 16px; display: flex; justify-content: space-between; }
         .shot-card p { margin: 0 0 10px 0; font-size: 13px; color: var(--muted-text); line-height: 1.4; }
         img.frame-img { width: 100%; border-radius: 8px; margin-top: 8px; border: 1px solid var(--border-color); }
+        .action-row { display: flex; gap: 10px; margin-top: 14px; }
     </style>
 </head>
 <body>
@@ -465,16 +546,46 @@ async def serve_index():
             <!-- Execution Control Card -->
             <div class="card">
                 <h3>🚀 Multi-Agent Studio Control</h3>
-                <div class="input-group">
-                    <input type="text" id="promptInput" value="A red panda skiing in Hakuba" placeholder="Enter video prompt...">
+                
+                <!-- Pipeline Mode Selection -->
+                <label style="font-size: 13px; color: var(--muted-text); margin-bottom: 6px; display: block;">Pipeline Generation Mode:</label>
+                <div class="mode-box">
+                    <div class="mode-option selected" id="mode-i2v" onclick="selectMode('i2v_chaining')">
+                        <input type="radio" name="mode" value="i2v_chaining" checked>
+                        <div>
+                            <strong>⚡ Sequential I2V Chaining</strong>
+                            <div style="font-size: 11px; color: var(--muted-text);">OpenCV terminal frame extraction for unbroken motion continuity</div>
+                        </div>
+                    </div>
+                    <div class="mode-option" id="mode-ref" onclick="selectMode('reference')">
+                        <input type="radio" name="mode" value="reference">
+                        <div>
+                            <strong>🎨 Asset Reference Mode</strong>
+                            <div style="font-size: 11px; color: var(--muted-text);">Shared character & style image reference anchors</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Reference Images Upload (Visible in Reference Mode) -->
+                <div class="ref-upload-container" id="refUploadBox">
+                    <label style="font-size: 12px; color: #38bdf8;">📷 Upload Character & Asset Reference Images (PNG/JPG):</label>
+                    <input type="file" id="refImageInput" multiple accept="image/*" onchange="handleRefImages(event)" style="margin-top: 6px; width: 100%;">
+                    <div class="preview-thumbs" id="refThumbs"></div>
+                </div>
+
+                <!-- Prompt & Shots Row -->
+                <div class="form-row">
+                    <input type="text" id="promptInput" value="A red panda skiing in Hakuba" placeholder="Enter video prompt intent...">
                     <select id="shotsSelect">
                         <option value="2">2 Shots (20s)</option>
                         <option value="3" selected>3 Shots (30s)</option>
                         <option value="4">4 Shots (40s)</option>
                         <option value="5">5 Shots (50s)</option>
+                        <option value="6">6 Shots (60s)</option>
                     </select>
-                    <button id="genBtn" onclick="runPipeline()">Execute Pipeline</button>
                 </div>
+
+                <button id="genBtn" onclick="runPipeline()" style="width: 100%;">🚀 Execute Multi-Agent Graph</button>
                 <div class="spinner" id="spinner">⚙️ Real-Time Multi-Agent SSE Stream Active...</div>
             </div>
 
@@ -494,13 +605,51 @@ async def serve_index():
         <div class="card" id="resultCard" style="display: none;">
             <h3 id="stitchedTitle">🎬 Stitched Output Video</h3>
             <video id="stitchedVideo" controls autoplay preload="metadata"></video>
+            
+            <div class="action-row">
+                <a id="downloadBtn" download="output_stitched.mp4" class="btn-secondary" style="text-decoration: none; color: #fff;">💾 Download Stitched MP4 Video</a>
+            </div>
 
-            <h3 style="margin-top: 28px;">🎞️ Individual Shot Breakdown & Terminal Frames</h3>
+            <h3 style="margin-top: 28px;">🎞️ Individual Shot Breakdown, Orchestrator Criteria & Terminal Frames</h3>
             <div class="shots-grid" id="shotsGrid"></div>
         </div>
     </div>
 
     <script>
+        let selectedMode = "i2v_chaining";
+        let refImagesB64 = [];
+
+        function selectMode(mode) {
+            selectedMode = mode;
+            document.getElementById("mode-i2v").classList.toggle("selected", mode === "i2v_chaining");
+            document.getElementById("mode-ref").classList.toggle("selected", mode === "reference");
+            document.querySelector(`input[value="${mode}"]`).checked = true;
+
+            const refBox = document.getElementById("refUploadBox");
+            if (mode === "reference") {
+                refBox.classList.add("visible");
+            } else {
+                refBox.classList.remove("visible");
+            }
+        }
+
+        function handleRefImages(event) {
+            const files = event.target.files;
+            const thumbsContainer = document.getElementById("refThumbs");
+            thumbsContainer.innerHTML = "";
+            refImagesB64 = [];
+
+            Array.from(files).slice(0, 10).forEach(file => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const b64 = e.target.result.split(',')[1];
+                    refImagesB64.push(b64);
+                    thumbsContainer.innerHTML += `<img class="thumb-img" src="${e.target.result}" alt="Ref Thumb">`;
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+
         function setStep(stepNum) {
             for (let i = 1; i <= 9; i++) {
                 const step = document.getElementById(`step-${i}`);
@@ -528,9 +677,9 @@ async def serve_index():
             feed.scrollTop = feed.scrollHeight;
         }
 
-        function runPipeline() {
+        async function runPipeline() {
             const prompt = document.getElementById("promptInput").value.trim();
-            const shots = document.getElementById("shotsSelect").value;
+            const shots = parseInt(document.getElementById("shotsSelect").value, 10);
             if (!prompt) return;
 
             const genBtn = document.getElementById("genBtn");
@@ -544,59 +693,88 @@ async def serve_index():
             trajectoryFeed.innerHTML = "";
             setStep(1);
 
-            // Open Server-Sent Events (SSE) Stream
-            const eventSource = new EventSource(`/api/stream?prompt=${encodeURIComponent(prompt)}&shots=${shots}`);
+            // Execute POST API call to stream endpoint with full parameters (mode, reference images, shots, prompt)
+            try {
+                const res = await fetch("/api/stream", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({
+                        prompt: prompt,
+                        num_shots: shots,
+                        mode: selectedMode,
+                        reference_assets_b64: refImagesB64
+                    })
+                });
 
-            eventSource.onmessage = (event) => {
-                const data = JSON.parse(event.data);
+                const reader = res.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = "";
 
-                if (data.step) {
-                    setStep(data.step);
-                }
+                while (true) {
+                    const { value, done } = await reader.read();
+                    if (done) break;
+                    buffer += decoder.decode(value, { stream: true });
 
-                if (data.agent && data.action) {
-                    appendLog(data.agent, data.action, data.details);
-                }
+                    const lines = buffer.split("\n\n");
+                    buffer = lines.pop(); // Keep partial frame
 
-                if (data.action === "PIPELINE_COMPLETE" && data.details && data.details.status === "complete") {
-                    eventSource.close();
-                    genBtn.disabled = false;
-                    spinner.style.display = "none";
+                    for (const line of lines) {
+                        if (line.startsWith("data: ")) {
+                            const data = JSON.parse(line.replace("data: ", ""));
 
-                    setStep(9);
-                    for (let i = 1; i <= 9; i++) {
-                        document.getElementById(`step-${i}`).classList.add("complete");
+                            if (data.step) {
+                                setStep(data.step);
+                            }
+
+                            if (data.agent && data.action) {
+                                appendLog(data.agent, data.action, data.details);
+                            }
+
+                            if (data.action === "PIPELINE_COMPLETE" && data.details && data.details.status === "complete") {
+                                genBtn.disabled = false;
+                                spinner.style.display = "none";
+
+                                setStep(9);
+                                for (let i = 1; i <= 9; i++) {
+                                    document.getElementById(`step-${i}`).classList.add("complete");
+                                }
+
+                                document.getElementById("stitchedTitle").innerText = `🎬 Stitched ${data.details.shots.length * 10}s Output Video (${data.details.mode} mode)`;
+                                const video = document.getElementById("stitchedVideo");
+                                const videoUrl = data.details.stitched_video_url + "?t=" + new Date().getTime();
+                                video.src = videoUrl;
+                                video.load();
+
+                                const downloadBtn = document.getElementById("downloadBtn");
+                                downloadBtn.href = data.details.stitched_video_url;
+
+                                const grid = document.getElementById("shotsGrid");
+                                grid.innerHTML = "";
+                                data.details.shots.forEach(shot => {
+                                    grid.innerHTML += `
+                                        <div class="shot-card">
+                                            <h4>
+                                                <span>Shot #${shot.shot_index}</span>
+                                                <a href="${shot.video_url}" download class="btn-secondary" style="font-size: 11px; text-decoration: none; padding: 4px 8px;">💾 Download MP4</a>
+                                            </h4>
+                                            <p><strong>Prompt:</strong> ${shot.prompt}</p>
+                                            <p style="color: #f472b6; font-size: 12px;"><strong>Orchestrator Criteria:</strong> ${shot.evaluation_criteria || 'Visual coherence & character lock'}</p>
+                                            <video controls preload="metadata" src="${shot.video_url}?t=${new Date().getTime()}"></video>
+                                            <p style="margin-top: 10px; color: #38bdf8;"><strong>OpenCV Last Frame (I2V Chaining):</strong></p>
+                                            <img class="frame-img" src="${shot.frame_url}?t=${new Date().getTime()}" alt="Shot ${shot.shot_index} Last Frame">
+                                        </div>
+                                    `;
+                                });
+                                resultCard.style.display = "block";
+                            }
+                        }
                     }
-
-                    document.getElementById("stitchedTitle").innerText = `🎬 Stitched ${data.details.shots.length * 10}s Output Video`;
-                    const video = document.getElementById("stitchedVideo");
-                    video.src = data.details.stitched_video_url + "?t=" + new Date().getTime();
-                    video.load();
-
-                    const grid = document.getElementById("shotsGrid");
-                    grid.innerHTML = "";
-                    data.details.shots.forEach(shot => {
-                        grid.innerHTML += `
-                            <div class="shot-card">
-                                <h4>Shot #${shot.shot_index}</h4>
-                                <p>${shot.prompt}</p>
-                                <p style="color: #f472b6; font-size: 12px;"><strong>Orchestrator Criteria:</strong> ${shot.evaluation_criteria || 'Visual coherence & character lock'}</p>
-                                <video controls preload="metadata" src="${shot.video_url}?t=${new Date().getTime()}"></video>
-                                <p style="margin-top: 10px; color: #38bdf8;"><strong>OpenCV Last Frame (I2V Chaining):</strong></p>
-                                <img class="frame-img" src="${shot.frame_url}?t=${new Date().getTime()}" alt="Shot ${shot.shot_index} Last Frame">
-                            </div>
-                        `;
-                    });
-                    resultCard.style.display = "block";
                 }
-            };
-
-            eventSource.onerror = (err) => {
-                console.error("SSE Error:", err);
-                eventSource.close();
+            } catch (err) {
+                alert("Execution error: " + err);
                 genBtn.disabled = false;
                 spinner.style.display = "none";
-            };
+            }
         }
     </script>
 </body>
