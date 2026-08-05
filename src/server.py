@@ -627,8 +627,8 @@ async def serve_index():
                         <div style="font-size: 26px; margin-bottom: 4px;">🖼️</div>
                         <div><strong>Click or Drag & Drop Reference Images Here</strong></div>
                         <div style="font-size: 11px; color: var(--muted-text); margin-top: 4px;">PNG, JPG, WEBP (Passed as reference visual anchors to Gemini Omni Flash)</div>
-                        <input type="file" id="refFileInput" multiple accept="image/*" onchange="handleRefFiles(event)" style="display: none;">
                     </label>
+                    <input type="file" id="refFileInput" multiple accept="image/*" onchange="handleRefFiles(event)" style="display: none;">
                     <div class="preview-grid" id="refPreviewGrid"></div>
                 </div>
 
@@ -689,28 +689,31 @@ async def serve_index():
         }
 
         async function handleRefFiles(event) {
-            const files = event.target.files;
+            const files = event.target ? event.target.files : (event.dataTransfer ? event.dataTransfer.files : null);
             if (!files || files.length === 0) return;
 
             const remainingSlots = 10 - refImagesB64.length;
             const fileList = Array.from(files).slice(0, remainingSlots);
 
-            const readPromises = fileList.map(file => {
-                return new Promise((resolve) => {
-                    const reader = new FileReader();
-                    reader.onload = (e) => {
-                        const b64 = e.target.result.split(',')[1];
-                        resolve(b64);
-                    };
-                    reader.readAsDataURL(file);
-                });
-            });
+            for (const file of fileList) {
+                try {
+                    const b64 = await new Promise((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onload = (e) => resolve(e.target.result.split(',')[1]);
+                        reader.onerror = (err) => reject(err);
+                        reader.readAsDataURL(file);
+                    });
+                    if (b64) {
+                        refImagesB64.push(b64);
+                    }
+                } catch (err) {
+                    console.error("Error reading reference image file:", err);
+                }
+            }
 
-            const newB64s = await Promise.all(readPromises);
-            refImagesB64.push(...newB64s);
-
-            // Reset file input so re-selecting same files triggers onchange
-            event.target.value = "";
+            if (event.target) {
+                event.target.value = "";
+            }
 
             renderRefGrid();
         }
@@ -756,9 +759,7 @@ async def serve_index():
         });
 
         dropZone.addEventListener('drop', (e) => {
-            const dt = e.dataTransfer;
-            const files = dt.files;
-            handleRefFiles({ target: { files: files, value: "" } });
+            handleRefFiles(e);
         }, false);
 
         function setStep(stepNum) {
