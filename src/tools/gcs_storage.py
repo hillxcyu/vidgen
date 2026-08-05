@@ -14,6 +14,20 @@ def get_default_bucket_name() -> str:
     project_id = config.PROJECT_ID or "universal-trail-492014-n5"
     return f"{project_id}-vidgen-showcase"
 
+def get_gcs_output_uri(run_id: str, filename: str) -> str:
+    """Constructs a direct GCS target URI (gs://<bucket>/showcase/<run_id>/<filename>) for direct model output writing."""
+    bucket_name = get_default_bucket_name()
+    return f"gs://{bucket_name}/showcase/{run_id}/{filename}"
+
+def gcs_uri_to_https_url(gcs_uri: str) -> str:
+    """Converts gs://bucket/path/to/file to https://storage.googleapis.com/bucket/path/to/file."""
+    if gcs_uri and gcs_uri.startswith("gs://"):
+        parts = gcs_uri[5:].split("/", 1)
+        bucket = parts[0]
+        blob = parts[1] if len(parts) > 1 else ""
+        return f"https://storage.googleapis.com/{bucket}/{blob}"
+    return gcs_uri or ""
+
 def get_storage_client() -> Optional[Any]:
     """Returns a Google Cloud Storage client instance or None if unauthenticated/offline."""
     try:

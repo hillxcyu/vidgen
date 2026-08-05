@@ -244,8 +244,12 @@ async def stream_pipeline(
                     duration=state.duration
                 )
 
+                from src.tools.gcs_storage import get_gcs_output_uri
+                run_id_str = f"run_{session_id}"
+                target_gcs_uri = get_gcs_output_uri(run_id_str, f"shot_{shot.shot_index}.mp4")
+
                 # Step 6: GeminiOmniFlash
-                yield f"data: {json.dumps({'step': 6, 'agent': 'GeminiOmniFlash', 'action': 'RENDER_CLIP', 'details': {'shot_index': shot.shot_index, 'mode': state.mode, 'control_string': control_str, 'has_input_image': prev_frame_b64 is not None or len(state.reference_assets_b64) > 0, 'has_audio_reference': len(active_audio_b64) > 0}})}\n\n"
+                yield f"data: {json.dumps({'step': 6, 'agent': 'GeminiOmniFlash', 'action': 'RENDER_CLIP', 'details': {'shot_index': shot.shot_index, 'mode': state.mode, 'control_string': control_str, 'gcs_output_uri': target_gcs_uri, 'has_input_image': prev_frame_b64 is not None or len(state.reference_assets_b64) > 0, 'has_audio_reference': len(active_audio_b64) > 0}})}\n\n"
 
                 video_bytes = generate_omni_clip(
                     prompt=optimized_shot_prompt,
@@ -256,6 +260,7 @@ async def stream_pipeline(
                     aspect_ratio=state.aspect_ratio,
                     resolution=state.resolution,
                     duration=state.duration,
+                    gcs_output_uri=target_gcs_uri,
                     client=client
                 )
 
