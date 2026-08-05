@@ -430,6 +430,24 @@ async def serve_index():
             border-color: #38bdf8;
             background: rgba(56, 189, 248, 0.05);
         }
+        
+        /* Native Button Label Styling */
+        label.btn-file-select {
+            display: inline-block;
+            background-color: #334155;
+            color: #fff;
+            padding: 10px 18px;
+            font-size: 13px;
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+            user-select: none;
+            transition: background-color 0.2s;
+        }
+        label.btn-file-select:hover {
+            background-color: #475569;
+        }
+
         .drop-zone {
             padding: 16px;
             text-align: center;
@@ -624,12 +642,11 @@ async def serve_index():
                         <span class="badge badge-info" id="refCountBadge">0 assets</span>
                     </div>
                     
-                    <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 12px;">
-                        <button type="button" class="btn-secondary" onclick="triggerFileInput()" style="padding: 10px 18px; font-size: 13px; font-weight: 600;">📁 Choose Image Files</button>
+                    <div style="display: flex; gap: 12px; align-items: center; margin-bottom: 12px;">
+                        <label for="refFileInput" class="btn-file-select">📁 Choose Image Files</label>
                         <span style="font-size: 12px; color: var(--muted-text);">Select up to 10 PNG, JPG, WEBP images</span>
+                        <input type="file" id="refFileInput" multiple accept="image/*" onchange="handleRefFiles(event)" style="position: absolute; width: 0; height: 0; opacity: 0; pointer-events: none;">
                     </div>
-
-                    <input type="file" id="refFileInput" multiple accept="image/*" onchange="handleRefFiles(event)" style="display: none;">
 
                     <div class="drop-zone" id="dropZone">
                         <div style="font-size: 22px; margin-bottom: 4px;">🖼️</div>
@@ -697,13 +714,6 @@ async def serve_index():
             }
         }
 
-        function triggerFileInput() {
-            var fileInput = document.getElementById("refFileInput");
-            if (fileInput) {
-                fileInput.click();
-            }
-        }
-
         async function handleRefFiles(event) {
             var files = null;
             if (event.target && event.target.files && event.target.files.length > 0) {
@@ -738,7 +748,7 @@ async def serve_index():
                 }
             }
 
-            if (event.target) {
+            if (event.target && event.target.value) {
                 event.target.value = "";
             }
 
