@@ -132,7 +132,7 @@ def optimize_prompt(raw_prompt: str, feedback: Optional[str] = None, client: Opt
     full_prompt = (
         f"Raw Shot Description: '{raw_prompt}'.{feedback_context}\n"
         "Generate an enhanced, highly-detailed cinematic prompt optimized for Gemini Omni Flash video generation. "
-        "Keep it concise, under 60 words, focusing on lighting, camera motion, and visual clarity."
+        "Keep it concise, under 60 words, focusing on lighting, camera motion, visual clarity, and object persistence."
     )
 
     try:
@@ -182,7 +182,8 @@ def evaluate_clip_quality(
 
     eval_prompt = (
         f"Visually inspect and evaluate shot #{shot_index} generated for prompt: '{prompt}'.{criteria_context}\n"
-        "Check character identity lock, motion smoothness, lighting stability, and adherence to Orchestrator criteria.\n"
+        "Conduct a temporal audit for object stability: check character identity lock, motion smoothness, lighting, "
+        "and verify that key visual assets, subject accessories, garments, and props do not abruptly vanish, flicker, or re-emerge mid-clip.\n"
         "Return ONLY a JSON object with keys: 'score' (float 0.0 - 1.0) and 'feedback' (str)."
     )
 
@@ -218,7 +219,8 @@ def run_pre_production(state: PipelineState, client: Optional[genai.Client] = No
     if not state.storyboard:
         prompt = (
             f"User request: '{state.original_intent}'. "
-            f"Generate a {state.num_shots}-scene video storyboard with custom quality inspection criteria for each scene. "
+            f"Generate a {state.num_shots}-scene video storyboard with custom quality evaluation criteria for each scene. "
+            "Ensure criteria audit character identity lock, smooth motion, and object persistence (confirming visual assets, props, and garments do not vanish or re-emerge).\n"
             f"Return ONLY a JSON list of {state.num_shots} items, where each item has keys: "
             "'scene_number' (int 1 to N), 'description' (str), 'camera_angle' (str), 'evaluation_criteria' (str)."
         )
@@ -235,7 +237,7 @@ def run_pre_production(state: PipelineState, client: Optional[genai.Client] = No
                     scene_number=item.get("scene_number", idx + 1),
                     description=item.get("description", f"Scene {idx + 1}"),
                     camera_angle=item.get("camera_angle", "medium"),
-                    evaluation_criteria=item.get("evaluation_criteria", "Check character identity lock and smooth motion.")
+                    evaluation_criteria=item.get("evaluation_criteria", "Check character identity lock, smooth motion, and object persistence.")
                 )
                 for idx, item in enumerate(raw_storyboard[:state.num_shots])
             ]
@@ -246,7 +248,7 @@ def run_pre_production(state: PipelineState, client: Optional[genai.Client] = No
                     scene_number=i + 1,
                     description=f"{state.original_intent} - Shot {i + 1}",
                     camera_angle=angles[i % len(angles)],
-                    evaluation_criteria="Check character identity lock, lighting stability, and smooth motion."
+                    evaluation_criteria="Check character identity lock, lighting stability, smooth motion, and object persistence (no popping or vanishing assets)."
                 )
                 for i in range(state.num_shots)
             ]
@@ -369,7 +371,7 @@ def run_production_loop(state: PipelineState, output_dir: str = "/tmp/vidgen_out
             if score >= 0.8 or attempt == max_attempts - 1:
                 break
             else:
-                feedback = eval_result.get("feedback", "Refine visual continuity")
+                feedback = eval_result.get("feedback", "Refine visual continuity and prevent object disappearance")
 
         shot.video_path = clip_filename
         shot.status = "completed"

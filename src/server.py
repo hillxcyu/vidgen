@@ -82,6 +82,7 @@ async def stream_pipeline(prompt: str, shots: int, mode: str, reference_assets_b
             screenplay_prompt = (
                 f"User request: '{state.original_intent}'. Mode: {state.mode}.\n"
                 f"Generate a {state.num_shots}-scene video storyboard with custom quality evaluation criteria for each scene. "
+                "Ensure criteria audit character identity lock, smooth motion, and object persistence (confirming visual assets, props, and garments do not vanish or re-emerge).\n"
                 f"Return ONLY a JSON list of {state.num_shots} items, where each item has keys: "
                 "'scene_number' (int 1 to N), 'description' (str), 'camera_angle' (str), 'evaluation_criteria' (str)."
             )
@@ -97,7 +98,7 @@ async def stream_pipeline(prompt: str, shots: int, mode: str, reference_assets_b
                     scene_number=item.get("scene_number", idx + 1),
                     description=item.get("description", f"Scene {idx + 1}"),
                     camera_angle=item.get("camera_angle", "medium"),
-                    evaluation_criteria=item.get("evaluation_criteria", "Check character identity lock and smooth motion.")
+                    evaluation_criteria=item.get("evaluation_criteria", "Check character identity lock, smooth motion, and object persistence.")
                 )
                 for idx, item in enumerate(raw_storyboard[:state.num_shots])
             ]
@@ -108,7 +109,7 @@ async def stream_pipeline(prompt: str, shots: int, mode: str, reference_assets_b
                     scene_number=i + 1,
                     description=f"{state.original_intent} - Shot {i + 1}",
                     camera_angle=angles[i % len(angles)],
-                    evaluation_criteria="Check character identity lock, lighting stability, and smooth motion."
+                    evaluation_criteria="Check character identity lock, lighting stability, smooth motion, and object persistence (no popping or vanishing assets)."
                 )
                 for i in range(state.num_shots)
             ]
@@ -187,7 +188,7 @@ async def stream_pipeline(prompt: str, shots: int, mode: str, reference_assets_b
                 if score >= 0.8 or attempt == max_attempts - 1:
                     break
                 else:
-                    feedback = eval_result.get("feedback", "Refine visual continuity")
+                    feedback = eval_result.get("feedback", "Refine visual continuity and prevent object disappearance")
 
             shot.video_path = clip_filename
             shot.status = "completed"
