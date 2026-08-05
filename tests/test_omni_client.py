@@ -20,7 +20,20 @@ def test_build_omni_control_string_reference_mode():
         resolution="1080p",
         duration=5
     )
-    assert ctrl_str == "[# References <IMAGE_REF_0>image_0.png <IMAGE_REF_1>image_1.png] [aspect_ratio=9:16] [resolution=1080p] [duration=5s] A panda riding a skateboard"
+    assert ctrl_str == "[# References <IMAGE_REF_0>[Character A]image_0.png <IMAGE_REF_1>[Character A]image_1.png] [aspect_ratio=9:16] [resolution=1080p] [duration=5s] A panda riding a skateboard"
+
+def test_build_omni_control_string_voice_audio_reference():
+    ctrl_str = build_omni_control_string(
+        prompt="A character speaking on stage",
+        reference_images_b64=["ref1_b64"],
+        reference_audio_b64=["audio1_b64"],
+        voice_transcript="Hello world, welcome to GenMedia!",
+        aspect_ratio="16:9",
+        resolution="720p",
+        duration=10
+    )
+    assert "[# References <IMAGE_REF_0>[Character A]image_0.png <AUDIO_REF_0>[Character A]audio_0.wav]" in ctrl_str
+    assert "Character A speaks dialogue: \"Hello world, welcome to GenMedia!\"" in ctrl_str
 
 def test_generate_omni_clip_i2v_mode():
     mock_client = MagicMock()
@@ -63,4 +76,4 @@ def test_generate_omni_clip_reference_mode():
     assert call_args["input"][0]["type"] == "image"
     assert call_args["input"][1]["type"] == "image"
     assert call_args["input"][2]["type"] == "text"
-    assert call_args["input"][2]["text"] == "[# References <IMAGE_REF_0>image_0.png <IMAGE_REF_1>image_1.png] [aspect_ratio=16:9] [resolution=720p] [duration=10s] A panda riding a skateboard"
+    assert call_args["input"][2]["text"] == "[# References <IMAGE_REF_0>[Character A]image_0.png <IMAGE_REF_1>[Character A]image_1.png] [aspect_ratio=16:9] [resolution=720p] [duration=10s] A panda riding a skateboard"

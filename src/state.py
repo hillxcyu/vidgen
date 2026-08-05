@@ -23,7 +23,9 @@ class PipelineState(BaseModel):
     aspect_ratio: str = "16:9"
     resolution: str = "720p"
     duration: int = 10
+    voice_transcript: Optional[str] = None
     reference_assets_b64: List[str] = Field(default_factory=list)
+    reference_audio_b64: List[str] = Field(default_factory=list)
     screenplay_draft: Optional[str] = None
     storyboard: List[StoryboardEntry] = Field(default_factory=list)
     shots: List[VideoShot] = Field(default_factory=list)

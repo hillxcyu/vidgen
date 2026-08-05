@@ -448,6 +448,12 @@
                     </div>
                 </div>
 
+                <!-- Voice / Dialogue Transcript Section -->
+                <div style="margin-bottom: 14px;">
+                    <label style="font-size: 11px; color: var(--muted-text); display: block; margin-bottom: 4px;">🎙️ Voice & Spoken Dialogue Transcript (Optional)</label>
+                    <textarea id="transcriptInput" rows="2" placeholder="Enter spoken transcript lines (e.g., 'Welcome to Hakuba! Follow me down the snowy slope.')..." style="width: 100%; border-radius: 8px; background: #0f172a; color: #fff; border: 1px solid #334155; padding: 10px; font-family: inherit; font-size: 13px; resize: vertical;"></textarea>
+                </div>
+
                 <!-- Prompt & Shots Row -->
                 <div class="form-row">
                     <input type="text" id="promptInput" value="A red panda skiing in Hakuba" placeholder="Enter video prompt intent...">
@@ -493,6 +499,7 @@
     <script>
         window.selectedMode = "i2v_chaining";
         window.refImagesB64 = [];
+        window.refAudioB64 = [];
 
         window.selectMode = function(mode) {
             window.selectedMode = mode;
@@ -645,6 +652,8 @@
             var resVal = resSelect ? resSelect.value : "720p";
             var durationSelect = document.getElementById("durationSelect");
             var durationVal = durationSelect ? parseInt(durationSelect.value, 10) : 10;
+            var transcriptInput = document.getElementById("transcriptInput");
+            var transcriptVal = transcriptInput ? transcriptInput.value.trim() : "";
 
             if (!prompt) return;
 
@@ -659,7 +668,7 @@
             if (trajectoryFeed) trajectoryFeed.innerHTML = "";
             setStep(1);
 
-            // Execute POST API call to stream endpoint with full parameters & control string configuration
+            // Execute POST API call to stream endpoint with full parameters, control string configuration, and voice transcript
             try {
                 var res = await fetch("/api/stream", {
                     method: "POST",
@@ -671,7 +680,9 @@
                         aspect_ratio: aspect,
                         resolution: resVal,
                         duration: durationVal,
-                        reference_assets_b64: window.refImagesB64
+                        voice_transcript: transcriptVal,
+                        reference_assets_b64: window.refImagesB64,
+                        reference_audio_b64: window.refAudioB64
                     })
                 });
 

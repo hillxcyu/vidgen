@@ -12,34 +12,54 @@ def build_omni_control_string(
     input_image_b64: Optional[str] = None,
     reference_images_b64: Optional[List[str]] = None,
     reference_assets_b64: Optional[List[str]] = None,
+    reference_audio_b64: Optional[List[str]] = None,
+    voice_transcript: Optional[str] = None,
     aspect_ratio: str = "16:9",
     resolution: str = "720p",
     duration: int = 10,
 ) -> str:
     """Builds Gemini Omni Control String according to Google Omni / Video Station specification.
     
+    Supports:
+    - Image Reference tags: <IMAGE_REF_i>[Character A]image_i.png
+    - Audio Reference tags: <AUDIO_REF_i>[Character A]audio_i.wav
+    - Spoken dialogue / transcript matching across shots for voice consistency
+    
     Format:
     [MMC_MODE_STRING] [aspect_ratio=VALUE] [resolution=VALUE] [duration=VALUEs] <user prompt>
     
     Examples:
     - I2V: "[# Sources <FIRST_FRAME>image_0.png] [aspect_ratio=16:9] [resolution=720p] [duration=10s] A red panda skiing"
-    - R2V: "[# References <IMAGE_REF_0>image_0.png <IMAGE_REF_1>image_1.png] [aspect_ratio=16:9] [resolution=720p] [duration=10s] A red panda skiing"
+    - R2V with Voice: "[# References <IMAGE_REF_0>[Character A]image_0.png <AUDIO_REF_0>[Character A]audio_0.wav] [aspect_ratio=16:9] [resolution=720p] [duration=10s] Character A speaks dialogue: 'Welcome to Hakuba!'"
     """
     ref_imgs = reference_images_b64 if reference_images_b64 is not None else reference_assets_b64
+    ref_auds = reference_audio_b64 or []
     mmc_parts = []
+    ref_tags = []
 
     # Mode B: Image-to-Video Chaining (First Frame Source)
     if input_image_b64:
         mmc_parts.append("# Sources <FIRST_FRAME>image_0.png")
-    # Mode A: Shared Asset Reference Mode (Image References)
-    elif ref_imgs and len(ref_imgs) > 0:
-        ref_tags = [f"<IMAGE_REF_{i}>image_{i}.png" for i in range(min(10, len(ref_imgs)))]
+    
+    # Mode A / Reference Mode: Image and Audio Character References
+    if ref_imgs and len(ref_imgs) > 0:
+        ref_tags.extend([f"<IMAGE_REF_{i}>[Character A]image_{i}.png" for i in range(min(10, len(ref_imgs)))])
+    
+    if ref_auds and len(ref_auds) > 0:
+        ref_tags.extend([f"<AUDIO_REF_{i}>[Character A]audio_{i}.wav" for i in range(min(5, len(ref_auds)))])
+
+    if ref_tags:
         mmc_parts.append(f"# References {' '.join(ref_tags)}")
 
     mmc_mode_str = f"[{' '.join(mmc_parts)}] " if mmc_parts else ""
     fc_args_str = f"[aspect_ratio={aspect_ratio}] [resolution={resolution}] [duration={duration}s]"
 
-    full_control_string = f"{mmc_mode_str}{fc_args_str} {prompt}".strip()
+    # Append voice transcript / dialogue instruction if provided
+    prompt_content = prompt
+    if voice_transcript and voice_transcript.strip():
+        prompt_content = f"{prompt}. Character A speaks dialogue: \"{voice_transcript.strip()}\""
+
+    full_control_string = f"{mmc_mode_str}{fc_args_str} {prompt_content}".strip()
     return full_control_string
 
 def _create_fallback_mp4_bytes(prompt: str) -> bytes:
@@ -71,6 +91,8 @@ def generate_omni_clip(
     input_image_b64: Optional[str] = None,
     reference_images_b64: Optional[List[str]] = None,
     reference_assets_b64: Optional[List[str]] = None,
+    reference_audio_b64: Optional[List[str]] = None,
+    voice_transcript: Optional[str] = None,
     aspect_ratio: str = "16:9",
     resolution: str = "720p",
     duration: int = 10,
@@ -79,14 +101,15 @@ def generate_omni_clip(
     """Wrapper tool for Gemini Omni Flash (gemini-omni-flash-preview) using interactions.create API.
     
     Supports:
-    - MMC Control Strings formatting (MMC mode tags & FC argument tokens)
-    - Mode A (Reference Mode): Up to 10 reference images + text prompt.
+    - MMC Control Strings formatting (MMC mode tags, audio reference tags & FC argument tokens)
+    - Mode A (Reference Mode): Image references + voice audio references + text prompt.
     - Mode B (Sequential I2V Mode): Terminal frame base64 input + text motion prompt.
     """
     if client is None:
         client = get_genai_client()
 
     ref_imgs = reference_images_b64 if reference_images_b64 is not None else reference_assets_b64
+    ref_auds = reference_audio_b64 or []
     config = Config()
     payload = []
 
@@ -98,8 +121,8 @@ def generate_omni_clip(
             "mime_type": "image/png"
         })
 
-    # Mode A: Shared Reference Mode
-    elif ref_imgs:
+    # Mode A: Shared Image Reference Mode
+    if ref_imgs:
         for img_b64 in ref_imgs[:10]:
             payload.append({
                 "type": "image",
@@ -107,11 +130,22 @@ def generate_omni_clip(
                 "mime_type": "image/png"
             })
 
+    # Shared Audio Reference Mode (Voice Consistency)
+    if ref_auds:
+        for aud_b64 in ref_auds[:5]:
+            payload.append({
+                "type": "audio",
+                "data": aud_b64,
+                "mime_type": "audio/wav"
+            })
+
     # Format full control string according to Google Omni / Video Station specification
     formatted_prompt = build_omni_control_string(
         prompt=prompt,
         input_image_b64=input_image_b64,
         reference_images_b64=ref_imgs,
+        reference_audio_b64=ref_auds,
+        voice_transcript=voice_transcript,
         aspect_ratio=aspect_ratio,
         resolution=resolution,
         duration=duration

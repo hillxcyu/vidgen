@@ -44,11 +44,13 @@ class GenerateRequest(BaseModel):
     aspect_ratio: Optional[str] = "16:9"
     resolution: Optional[str] = "720p"
     duration: Optional[int] = 10
+    voice_transcript: Optional[str] = None
     reference_assets_b64: Optional[List[str]] = None
+    reference_audio_b64: Optional[List[str]] = None
 
 @app.post("/api/stream")
 async def stream_pipeline_post_endpoint(req: GenerateRequest):
-    """POST streaming endpoint supporting prompt, mode, shots, control strings, and reference asset uploads."""
+    """POST streaming endpoint supporting prompt, mode, shots, voice transcript, control strings, and asset uploads."""
     return await stream_pipeline(
         prompt=req.prompt,
         shots=req.num_shots or 3,
@@ -56,7 +58,9 @@ async def stream_pipeline_post_endpoint(req: GenerateRequest):
         aspect_ratio=req.aspect_ratio or "16:9",
         resolution=req.resolution or "720p",
         duration=req.duration or 10,
-        reference_assets_b64=req.reference_assets_b64 or []
+        voice_transcript=req.voice_transcript,
+        reference_assets_b64=req.reference_assets_b64 or [],
+        reference_audio_b64=req.reference_audio_b64 or []
     )
 
 @app.get("/api/stream")
@@ -66,7 +70,8 @@ async def stream_pipeline_get_endpoint(
     mode: Optional[str] = "i2v_chaining",
     aspect_ratio: Optional[str] = "16:9",
     resolution: Optional[str] = "720p",
-    duration: Optional[int] = 10
+    duration: Optional[int] = 10,
+    voice_transcript: Optional[str] = None
 ):
     """GET SSE streaming endpoint for backwards compatibility."""
     return await stream_pipeline(
@@ -76,7 +81,9 @@ async def stream_pipeline_get_endpoint(
         aspect_ratio=aspect_ratio or "16:9",
         resolution=resolution or "720p",
         duration=duration or 10,
-        reference_assets_b64=[]
+        voice_transcript=voice_transcript,
+        reference_assets_b64=[],
+        reference_audio_b64=[]
     )
 
 async def stream_pipeline(
@@ -86,9 +93,11 @@ async def stream_pipeline(
     aspect_ratio: str,
     resolution: str,
     duration: int,
-    reference_assets_b64: List[str]
+    voice_transcript: Optional[str],
+    reference_assets_b64: List[str],
+    reference_audio_b64: List[str]
 ):
-    """Core SSE generator executing all 7 agent stages with complete parameter & ADK shared session state support."""
+    """Core SSE generator executing all 7 agent stages with voice consistency & ADK shared session state support."""
     async def event_generator():
         client = get_genai_client()
         num_shots = max(1, min(10, shots or 3))
@@ -99,7 +108,9 @@ async def stream_pipeline(
             aspect_ratio=aspect_ratio,
             resolution=resolution,
             duration=duration,
-            reference_assets_b64=reference_assets_b64 or []
+            voice_transcript=voice_transcript,
+            reference_assets_b64=reference_assets_b64 or [],
+            reference_audio_b64=reference_audio_b64 or []
         )
         config = Config()
         agents = create_adk_agents(config)
@@ -117,25 +128,29 @@ async def stream_pipeline(
                 "aspect_ratio": state.aspect_ratio,
                 "resolution": state.resolution,
                 "duration": state.duration,
+                "voice_transcript": state.voice_transcript,
                 "reference_assets_count": len(state.reference_assets_b64),
-                "reference_assets_b64": state.reference_assets_b64
+                "reference_audio_count": len(state.reference_audio_b64),
+                "reference_assets_b64": state.reference_assets_b64,
+                "reference_audio_b64": state.reference_audio_b64
             }
         )
         session_id = adk_session.id
 
         # Step 1: OrchestratorAgent Initialization
-        yield f"data: {json.dumps({'step': 1, 'agent': 'OrchestratorAgent', 'action': 'INITIATE_PIPELINE', 'details': {'prompt': prompt, 'num_shots': state.num_shots, 'mode': state.mode, 'aspect_ratio': state.aspect_ratio, 'resolution': state.resolution, 'duration': state.duration, 'adk_session_id': session_id, 'reference_assets_count': len(state.reference_assets_b64)}})}\n\n"
+        yield f"data: {json.dumps({'step': 1, 'agent': 'OrchestratorAgent', 'action': 'INITIATE_PIPELINE', 'details': {'prompt': prompt, 'num_shots': state.num_shots, 'mode': state.mode, 'aspect_ratio': state.aspect_ratio, 'resolution': state.resolution, 'duration': state.duration, 'has_voice_transcript': bool(state.voice_transcript), 'reference_assets_count': len(state.reference_assets_b64), 'reference_audio_count': len(state.reference_audio_b64)}})}\n\n"
         await asyncio.sleep(0.3)
 
         # Step 2: ScreenwriterAgent via ADK Runner
-        yield f"data: {json.dumps({'step': 2, 'agent': 'ScreenwriterAgent', 'action': 'EXPAND_SCRIPT', 'details': {'status': 'in_progress', 'intent': prompt, 'target_shots': state.num_shots}})}\n\n"
+        yield f"data: {json.dumps({'step': 2, 'agent': 'ScreenwriterAgent', 'action': 'EXPAND_SCRIPT', 'details': {'status': 'in_progress', 'intent': prompt, 'target_shots': state.num_shots, 'voice_transcript': state.voice_transcript}})}\n\n"
         screenwriter = agents["screenwriter"]
 
         try:
+            transcript_ctx = f"\nVoice Transcript Spoken Lines: '{state.voice_transcript}'" if state.voice_transcript else ""
             screenplay_prompt = (
-                f"User request: '{state.original_intent}'. Mode: {state.mode}.\n"
+                f"User request: '{state.original_intent}'. Mode: {state.mode}.{transcript_ctx}\n"
                 f"Generate a {state.num_shots}-scene video storyboard with custom quality evaluation criteria for each scene. "
-                "Ensure criteria audit character identity lock, smooth motion, and object persistence (confirming visual assets, props, and garments do not vanish or re-emerge).\n"
+                "Ensure criteria audit character identity lock, voice lock, smooth motion, and object persistence.\n"
                 f"Return ONLY a JSON list of {state.num_shots} items, where each item has keys: "
                 "'scene_number' (int 1 to N), 'description' (str), 'camera_angle' (str), 'evaluation_criteria' (str)."
             )
@@ -162,7 +177,7 @@ async def stream_pipeline(
                     scene_number=i + 1,
                     description=f"{state.original_intent} - Shot {i + 1}",
                     camera_angle=angles[i % len(angles)],
-                    evaluation_criteria="Check character identity lock, lighting stability, smooth motion, and object persistence (no popping or vanishing assets)."
+                    evaluation_criteria="Check character identity lock, lighting stability, smooth motion, and object persistence."
                 )
                 for i in range(state.num_shots)
             ]
@@ -210,18 +225,22 @@ async def stream_pipeline(
                     prompt=optimized_shot_prompt,
                     input_image_b64=prev_frame_b64 if state.mode == "i2v_chaining" else None,
                     reference_assets_b64=state.reference_assets_b64 if state.mode == "reference" else None,
+                    reference_audio_b64=state.reference_audio_b64,
+                    voice_transcript=state.voice_transcript,
                     aspect_ratio=state.aspect_ratio,
                     resolution=state.resolution,
                     duration=state.duration
                 )
 
                 # Step 6: GeminiOmniFlash
-                yield f"data: {json.dumps({'step': 6, 'agent': 'GeminiOmniFlash', 'action': 'RENDER_CLIP', 'details': {'shot_index': shot.shot_index, 'mode': state.mode, 'control_string': control_str, 'has_input_image': prev_frame_b64 is not None or len(state.reference_assets_b64) > 0}})}\n\n"
+                yield f"data: {json.dumps({'step': 6, 'agent': 'GeminiOmniFlash', 'action': 'RENDER_CLIP', 'details': {'shot_index': shot.shot_index, 'mode': state.mode, 'control_string': control_str, 'has_input_image': prev_frame_b64 is not None or len(state.reference_assets_b64) > 0, 'has_audio_reference': len(state.reference_audio_b64) > 0}})}\n\n"
 
                 if state.mode == "i2v_chaining":
                     video_bytes = generate_omni_clip(
                         prompt=optimized_shot_prompt,
                         input_image_b64=prev_frame_b64,
+                        reference_audio_b64=state.reference_audio_b64,
+                        voice_transcript=state.voice_transcript,
                         aspect_ratio=state.aspect_ratio,
                         resolution=state.resolution,
                         duration=state.duration,
@@ -231,6 +250,8 @@ async def stream_pipeline(
                     video_bytes = generate_omni_clip(
                         prompt=optimized_shot_prompt,
                         reference_images_b64=state.reference_assets_b64,
+                        reference_audio_b64=state.reference_audio_b64,
+                        voice_transcript=state.voice_transcript,
                         aspect_ratio=state.aspect_ratio,
                         resolution=state.resolution,
                         duration=state.duration,
