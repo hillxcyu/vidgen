@@ -3,7 +3,7 @@ import tempfile
 import cv2
 import numpy as np
 import pytest
-from src.tools.video_parser import extract_last_frame
+from src.tools.video_parser import extract_last_frame, extract_audio_reference
 
 @pytest.fixture
 def sample_video_path():
@@ -41,3 +41,7 @@ def test_extract_last_frame_save_file(sample_video_path):
 def test_extract_last_frame_invalid_path():
     with pytest.raises(FileNotFoundError):
         extract_last_frame("/non/existent/video.mp4")
+
+def test_extract_audio_reference_non_existent():
+    res = extract_audio_reference("/non/existent/video_path_9999.mp4")
+    assert res is None

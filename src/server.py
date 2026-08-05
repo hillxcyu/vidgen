@@ -197,6 +197,7 @@ async def stream_pipeline(
 
         generated_clip_paths = []
         prev_frame_b64: Optional[str] = None
+        active_audio_b64: List[str] = state.reference_audio_b64 or []
 
         for idx, shot in enumerate(state.shots):
             clip_filename = os.path.join(OUTPUT_DIR, f"shot_{shot.shot_index}.mp4")
@@ -225,7 +226,7 @@ async def stream_pipeline(
                     prompt=optimized_shot_prompt,
                     input_image_b64=prev_frame_b64 if state.mode == "i2v_chaining" else None,
                     reference_assets_b64=state.reference_assets_b64 if state.mode == "reference" else None,
-                    reference_audio_b64=state.reference_audio_b64,
+                    reference_audio_b64=active_audio_b64,
                     voice_transcript=state.voice_transcript,
                     aspect_ratio=state.aspect_ratio,
                     resolution=state.resolution,
@@ -233,13 +234,13 @@ async def stream_pipeline(
                 )
 
                 # Step 6: GeminiOmniFlash
-                yield f"data: {json.dumps({'step': 6, 'agent': 'GeminiOmniFlash', 'action': 'RENDER_CLIP', 'details': {'shot_index': shot.shot_index, 'mode': state.mode, 'control_string': control_str, 'has_input_image': prev_frame_b64 is not None or len(state.reference_assets_b64) > 0, 'has_audio_reference': len(state.reference_audio_b64) > 0}})}\n\n"
+                yield f"data: {json.dumps({'step': 6, 'agent': 'GeminiOmniFlash', 'action': 'RENDER_CLIP', 'details': {'shot_index': shot.shot_index, 'mode': state.mode, 'control_string': control_str, 'has_input_image': prev_frame_b64 is not None or len(state.reference_assets_b64) > 0, 'has_audio_reference': len(active_audio_b64) > 0}})}\n\n"
 
                 if state.mode == "i2v_chaining":
                     video_bytes = generate_omni_clip(
                         prompt=optimized_shot_prompt,
                         input_image_b64=prev_frame_b64,
-                        reference_audio_b64=state.reference_audio_b64,
+                        reference_audio_b64=active_audio_b64,
                         voice_transcript=state.voice_transcript,
                         aspect_ratio=state.aspect_ratio,
                         resolution=state.resolution,
@@ -250,7 +251,7 @@ async def stream_pipeline(
                     video_bytes = generate_omni_clip(
                         prompt=optimized_shot_prompt,
                         reference_images_b64=state.reference_assets_b64,
-                        reference_audio_b64=state.reference_audio_b64,
+                        reference_audio_b64=active_audio_b64,
                         voice_transcript=state.voice_transcript,
                         aspect_ratio=state.aspect_ratio,
                         resolution=state.resolution,
@@ -286,6 +287,7 @@ async def stream_pipeline(
             shot.status = "completed"
             generated_clip_paths.append(clip_filename)
 
+            # Visual Chaining via OpenCV
             if state.mode == "i2v_chaining":
                 try:
                     prev_frame_b64 = extract_last_frame(clip_filename, output_image_path=frame_filename)
@@ -295,6 +297,16 @@ async def stream_pipeline(
                     await asyncio.sleep(0.3)
                 except Exception:
                     prev_frame_b64 = None
+
+            # Audio Voice Chaining via FFmpeg: Extract audio from Shot 1 to lock voice identity across subsequent shots
+            if not state.reference_audio_b64:
+                try:
+                    from src.tools.video_parser import extract_audio_reference
+                    extracted_aud_b64 = extract_audio_reference(clip_filename)
+                    if extracted_aud_b64:
+                        active_audio_b64 = [extracted_aud_b64]
+                except Exception:
+                    pass
 
         # Step 9: FFMPEGStitcher
         stitched_path = os.path.join(OUTPUT_DIR, f"output_stitched_{len(generated_clip_paths)*10}s.mp4")
