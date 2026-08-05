@@ -305,8 +305,9 @@ async def serve_index():
             font-size: 18px;
             display: flex;
             align-items: center;
-            gap: 8px;
+            justify-content: space-between;
         }
+
         /* Workflow Stepper */
         .stepper {
             display: flex;
@@ -416,28 +417,66 @@ async def serve_index():
             accent-color: var(--accent);
         }
 
-        /* Reference Image Uploader */
-        .ref-upload-container {
-            display: none;
-            margin-bottom: 14px;
-            padding: 14px;
+        /* Prominent Reference Image Uploader Panel */
+        .ref-upload-panel {
+            margin-bottom: 16px;
+            padding: 16px;
             background: #090d16;
             border: 1px dashed var(--border-color);
-            border-radius: 10px;
+            border-radius: 12px;
+            transition: all 0.3s;
         }
-        .ref-upload-container.visible { display: block; }
-        .preview-thumbs {
+        .ref-upload-panel.active-panel {
+            border-color: #38bdf8;
+            background: rgba(56, 189, 248, 0.05);
+        }
+        .drop-zone {
+            padding: 20px;
+            text-align: center;
+            border: 2px dashed var(--border-color);
+            border-radius: 10px;
+            cursor: pointer;
+            background: rgba(255,255,255,0.02);
+            transition: background 0.2s;
+        }
+        .drop-zone:hover {
+            background: rgba(99, 102, 241, 0.1);
+            border-color: var(--accent);
+        }
+        .preview-grid {
             display: flex;
-            gap: 10px;
-            margin-top: 10px;
+            gap: 12px;
+            margin-top: 14px;
             flex-wrap: wrap;
         }
+        .thumb-wrapper {
+            position: relative;
+            width: 70px;
+            height: 70px;
+        }
         .thumb-img {
-            width: 60px;
-            height: 60px;
-            border-radius: 6px;
+            width: 70px;
+            height: 70px;
+            border-radius: 8px;
             object-fit: cover;
-            border: 1px solid var(--accent);
+            border: 2px solid var(--accent);
+        }
+        .remove-btn {
+            position: absolute;
+            top: -6px;
+            right: -6px;
+            background: #ef4444;
+            color: #fff;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            cursor: pointer;
+            border: none;
+            padding: 0;
         }
 
         button {
@@ -472,7 +511,7 @@ async def serve_index():
 
         /* Trajectory Audit Log Feed */
         .trajectory-feed {
-            height: 380px;
+            height: 480px;
             overflow-y: auto;
             border: 1px solid var(--border-color);
             border-radius: 10px;
@@ -510,6 +549,7 @@ async def serve_index():
             font-weight: 600;
         }
         .badge-success { background: rgba(16, 185, 129, 0.2); color: #34d399; }
+        .badge-info { background: rgba(56, 189, 248, 0.2); color: #38bdf8; }
 
         /* Media Player */
         video { width: 100%; border-radius: 10px; background: #000; margin-top: 12px; }
@@ -575,11 +615,19 @@ async def serve_index():
                     </label>
                 </div>
 
-                <!-- Reference Images Upload (Visible in Reference Mode) -->
-                <div class="ref-upload-container" id="refUploadBox">
-                    <label style="font-size: 12px; color: #38bdf8;">📷 Upload Character & Asset Reference Images (PNG/JPG):</label>
-                    <input type="file" id="refImageInput" multiple accept="image/*" onchange="handleRefImages(event)" style="margin-top: 6px; width: 100%;">
-                    <div class="preview-thumbs" id="refThumbs"></div>
+                <!-- Dedicated Prominent Reference Asset Uploader Panel -->
+                <div class="ref-upload-panel" id="refUploadPanel">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <span style="font-size: 13px; font-weight: 700; color: #38bdf8;">📷 Character & Asset Reference Images</span>
+                        <span class="badge badge-info" id="refCountBadge">0 assets</span>
+                    </div>
+                    <div class="drop-zone" id="dropZone" onclick="document.getElementById('refFileInput').click()">
+                        <div style="font-size: 26px; margin-bottom: 4px;">🖼️</div>
+                        <div><strong>Click or Drag & Drop Reference Images Here</strong></div>
+                        <div style="font-size: 11px; color: var(--muted-text); margin-top: 4px;">PNG, JPG, WEBP (Passed as reference visual anchors to Gemini Omni Flash)</div>
+                        <input type="file" id="refFileInput" multiple accept="image/*" onchange="handleRefFiles(event)" style="display: none;">
+                    </div>
+                    <div class="preview-grid" id="refPreviewGrid"></div>
                 </div>
 
                 <!-- Prompt & Shots Row -->
@@ -630,30 +678,62 @@ async def serve_index():
 
         function selectMode(mode) {
             selectedMode = mode;
-            const refBox = document.getElementById("refUploadBox");
+            const refPanel = document.getElementById("refUploadPanel");
             if (mode === "reference") {
-                refBox.classList.add("visible");
+                refPanel.classList.add("active-panel");
             } else {
-                refBox.classList.remove("visible");
+                refPanel.classList.remove("active-panel");
             }
         }
 
-        function handleRefImages(event) {
+        function handleRefFiles(event) {
             const files = event.target.files;
-            const thumbsContainer = document.getElementById("refThumbs");
-            thumbsContainer.innerHTML = "";
-            refImagesB64 = [];
+            if (!files || files.length === 0) return;
 
-            Array.from(files).slice(0, 10).forEach(file => {
+            Array.from(files).forEach(file => {
+                if (refImagesB64.length >= 10) return;
                 const reader = new FileReader();
                 reader.onload = (e) => {
                     const b64 = e.target.result.split(',')[1];
                     refImagesB64.push(b64);
-                    thumbsContainer.innerHTML += `<img class="thumb-img" src="${e.target.result}" alt="Ref Thumb">`;
+                    renderRefGrid();
                 };
                 reader.readAsDataURL(file);
             });
         }
+
+        function removeRefImage(index) {
+            refImagesB64.splice(index, 1);
+            renderRefGrid();
+        }
+
+        function renderRefGrid() {
+            const grid = document.getElementById("refPreviewGrid");
+            const badge = document.getElementById("refCountBadge");
+            badge.innerText = `${refImagesB64.length} uploaded`;
+            grid.innerHTML = "";
+
+            refImagesB64.forEach((b64, idx) => {
+                grid.innerHTML += `
+                    <div class="thumb-wrapper">
+                        <img class="thumb-img" src="data:image/png;base64,${b64}" alt="Ref Image ${idx + 1}">
+                        <button class="remove-btn" onclick="removeRefImage(${idx})" title="Remove image">✕</button>
+                    </div>
+                `;
+            });
+        }
+
+        // Drag and drop handlers for dropZone
+        const dropZone = document.getElementById("dropZone");
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, (e) => { e.preventDefault(); e.stopPropagation(); }, false);
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            handleRefFiles({ target: { files: files } });
+        }, false);
 
         function setStep(stepNum) {
             for (let i = 1; i <= 9; i++) {
