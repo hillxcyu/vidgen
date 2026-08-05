@@ -150,9 +150,10 @@ async def stream_pipeline(
             screenplay_prompt = (
                 f"User request: '{state.original_intent}'. Mode: {state.mode}.{transcript_ctx}\n"
                 f"Generate a {state.num_shots}-scene video storyboard with custom quality evaluation criteria for each scene. "
-                "Ensure criteria audit character identity lock, voice lock, smooth motion, and object persistence.\n"
+                "CRITICAL TRANSCRIPT SEGMENTATION RULE: If a Voice Transcript is provided above, you MUST segment and chronologically split the transcript across the scenes. "
+                "Each scene MUST receive its exact corresponding line of dialogue in 'spoken_dialogue'. Only Scene 1 may contain the opening greeting if present in the transcript.\n"
                 f"Return ONLY a JSON list of {state.num_shots} items, where each item has keys: "
-                "'scene_number' (int 1 to N), 'description' (str), 'camera_angle' (str), 'evaluation_criteria' (str)."
+                "'scene_number' (int 1 to N), 'description' (str), 'camera_angle' (str), 'spoken_dialogue' (str or null), 'evaluation_criteria' (str)."
             )
             text = await run_adk_agent(screenwriter, screenplay_prompt, session_service=session_service, session_id=session_id)
             if text.startswith("```"):
@@ -166,6 +167,7 @@ async def stream_pipeline(
                     scene_number=item.get("scene_number", idx + 1),
                     description=item.get("description", f"Scene {idx + 1}"),
                     camera_angle=item.get("camera_angle", "medium"),
+                    spoken_dialogue=item.get("spoken_dialogue"),
                     evaluation_criteria=item.get("evaluation_criteria", "Check character identity lock, smooth motion, and object persistence.")
                 )
                 for idx, item in enumerate(raw_storyboard[:state.num_shots])
@@ -177,6 +179,7 @@ async def stream_pipeline(
                     scene_number=i + 1,
                     description=f"{state.original_intent} - Shot {i + 1}",
                     camera_angle=angles[i % len(angles)],
+                    spoken_dialogue=state.voice_transcript if i == 0 else None,
                     evaluation_criteria="Check character identity lock, lighting stability, smooth motion, and object persistence."
                 )
                 for i in range(state.num_shots)
@@ -190,6 +193,7 @@ async def stream_pipeline(
             VideoShot(
                 shot_index=sb.scene_number,
                 prompt=f"{sb.camera_angle} shot: {sb.description}",
+                spoken_dialogue=sb.spoken_dialogue,
                 evaluation_criteria=sb.evaluation_criteria
             )
             for sb in state.storyboard
@@ -208,9 +212,10 @@ async def stream_pipeline(
             for attempt in range(max_attempts):
                 state.attempt_counter += 1
 
-                # Step 4: PromptOptimizerAgent via ADK Runner
-                optimized_shot_prompt = await optimize_prompt(shot.prompt, voice_transcript=state.voice_transcript, feedback=feedback, session_service=session_service, session_id=session_id, client=client)
-                yield f"data: {json.dumps({'step': 4, 'agent': 'PromptOptimizerAgent', 'action': 'OPTIMIZE_PROMPT', 'details': {'shot_index': shot.shot_index, 'attempt': attempt + 1, 'raw_prompt': shot.prompt, 'optimized_prompt': optimized_shot_prompt, 'feedback': feedback}})}\n\n"
+                # Step 4: PromptOptimizerAgent via ADK Runner (Pass per-shot spoken dialogue)
+                shot_dialogue = shot.spoken_dialogue or (state.voice_transcript if idx == 0 else None)
+                optimized_shot_prompt = await optimize_prompt(shot.prompt, voice_transcript=shot_dialogue, feedback=feedback, session_service=session_service, session_id=session_id, client=client)
+                yield f"data: {json.dumps({'step': 4, 'agent': 'PromptOptimizerAgent', 'action': 'OPTIMIZE_PROMPT', 'details': {'shot_index': shot.shot_index, 'attempt': attempt + 1, 'raw_prompt': shot.prompt, 'optimized_prompt': optimized_shot_prompt, 'spoken_dialogue': shot_dialogue, 'feedback': feedback}})}\n\n"
                 await asyncio.sleep(0.3)
 
                 # Step 5: HealthCheckerAgent via ADK Runner
@@ -227,7 +232,7 @@ async def stream_pipeline(
                     input_image_b64=prev_frame_b64 if state.mode == "i2v_chaining" else None,
                     reference_assets_b64=state.reference_assets_b64 if state.mode == "reference" else None,
                     reference_audio_b64=active_audio_b64,
-                    voice_transcript=state.voice_transcript,
+                    voice_transcript=shot_dialogue,
                     aspect_ratio=state.aspect_ratio,
                     resolution=state.resolution,
                     duration=state.duration
@@ -241,7 +246,7 @@ async def stream_pipeline(
                         prompt=optimized_shot_prompt,
                         input_image_b64=prev_frame_b64,
                         reference_audio_b64=active_audio_b64,
-                        voice_transcript=state.voice_transcript,
+                        voice_transcript=shot_dialogue,
                         aspect_ratio=state.aspect_ratio,
                         resolution=state.resolution,
                         duration=state.duration,
@@ -252,7 +257,7 @@ async def stream_pipeline(
                         prompt=optimized_shot_prompt,
                         reference_images_b64=state.reference_assets_b64,
                         reference_audio_b64=active_audio_b64,
-                        voice_transcript=state.voice_transcript,
+                        voice_transcript=shot_dialogue,
                         aspect_ratio=state.aspect_ratio,
                         resolution=state.resolution,
                         duration=state.duration,
