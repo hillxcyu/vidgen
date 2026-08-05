@@ -156,7 +156,8 @@ async def optimize_prompt(
     full_prompt = (
         f"Raw Shot Description: '{raw_prompt}'.{feedback_context}{transcript_context}\n"
         "Generate an enhanced, highly-detailed cinematic prompt optimized for Gemini Omni Flash video generation. "
-        "Keep it concise, under 60 words, focusing on lighting, camera motion, visual clarity, and object persistence. "
+        "Keep it concise, under 60 words, focusing on lighting, continuous camera motion, visual clarity, and object persistence. "
+        "STRICT SINGLE-SHOT RULE: The clip MUST be a single, continuous, uninterrupted camera take. Explicitly specify a single continuous camera motion (e.g. 'continuous single take', 'smooth tracking shot') and strictly forbid internal cuts, scene switches, jump cuts, or multi-angle edits. "
         "Do NOT add any unscripted greetings or intro lines if dialogue is specified."
     )
 
