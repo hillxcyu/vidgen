@@ -3,7 +3,6 @@ import json
 import time
 import glob
 from typing import List, Dict, Any, Optional
-from google.cloud import storage
 from src.config import Config
 
 def get_default_bucket_name() -> str:
@@ -15,9 +14,10 @@ def get_default_bucket_name() -> str:
     project_id = config.PROJECT_ID or "universal-trail-492014-n5"
     return f"{project_id}-vidgen-showcase"
 
-def get_storage_client() -> Optional[storage.Client]:
+def get_storage_client() -> Optional[Any]:
     """Returns a Google Cloud Storage client instance or None if unauthenticated/offline."""
     try:
+        from google.cloud import storage
         config = Config()
         if config.PROJECT_ID:
             return storage.Client(project=config.PROJECT_ID)
@@ -26,7 +26,7 @@ def get_storage_client() -> Optional[storage.Client]:
         print(f"[NOTICE] GCS storage client initialization notice: {e}")
         return None
 
-def ensure_gcs_bucket(client: storage.Client, bucket_name: str) -> Optional[storage.Bucket]:
+def ensure_gcs_bucket(client: Any, bucket_name: str) -> Optional[Any]:
     """Retrieves or attempts to create the GCS showcase bucket."""
     try:
         bucket = client.bucket(bucket_name)
@@ -42,7 +42,7 @@ def ensure_gcs_bucket(client: storage.Client, bucket_name: str) -> Optional[stor
         except Exception:
             return None
 
-def upload_file_to_gcs(bucket: Optional[storage.Bucket], local_path: str, gcs_blob_name: str) -> Optional[str]:
+def upload_file_to_gcs(bucket: Optional[Any], local_path: str, gcs_blob_name: str) -> Optional[str]:
     """Uploads a local file to GCS and returns its GCS URI or public URL."""
     if not bucket or not os.path.exists(local_path):
         return None
