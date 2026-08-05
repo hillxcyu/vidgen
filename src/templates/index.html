@@ -311,6 +311,18 @@
             border-left: 3px solid var(--accent);
             animation: fadeIn 0.3s ease-in-out;
         }
+        .log-item.failed-log {
+            background: rgba(239, 68, 68, 0.15) !important;
+            border-left: 4px solid #ef4444 !important;
+            border: 1px solid rgba(239, 68, 68, 0.4);
+        }
+        .log-item.failed-log .log-action {
+            color: #f87171 !important;
+            font-weight: 700;
+        }
+        .log-item.failed-log .log-agent {
+            color: #fca5a5 !important;
+        }
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(4px); }
             to { opacity: 1; transform: translateY(0); }
@@ -628,9 +640,28 @@
             if (!feed) return;
             var div = document.createElement("div");
             div.className = "log-item";
+
+            var isFailed = false;
+            if (details) {
+                var verdict = String(details.verdict || "").toUpperCase();
+                var status = String(details.status || "").toUpperCase();
+                var feedback = String(details.feedback || "").toUpperCase();
+                var act = String(action || "").toUpperCase();
+                if (verdict.includes("REATTEMPT") || verdict.includes("REJECT") || verdict.includes("FAIL") ||
+                    status.includes("FAIL") || feedback.includes("FAIL") || act.includes("REVERT") ||
+                    details.drift_detected === true || (typeof details.score === 'number' && details.score < 0.8)) {
+                    isFailed = true;
+                }
+            }
+
+            if (isFailed) {
+                div.classList.add("failed-log");
+            }
+
             var headerDiv = document.createElement("div");
             headerDiv.className = "log-header";
-            headerDiv.innerHTML = '<span class="log-agent">🤖 ' + agent + '</span><span class="log-action">' + action + '</span>';
+            var statusBadge = isFailed ? ' <span style="color: #ef4444; font-weight: bold; margin-left: 8px;">🔴 FAILED / REATTEMPT</span>' : '';
+            headerDiv.innerHTML = '<span class="log-agent">🤖 ' + agent + '</span><span class="log-action">' + action + statusBadge + '</span>';
             var detailsDiv = document.createElement("div");
             detailsDiv.className = "log-details";
             detailsDiv.innerText = JSON.stringify(details, null, 2);
