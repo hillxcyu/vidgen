@@ -620,14 +620,14 @@ async def serve_index():
                 <label style="font-size: 13px; color: var(--muted-text); margin-bottom: 6px; display: block;">Pipeline Generation Mode:</label>
                 <div class="mode-box">
                     <label class="mode-option" id="mode-i2v">
-                        <input type="radio" name="mode" value="i2v_chaining" checked onchange="selectMode('i2v_chaining')">
+                        <input type="radio" name="mode" value="i2v_chaining" checked onchange="window.selectMode('i2v_chaining')">
                         <div>
                             <strong>⚡ Sequential I2V Chaining</strong>
                             <div style="font-size: 11px; color: var(--muted-text);">OpenCV terminal frame extraction for unbroken motion continuity</div>
                         </div>
                     </label>
                     <label class="mode-option" id="mode-ref">
-                        <input type="radio" name="mode" value="reference" onchange="selectMode('reference')">
+                        <input type="radio" name="mode" value="reference" onchange="window.selectMode('reference')">
                         <div>
                             <strong>🎨 Asset Reference Mode</strong>
                             <div style="font-size: 11px; color: var(--muted-text);">Shared character & style image reference anchors</div>
@@ -645,7 +645,7 @@ async def serve_index():
                     <div style="display: flex; gap: 12px; align-items: center; margin-bottom: 12px;">
                         <label for="refFileInput" class="btn-file-select">📁 Choose Image Files</label>
                         <span style="font-size: 12px; color: var(--muted-text);">Select up to 10 PNG, JPG, WEBP images</span>
-                        <input type="file" id="refFileInput" multiple accept="image/*" onchange="handleRefFiles(event)" style="position: absolute; width: 0; height: 0; opacity: 0; pointer-events: none;">
+                        <input type="file" id="refFileInput" multiple accept="image/*" onchange="window.handleRefFiles(event)" style="position: absolute; width: 0; height: 0; opacity: 0; pointer-events: none;">
                     </div>
 
                     <div class="drop-zone" id="dropZone">
@@ -668,7 +668,7 @@ async def serve_index():
                     </select>
                 </div>
 
-                <button id="genBtn" onclick="runPipeline()" style="width: 100%;">🚀 Execute Multi-Agent Graph</button>
+                <button id="genBtn" onclick="window.runPipeline()" style="width: 100%;">🚀 Execute Multi-Agent Graph</button>
                 <div class="spinner" id="spinner">⚙️ Real-Time Multi-Agent SSE Stream Active...</div>
             </div>
 
@@ -699,11 +699,11 @@ async def serve_index():
     </div>
 
     <script>
-        var selectedMode = "i2v_chaining";
-        var refImagesB64 = [];
+        window.selectedMode = "i2v_chaining";
+        window.refImagesB64 = [];
 
-        function selectMode(mode) {
-            selectedMode = mode;
+        window.selectMode = function(mode) {
+            window.selectedMode = mode;
             var refPanel = document.getElementById("refUploadPanel");
             if (refPanel) {
                 if (mode === "reference") {
@@ -712,19 +712,19 @@ async def serve_index():
                     refPanel.classList.remove("active-panel");
                 }
             }
-        }
+        };
 
-        async function handleRefFiles(event) {
+        window.handleRefFiles = async function(event) {
             var files = null;
-            if (event.target && event.target.files && event.target.files.length > 0) {
+            if (event && event.target && event.target.files && event.target.files.length > 0) {
                 files = event.target.files;
-            } else if (event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files.length > 0) {
+            } else if (event && event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files.length > 0) {
                 files = event.dataTransfer.files;
             }
 
             if (!files || files.length === 0) return;
 
-            var remainingSlots = 10 - refImagesB64.length;
+            var remainingSlots = 10 - window.refImagesB64.length;
             var fileList = Array.from(files).slice(0, remainingSlots);
 
             for (var i = 0; i < fileList.length; i++) {
@@ -741,41 +741,41 @@ async def serve_index():
                         reader.readAsDataURL(file);
                     });
                     if (b64) {
-                        refImagesB64.push(b64);
+                        window.refImagesB64.push(b64);
                     }
                 } catch (err) {
                     console.error("FileReader error:", err);
                 }
             }
 
-            if (event.target && event.target.value) {
+            if (event && event.target && event.target.value) {
                 event.target.value = "";
             }
 
-            renderRefGrid();
-        }
+            window.renderRefGrid();
+        };
 
-        function removeRefImage(index) {
-            refImagesB64.splice(index, 1);
-            renderRefGrid();
-        }
+        window.removeRefImage = function(index) {
+            window.refImagesB64.splice(index, 1);
+            window.renderRefGrid();
+        };
 
-        function renderRefGrid() {
+        window.renderRefGrid = function() {
             var grid = document.getElementById("refPreviewGrid");
             var badge = document.getElementById("refCountBadge");
-            if (badge) badge.innerText = refImagesB64.length + " assets";
+            if (badge) badge.innerText = window.refImagesB64.length + " assets";
             if (!grid) return;
 
             grid.innerHTML = "";
 
-            for (var i = 0; i < refImagesB64.length; i++) {
+            for (var i = 0; i < window.refImagesB64.length; i++) {
                 (function(idx) {
                     var wrapper = document.createElement("div");
                     wrapper.className = "thumb-wrapper";
 
                     var img = document.createElement("img");
                     img.className = "thumb-img";
-                    img.src = "data:image/png;base64," + refImagesB64[idx];
+                    img.src = "data:image/png;base64," + window.refImagesB64[idx];
                     img.alt = "Ref Image " + (idx + 1);
 
                     var btn = document.createElement("button");
@@ -784,7 +784,7 @@ async def serve_index():
                     btn.innerText = "✕";
                     btn.onclick = function(e) {
                         if (e) e.stopPropagation();
-                        removeRefImage(idx);
+                        window.removeRefImage(idx);
                     };
 
                     wrapper.appendChild(img);
@@ -792,7 +792,7 @@ async def serve_index():
                     grid.appendChild(wrapper);
                 })(i);
             }
-        }
+        };
 
         window.addEventListener("DOMContentLoaded", function() {
             var dropZone = document.getElementById("dropZone");
@@ -805,7 +805,7 @@ async def serve_index():
                 });
 
                 dropZone.addEventListener('drop', function(e) {
-                    handleRefFiles(e);
+                    window.handleRefFiles(e);
                 }, false);
             }
         });
@@ -829,18 +829,19 @@ async def serve_index():
             if (!feed) return;
             var div = document.createElement("div");
             div.className = "log-item";
-            div.innerHTML = `
-                <div class="log-header">
-                    <span class="log-agent">🤖 ${agent}</span>
-                    <span class="log-action">${action}</span>
-                </div>
-                <div class="log-details">${JSON.stringify(details, null, 2)}</div>
-            `;
+            var headerDiv = document.createElement("div");
+            headerDiv.className = "log-header";
+            headerDiv.innerHTML = '<span class="log-agent">🤖 ' + agent + '</span><span class="log-action">' + action + '</span>';
+            var detailsDiv = document.createElement("div");
+            detailsDiv.className = "log-details";
+            detailsDiv.innerText = JSON.stringify(details, null, 2);
+            div.appendChild(headerDiv);
+            div.appendChild(detailsDiv);
             feed.appendChild(div);
             feed.scrollTop = feed.scrollHeight;
         }
 
-        async function runPipeline() {
+        window.runPipeline = async function() {
             var promptInput = document.getElementById("promptInput");
             var prompt = promptInput ? promptInput.value.trim() : "";
             var shotsSelect = document.getElementById("shotsSelect");
@@ -866,8 +867,8 @@ async def serve_index():
                     body: JSON.stringify({
                         prompt: prompt,
                         num_shots: shots,
-                        mode: selectedMode,
-                        reference_assets_b64: refImagesB64
+                        mode: window.selectedMode,
+                        reference_assets_b64: window.refImagesB64
                     })
                 });
 
@@ -907,7 +908,7 @@ async def serve_index():
                                 }
 
                                 var title = document.getElementById("stitchedTitle");
-                                if (title) title.innerText = `🎬 Stitched ${data.details.shots.length * 10}s Output Video (${data.details.mode} mode)`;
+                                if (title) title.innerText = "🎬 Stitched " + (data.details.shots.length * 10) + "s Output Video (" + data.details.mode + " mode)";
                                 
                                 var video = document.getElementById("stitchedVideo");
                                 if (video) {
@@ -923,19 +924,15 @@ async def serve_index():
                                 if (grid) {
                                     grid.innerHTML = "";
                                     data.details.shots.forEach(function(shot) {
-                                        grid.innerHTML += `
-                                            <div class="shot-card">
-                                                <h4>
-                                                    <span>Shot #${shot.shot_index}</span>
-                                                    <a href="${shot.video_url}" download class="btn-secondary" style="font-size: 11px; text-decoration: none; padding: 4px 8px;">💾 Download MP4</a>
-                                                </h4>
-                                                <p><strong>Prompt:</strong> ${shot.prompt}</p>
-                                                <p style="color: #f472b6; font-size: 12px;"><strong>Orchestrator Criteria:</strong> ${shot.evaluation_criteria || 'Visual coherence & character lock'}</p>
-                                                <video controls preload="metadata" src="${shot.video_url}?t=${new Date().getTime()}"></video>
-                                                <p style="margin-top: 10px; color: #38bdf8;"><strong>OpenCV Last Frame (I2V Chaining):</strong></p>
-                                                <img class="frame-img" src="${shot.frame_url}?t=${new Date().getTime()}" alt="Shot ${shot.shot_index} Last Frame">
-                                            </div>
-                                        `;
+                                        var card = document.createElement("div");
+                                        card.className = "shot-card";
+                                        card.innerHTML = '<h4><span>Shot #' + shot.shot_index + '</span><a href="' + shot.video_url + '" download class="btn-secondary" style="font-size: 11px; text-decoration: none; padding: 4px 8px;">💾 Download MP4</a></h4>' +
+                                            '<p><strong>Prompt:</strong> ' + shot.prompt + '</p>' +
+                                            '<p style="color: #f472b6; font-size: 12px;"><strong>Orchestrator Criteria:</strong> ' + (shot.evaluation_criteria || 'Visual coherence & character lock') + '</p>' +
+                                            '<video controls preload="metadata" src="' + shot.video_url + '?t=' + new Date().getTime() + '"></video>' +
+                                            '<p style="margin-top: 10px; color: #38bdf8;"><strong>OpenCV Last Frame (I2V Chaining):</strong></p>' +
+                                            '<img class="frame-img" src="' + shot.frame_url + '?t=' + new Date().getTime() + '" alt="Shot ' + shot.shot_index + ' Last Frame">';
+                                        grid.appendChild(card);
                                     });
                                 }
                                 if (resultCard) resultCard.style.display = "block";
@@ -948,7 +945,7 @@ async def serve_index():
                 if (genBtn) genBtn.disabled = false;
                 if (spinner) spinner.style.display = "none";
             }
-        }
+        };
     </script>
 </body>
 </html>
