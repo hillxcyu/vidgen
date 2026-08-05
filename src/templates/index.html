@@ -516,7 +516,7 @@
                     <div class="preview-grid" id="refPreviewGrid"></div>
                 </div>
 
-                <!-- Google Omni Control String Parameters Row -->
+                <!-- Google Omni Control String & Production Loop Parameters Row -->
                 <div class="form-row" style="margin-bottom: 14px;">
                     <div style="flex: 1;">
                         <label style="font-size: 11px; color: var(--muted-text); display: block; margin-bottom: 4px;">Aspect Ratio</label>
@@ -541,6 +541,16 @@
                             <option value="8">8s per shot</option>
                             <option value="15">15s per shot</option>
                             <option value="30">30s per shot</option>
+                        </select>
+                    </div>
+                    <div style="flex: 1;">
+                        <label style="font-size: 11px; color: var(--muted-text); display: block; margin-bottom: 4px;">Max Re-attempts</label>
+                        <select id="maxAttemptsSelect" style="width: 100%;">
+                            <option value="1">1 Attempt (No Retry)</option>
+                            <option value="2" selected>2 Attempts (Default)</option>
+                            <option value="3">3 Attempts</option>
+                            <option value="4">4 Attempts</option>
+                            <option value="5">5 Attempts</option>
                         </select>
                     </div>
                 </div>
@@ -788,6 +798,8 @@
             var resVal = resSelect ? resSelect.value : "720p";
             var durationSelect = document.getElementById("durationSelect");
             var durationVal = durationSelect ? parseInt(durationSelect.value, 10) : 10;
+            var maxAttemptsSelect = document.getElementById("maxAttemptsSelect");
+            var maxAttemptsVal = maxAttemptsSelect ? parseInt(maxAttemptsSelect.value, 10) : 2;
             var transcriptInput = document.getElementById("transcriptInput");
             var transcriptVal = transcriptInput ? transcriptInput.value.trim() : "";
 
@@ -816,6 +828,7 @@
                         aspect_ratio: aspect,
                         resolution: resVal,
                         duration: durationVal,
+                        max_attempts: maxAttemptsVal,
                         voice_transcript: transcriptVal,
                         reference_assets_b64: window.refImagesB64,
                         reference_audio_b64: window.refAudioB64

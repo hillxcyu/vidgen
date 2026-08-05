@@ -44,6 +44,7 @@ class GenerateRequest(BaseModel):
     aspect_ratio: Optional[str] = "16:9"
     resolution: Optional[str] = "720p"
     duration: Optional[int] = 10
+    max_attempts: Optional[int] = 2
     voice_transcript: Optional[str] = None
     reference_assets_b64: Optional[List[str]] = None
     reference_audio_b64: Optional[List[str]] = None
@@ -58,6 +59,7 @@ async def stream_pipeline_post_endpoint(req: GenerateRequest):
         aspect_ratio=req.aspect_ratio or "16:9",
         resolution=req.resolution or "720p",
         duration=req.duration or 10,
+        max_attempts=req.max_attempts or 2,
         voice_transcript=req.voice_transcript,
         reference_assets_b64=req.reference_assets_b64 or [],
         reference_audio_b64=req.reference_audio_b64 or []
@@ -71,6 +73,7 @@ async def stream_pipeline_get_endpoint(
     aspect_ratio: Optional[str] = "16:9",
     resolution: Optional[str] = "720p",
     duration: Optional[int] = 10,
+    max_attempts: Optional[int] = 2,
     voice_transcript: Optional[str] = None
 ):
     """GET SSE streaming endpoint for backwards compatibility."""
@@ -81,6 +84,7 @@ async def stream_pipeline_get_endpoint(
         aspect_ratio=aspect_ratio or "16:9",
         resolution=resolution or "720p",
         duration=duration or 10,
+        max_attempts=max_attempts or 2,
         voice_transcript=voice_transcript,
         reference_assets_b64=[],
         reference_audio_b64=[]
@@ -93,6 +97,7 @@ async def stream_pipeline(
     aspect_ratio: str,
     resolution: str,
     duration: int,
+    max_attempts: int,
     voice_transcript: Optional[str],
     reference_assets_b64: List[str],
     reference_audio_b64: List[str]
@@ -108,6 +113,7 @@ async def stream_pipeline(
             aspect_ratio=aspect_ratio,
             resolution=resolution,
             duration=duration,
+            max_attempts=max_attempts,
             voice_transcript=voice_transcript,
             reference_assets_b64=reference_assets_b64 or [],
             reference_audio_b64=reference_audio_b64 or []
@@ -208,7 +214,7 @@ async def stream_pipeline(
             frame_filename = os.path.join(OUTPUT_DIR, f"shot_{shot.shot_index}_last_frame.png")
 
             feedback: Optional[str] = None
-            max_attempts = 2
+            max_attempts = state.max_attempts
             for attempt in range(max_attempts):
                 state.attempt_counter += 1
 
