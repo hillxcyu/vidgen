@@ -11,6 +11,7 @@ def build_omni_control_string(
     prompt: str,
     input_image_b64: Optional[str] = None,
     reference_images_b64: Optional[List[str]] = None,
+    reference_assets_b64: Optional[List[str]] = None,
     aspect_ratio: str = "16:9",
     resolution: str = "720p",
     duration: int = 10,
@@ -24,14 +25,15 @@ def build_omni_control_string(
     - I2V: "[# Sources <FIRST_FRAME>image_0.png] [aspect_ratio=16:9] [resolution=720p] [duration=10s] A red panda skiing"
     - R2V: "[# References <IMAGE_REF_0>image_0.png <IMAGE_REF_1>image_1.png] [aspect_ratio=16:9] [resolution=720p] [duration=10s] A red panda skiing"
     """
+    ref_imgs = reference_images_b64 if reference_images_b64 is not None else reference_assets_b64
     mmc_parts = []
 
     # Mode B: Image-to-Video Chaining (First Frame Source)
     if input_image_b64:
         mmc_parts.append("# Sources <FIRST_FRAME>image_0.png")
     # Mode A: Shared Asset Reference Mode (Image References)
-    elif reference_images_b64 and len(reference_images_b64) > 0:
-        ref_tags = [f"<IMAGE_REF_{i}>image_{i}.png" for i in range(min(10, len(reference_images_b64)))]
+    elif ref_imgs and len(ref_imgs) > 0:
+        ref_tags = [f"<IMAGE_REF_{i}>image_{i}.png" for i in range(min(10, len(ref_imgs)))]
         mmc_parts.append(f"# References {' '.join(ref_tags)}")
 
     mmc_mode_str = f"[{' '.join(mmc_parts)}] " if mmc_parts else ""
@@ -68,6 +70,7 @@ def generate_omni_clip(
     prompt: str,
     input_image_b64: Optional[str] = None,
     reference_images_b64: Optional[List[str]] = None,
+    reference_assets_b64: Optional[List[str]] = None,
     aspect_ratio: str = "16:9",
     resolution: str = "720p",
     duration: int = 10,
@@ -83,6 +86,7 @@ def generate_omni_clip(
     if client is None:
         client = get_genai_client()
 
+    ref_imgs = reference_images_b64 if reference_images_b64 is not None else reference_assets_b64
     config = Config()
     payload = []
 
@@ -95,8 +99,8 @@ def generate_omni_clip(
         })
 
     # Mode A: Shared Reference Mode
-    elif reference_images_b64:
-        for img_b64 in reference_images_b64[:10]:
+    elif ref_imgs:
+        for img_b64 in ref_imgs[:10]:
             payload.append({
                 "type": "image",
                 "data": img_b64,
@@ -107,7 +111,7 @@ def generate_omni_clip(
     formatted_prompt = build_omni_control_string(
         prompt=prompt,
         input_image_b64=input_image_b64,
-        reference_images_b64=reference_images_b64,
+        reference_images_b64=ref_imgs,
         aspect_ratio=aspect_ratio,
         resolution=resolution,
         duration=duration
