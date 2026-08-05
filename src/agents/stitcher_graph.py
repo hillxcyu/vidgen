@@ -2,12 +2,15 @@ import base64
 import json
 import os
 import uuid
+import asyncio
 from typing import Optional, Dict, Any, List
 
 from google import genai
+from google.genai import types
+from google.adk import Runner
 from google.adk.agents.llm_agent import LlmAgent
 from google.adk.events.event import Event
-from google.adk.sessions.session import Session
+from google.adk.sessions import InMemorySessionService
 from google.adk.tools.function_tool import FunctionTool
 from google.adk.workflow import Workflow, FunctionNode, Edge, START
 
@@ -86,93 +89,97 @@ def create_adk_agents(config: Config) -> Dict[str, LlmAgent]:
         "quality_rater": quality_rater,
     }
 
+async def run_adk_agent(
+    agent: LlmAgent,
+    user_prompt: str,
+    media_parts: Optional[List[types.Part]] = None,
+    session_service: Optional[InMemorySessionService] = None
+) -> str:
+    """Executes an ADK LlmAgent natively using ADK Runner and session management."""
+    if session_service is None:
+        session_service = InMemorySessionService()
+
+    session = await session_service.create_session(app_name="vidgen-omni", user_id="xcyu")
+    runner = Runner(agent=agent, app_name="vidgen-omni", session_service=session_service)
+
+    parts = [types.Part.from_text(text=user_prompt)]
+    if media_parts:
+        parts.extend(media_parts)
+
+    response_text = ""
+    try:
+        async for event in runner.run_async(
+            user_id="xcyu",
+            session_id=session.id,
+            new_message=types.Content(parts=parts)
+        ):
+            if event.message and event.message.parts:
+                for part in event.message.parts:
+                    if hasattr(part, "text") and part.text:
+                        response_text += part.text
+    except Exception as e:
+        print(f"[ADK Runner Error on Agent '{agent.name}']: {e}")
+
+    return response_text.strip()
+
 def optimize_prompt(raw_prompt: str, feedback: Optional[str] = None, client: Optional[genai.Client] = None) -> str:
-    """Prompt Optimizer Agent: Enhances raw storyboard prompts using gemini-3.6-flash."""
-    if client is None:
-        client = get_genai_client()
+    """Prompt Optimizer Agent: Enhances raw storyboard prompts using ADK LlmAgent & Runner."""
     config = Config()
     agents = create_adk_agents(config)
     optimizer = agents["prompt_optimizer"]
 
     feedback_context = f"\nQuality Rater Feedback to address: '{feedback}'" if feedback else ""
     full_prompt = (
-        f"{optimizer.instruction}\n\n"
         f"Raw Shot Description: '{raw_prompt}'.{feedback_context}\n"
         "Generate an enhanced, highly-detailed cinematic prompt optimized for Gemini Omni Flash video generation. "
         "Keep it concise, under 60 words, focusing on lighting, camera motion, and visual clarity."
     )
 
     try:
-        response = client.models.generate_content(
-            model=optimizer.model,
-            contents=full_prompt,
-        )
-        optimized = response.text.strip()
+        optimized = asyncio.run(run_adk_agent(optimizer, full_prompt))
         return optimized if optimized else raw_prompt
     except Exception:
         return raw_prompt
 
 def audit_prompt_health(prompt: str, client: Optional[genai.Client] = None) -> bool:
-    """Health Checker Agent: Audits candidate prompt safety and policy compliance."""
-    if client is None:
-        client = get_genai_client()
+    """Health Checker Agent: Audits candidate prompt safety using ADK LlmAgent & Runner."""
     config = Config()
     agents = create_adk_agents(config)
     checker = agents["health_checker"]
 
     audit_prompt = (
-        f"{checker.instruction}\n\n"
         f"Inspect candidate prompt for safety/compliance: '{prompt}'.\n"
         "Reply ONLY with 'APPROVED' if compliant or 'REJECTED' if non-compliant."
     )
     try:
-        response = client.models.generate_content(
-            model=checker.model,
-            contents=audit_prompt
-        )
-        res_text = response.text.strip().upper()
+        res_text = asyncio.run(run_adk_agent(checker, audit_prompt)).upper()
         return "APPROVED" in res_text or "REJECTED" not in res_text
     except Exception:
         return True
 
 def evaluate_clip_quality(shot_index: int, prompt: str, video_path: str, client: Optional[genai.Client] = None) -> Dict[str, Any]:
-    """Quality Rater Agent: Inspects the generated MP4 video file directly using gemini-3.6-flash multimodal video vision."""
-    if client is None:
-        client = get_genai_client()
+    """Quality Rater Agent: Evaluates clip quality using ADK LlmAgent & Runner with multimodal video parts."""
     config = Config()
     agents = create_adk_agents(config)
     rater = agents["quality_rater"]
 
-    contents = []
-
-    # Attach the actual MP4 video file bytes for visual inspection by Gemini
+    media_parts = []
     if os.path.exists(video_path):
         try:
             with open(video_path, "rb") as f:
                 video_bytes = f.read()
-            contents.append({
-                "inline_data": {
-                    "mime_type": "video/mp4",
-                    "data": base64.b64encode(video_bytes).decode("utf-8")
-                }
-            })
+            media_parts.append(types.Part.from_bytes(data=video_bytes, mime_type="video/mp4"))
         except Exception:
             pass
 
     eval_prompt = (
-        f"{rater.instruction}\n\n"
         f"Visually inspect and evaluate shot #{shot_index} generated for prompt: '{prompt}'.\n"
         "Check character identity lock, motion smoothness, lighting stability, and visual artifacts.\n"
         "Return ONLY a JSON object with keys: 'score' (float 0.0 - 1.0) and 'feedback' (str)."
     )
-    contents.append(eval_prompt)
 
     try:
-        response = client.models.generate_content(
-            model=rater.model,
-            contents=contents
-        )
-        text = response.text.strip()
+        text = asyncio.run(run_adk_agent(rater, eval_prompt, media_parts=media_parts))
         if text.startswith("```"):
             text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
         if text.startswith("json"):
@@ -183,12 +190,9 @@ def evaluate_clip_quality(shot_index: int, prompt: str, video_path: str, client:
         return {"score": 0.9, "feedback": "Passed multimodal video evaluation"}
 
 def run_pre_production(state: PipelineState, client: Optional[genai.Client] = None) -> PipelineState:
-    """Pre-production block: Uses ADK Master Orchestrator, Screenwriter, and Storyboarder agents."""
-    if client is None:
-        client = get_genai_client()
+    """Pre-production block: Uses ADK Master Orchestrator, Screenwriter, and Storyboarder agents via Runner."""
     config = Config()
     agents = create_adk_agents(config)
-    orchestrator = agents["orchestrator"]
     screenwriter = agents["screenwriter"]
 
     state.log_event(
@@ -205,16 +209,12 @@ def run_pre_production(state: PipelineState, client: Optional[genai.Client] = No
 
     if not state.storyboard:
         prompt = (
-            f"{screenwriter.instruction}\n\nUser request: '{state.original_intent}'. "
+            f"User request: '{state.original_intent}'. "
             f"Generate a {state.num_shots}-scene video storyboard. Return ONLY a JSON list of {state.num_shots} items, "
             f"where each item has keys: 'scene_number' (int 1 to {state.num_shots}), 'description' (str), 'camera_angle' (str)."
         )
         try:
-            response = client.models.generate_content(
-                model=screenwriter.model,
-                contents=prompt,
-            )
-            text = response.text.strip()
+            text = asyncio.run(run_adk_agent(screenwriter, prompt))
             if text.startswith("```"):
                 text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
             if text.startswith("json"):
@@ -261,8 +261,6 @@ def run_production_loop(state: PipelineState, output_dir: str = "/tmp/vidgen_out
     generated_clip_paths = []
     prev_frame_b64: Optional[str] = None
 
-    session = Session(id=f"session_{uuid.uuid4().hex[:8]}", appName="vidgen-omni", userId="xcyu")
-
     for idx, shot in enumerate(state.shots):
         clip_filename = os.path.join(output_dir, f"shot_{shot.shot_index}.mp4")
         frame_filename = os.path.join(output_dir, f"shot_{shot.shot_index}_last_frame.png")
@@ -272,7 +270,7 @@ def run_production_loop(state: PipelineState, output_dir: str = "/tmp/vidgen_out
         for attempt in range(max_attempts):
             state.attempt_counter += 1
 
-            # 1. Prompt Optimizer Agent
+            # 1. Prompt Optimizer Agent (runs via ADK Runner)
             optimized_shot_prompt = optimize_prompt(shot.prompt, feedback=feedback, client=client)
             state.log_event(
                 agent="PromptOptimizerAgent",
@@ -286,7 +284,7 @@ def run_production_loop(state: PipelineState, output_dir: str = "/tmp/vidgen_out
                 }
             )
 
-            # 2. Health Checker Agent Audit
+            # 2. Health Checker Agent Audit (runs via ADK Runner)
             is_healthy = audit_prompt_health(optimized_shot_prompt, client=client)
             state.log_event(
                 agent="HealthCheckerAgent",
@@ -328,7 +326,7 @@ def run_production_loop(state: PipelineState, output_dir: str = "/tmp/vidgen_out
             with open(clip_filename, "wb") as f:
                 f.write(video_bytes)
 
-            # 4. Quality Rater Agent Evaluation (Passes actual MP4 video file)
+            # 4. Quality Rater Agent Evaluation (runs via ADK Runner with video bytes)
             eval_result = evaluate_clip_quality(shot.shot_index, optimized_shot_prompt, video_path=clip_filename, client=client)
             score = eval_result.get("score", 0.9)
             state.quality_rating = score

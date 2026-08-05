@@ -2,7 +2,7 @@ import os
 import tempfile
 import base64
 import subprocess
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 import cv2
 import numpy as np
 import pytest
@@ -23,17 +23,24 @@ def create_synthetic_mp4():
     os.remove(path)
     return data
 
-def test_full_pipeline_integration_i2v():
-    mock_client = MagicMock()
+async def mock_run_adk_agent(agent, prompt, media_parts=None, session_service=None):
+    if agent.name == "ScreenwriterAgent":
+        return '''[
+            {"scene_number": 1, "description": "Shot 1: Snow landscape", "camera_angle": "wide"},
+            {"scene_number": 2, "description": "Shot 2: Red panda skiing", "camera_angle": "medium"},
+            {"scene_number": 3, "description": "Shot 3: Red panda jumping", "camera_angle": "close-up"}
+        ]'''
+    elif agent.name == "PromptOptimizerAgent":
+        return "Enhanced cinematic prompt"
+    elif agent.name == "HealthCheckerAgent":
+        return "APPROVED"
+    elif agent.name == "QualityRaterAgent":
+        return '{"score": 0.9, "feedback": "Good quality"}'
+    return "OK"
 
-    # Pre-production mock
-    mock_response = MagicMock()
-    mock_response.text = '''[
-        {"scene_number": 1, "description": "Shot 1: Snow landscape", "camera_angle": "wide"},
-        {"scene_number": 2, "description": "Shot 2: Red panda skiing", "camera_angle": "medium"},
-        {"scene_number": 3, "description": "Shot 3: Red panda jumping", "camera_angle": "close-up"}
-    ]'''
-    mock_client.models.generate_content.return_value = mock_response
+@patch("src.agents.stitcher_graph.run_adk_agent", side_effect=mock_run_adk_agent)
+def test_full_pipeline_integration_i2v(mock_adk):
+    mock_client = MagicMock()
 
     # Video generation mock
     fake_mp4_data = create_synthetic_mp4()
@@ -63,16 +70,9 @@ def test_full_pipeline_integration_i2v():
         assert result_state.shots[0].extracted_last_frame_b64 is not None
         assert result_state.shots[1].extracted_last_frame_b64 is not None
 
-def test_full_pipeline_integration_reference_mode():
+@patch("src.agents.stitcher_graph.run_adk_agent", side_effect=mock_run_adk_agent)
+def test_full_pipeline_integration_reference_mode(mock_adk):
     mock_client = MagicMock()
-    mock_response = MagicMock()
-    mock_response.text = '''[
-        {"scene_number": 1, "description": "Character entrance", "camera_angle": "medium"},
-        {"scene_number": 2, "description": "Character action", "camera_angle": "close-up"},
-        {"scene_number": 3, "description": "Character wave", "camera_angle": "wide"}
-    ]'''
-    mock_client.models.generate_content.return_value = mock_response
-
     fake_mp4_data = create_synthetic_mp4()
     mock_interaction = MagicMock()
     mock_interaction.output_video.data = base64.b64encode(fake_mp4_data).decode("utf-8")

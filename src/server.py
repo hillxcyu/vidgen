@@ -6,6 +6,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from google.genai import types
 
 from src.config import Config, get_genai_client
 from src.state import PipelineState, VideoShot, StoryboardEntry
@@ -14,6 +15,7 @@ from src.tools.omni_client import generate_omni_clip
 from src.tools.stitcher import stitch_videos
 from src.agents.stitcher_graph import (
     create_adk_agents,
+    run_adk_agent,
     optimize_prompt,
     audit_prompt_health,
     evaluate_clip_quality
@@ -38,7 +40,7 @@ class GenerateRequest(BaseModel):
 
 @app.get("/api/stream")
 async def stream_pipeline_endpoint(prompt: str, shots: Optional[int] = 3, mode: Optional[str] = "i2v_chaining"):
-    """Streams real-time SSE events for each agent step and audit trajectory."""
+    """Streams real-time SSE events for each agent step using native ADK Runner execution."""
     async def event_generator():
         client = get_genai_client()
         num_shots = max(1, min(10, shots or 3))
@@ -50,21 +52,17 @@ async def stream_pipeline_endpoint(prompt: str, shots: Optional[int] = 3, mode: 
         yield f"data: {json.dumps({'step': 1, 'agent': 'OrchestratorAgent', 'action': 'INITIATE_PIPELINE', 'details': {'prompt': prompt, 'num_shots': state.num_shots, 'mode': state.mode}})}\n\n"
         await asyncio.sleep(0.3)
 
-        # Step 2: ScreenwriterAgent
+        # Step 2: ScreenwriterAgent via ADK Runner
         yield f"data: {json.dumps({'step': 2, 'agent': 'ScreenwriterAgent', 'action': 'EXPAND_SCRIPT', 'details': {'status': 'in_progress', 'intent': prompt, 'target_shots': state.num_shots}})}\n\n"
         screenwriter = agents["screenwriter"]
 
         try:
             screenplay_prompt = (
-                f"{screenwriter.instruction}\n\nUser request: '{state.original_intent}'. "
+                f"User request: '{state.original_intent}'. "
                 f"Generate a {state.num_shots}-scene video storyboard. Return ONLY a JSON list of {state.num_shots} items, "
                 f"where each item has keys: 'scene_number' (int 1 to {state.num_shots}), 'description' (str), 'camera_angle' (str)."
             )
-            response = client.models.generate_content(
-                model=screenwriter.model,
-                contents=screenplay_prompt,
-            )
-            text = response.text.strip()
+            text = await run_adk_agent(screenwriter, screenplay_prompt)
             if text.startswith("```"):
                 text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
             if text.startswith("json"):
@@ -111,12 +109,12 @@ async def stream_pipeline_endpoint(prompt: str, shots: Optional[int] = 3, mode: 
             for attempt in range(max_attempts):
                 state.attempt_counter += 1
 
-                # Step 4: PromptOptimizerAgent
+                # Step 4: PromptOptimizerAgent via ADK Runner
                 optimized_shot_prompt = optimize_prompt(shot.prompt, feedback=feedback, client=client)
                 yield f"data: {json.dumps({'step': 4, 'agent': 'PromptOptimizerAgent', 'action': 'OPTIMIZE_PROMPT', 'details': {'shot_index': shot.shot_index, 'attempt': attempt + 1, 'raw_prompt': shot.prompt, 'optimized_prompt': optimized_shot_prompt, 'feedback': feedback}})}\n\n"
                 await asyncio.sleep(0.3)
 
-                # Step 5: HealthCheckerAgent
+                # Step 5: HealthCheckerAgent via ADK Runner
                 is_healthy = audit_prompt_health(optimized_shot_prompt, client=client)
                 yield f"data: {json.dumps({'step': 5, 'agent': 'HealthCheckerAgent', 'action': 'AUDIT_PROMPT', 'details': {'shot_index': shot.shot_index, 'verdict': 'APPROVED' if is_healthy else 'REJECTED_REVERTED', 'safety_status': 'CLEAR', 'ethical_ai_score': '99/100'}})}\n\n"
                 await asyncio.sleep(0.3)
@@ -143,7 +141,7 @@ async def stream_pipeline_endpoint(prompt: str, shots: Optional[int] = 3, mode: 
                 with open(clip_filename, "wb") as f:
                     f.write(video_bytes)
 
-                # Step 7: QualityRaterAgent (Passes MP4 video file for multimodal visual evaluation)
+                # Step 7: QualityRaterAgent via ADK Runner
                 eval_result = evaluate_clip_quality(shot.shot_index, optimized_shot_prompt, video_path=clip_filename, client=client)
                 score = eval_result.get("score", 0.9)
                 state.quality_rating = score

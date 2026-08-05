@@ -23,24 +23,32 @@ def create_mock_mp4_bytes():
     os.remove(path)
     return data
 
-def test_run_pre_production():
-    mock_client = MagicMock()
-    mock_response = MagicMock()
-    mock_response.text = '''[
-        {"scene_number": 1, "description": "Red panda walking", "camera_angle": "wide"},
-        {"scene_number": 2, "description": "Red panda skiing", "camera_angle": "medium"},
-        {"scene_number": 3, "description": "Red panda celebrating", "camera_angle": "close-up"}
-    ]'''
-    mock_client.models.generate_content.return_value = mock_response
+async def mock_run_adk_agent(agent, prompt, media_parts=None, session_service=None):
+    if agent.name == "ScreenwriterAgent":
+        return '''[
+            {"scene_number": 1, "description": "Red panda walking", "camera_angle": "wide"},
+            {"scene_number": 2, "description": "Red panda skiing", "camera_angle": "medium"},
+            {"scene_number": 3, "description": "Red panda celebrating", "camera_angle": "close-up"}
+        ]'''
+    elif agent.name == "PromptOptimizerAgent":
+        return "Enhanced cinematic prompt"
+    elif agent.name == "HealthCheckerAgent":
+        return "APPROVED"
+    elif agent.name == "QualityRaterAgent":
+        return '{"score": 0.9, "feedback": "Good quality"}'
+    return "OK"
 
+@patch("src.agents.stitcher_graph.run_adk_agent", side_effect=mock_run_adk_agent)
+def test_run_pre_production(mock_adk):
     state = PipelineState(original_intent="A red panda skiing in Hakuba", mode="i2v_chaining")
-    updated_state = run_pre_production(state, client=mock_client)
+    updated_state = run_pre_production(state)
 
     assert len(updated_state.storyboard) == 3
     assert len(updated_state.shots) == 3
     assert updated_state.shots[0].prompt == "wide shot: Red panda walking"
 
-def test_run_production_loop_mocked():
+@patch("src.agents.stitcher_graph.run_adk_agent", side_effect=mock_run_adk_agent)
+def test_run_production_loop_mocked(mock_adk):
     mock_client = MagicMock()
     fake_mp4 = create_mock_mp4_bytes()
 
@@ -49,7 +57,7 @@ def test_run_production_loop_mocked():
     mock_client.interactions.create.return_value = mock_interaction
 
     state = PipelineState(original_intent="Test intent", mode="i2v_chaining")
-    state = run_pre_production(state, client=mock_client)
+    state = run_pre_production(state)
 
     with tempfile.TemporaryDirectory() as tmpdir:
         result_state = run_production_loop(state, output_dir=tmpdir, client=mock_client)
