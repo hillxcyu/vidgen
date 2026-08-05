@@ -214,8 +214,8 @@ async def stream_pipeline(
             frame_filename = os.path.join(OUTPUT_DIR, f"shot_{shot.shot_index}_last_frame.png")
 
             feedback: Optional[str] = None
-            max_attempts = state.max_attempts
-            for attempt in range(max_attempts):
+            shot_max_attempts = state.max_attempts
+            for attempt in range(shot_max_attempts):
                 state.attempt_counter += 1
 
                 # Step 4: PromptOptimizerAgent via ADK Runner (Pass per-shot spoken dialogue)
@@ -280,7 +280,7 @@ async def stream_pipeline(
                 yield f"data: {json.dumps({'step': 7, 'agent': 'QualityRaterAgent', 'action': 'EVALUATE_QUALITY', 'details': {'shot_index': shot.shot_index, 'video_path': clip_filename, 'criteria_evaluated': shot.evaluation_criteria, 'attempt': attempt + 1, 'score': score, 'drift_detected': drift_detected, 'drift_breakdown': drift_breakdown, 'feedback': eval_result.get('feedback', 'Good visual quality'), 'verdict': 'PASSED' if score >= 0.8 and not drift_detected else 'REATTEMPT_REQUIRED'}})}\n\n"
                 await asyncio.sleep(0.3)
 
-                if (score >= 0.8 and not drift_detected) or attempt == max_attempts - 1:
+                if (score >= 0.8 and not drift_detected) or attempt == shot_max_attempts - 1:
                     break
                 else:
                     feedback = eval_result.get("feedback", "Refine visual continuity and prevent subject drift")
