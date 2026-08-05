@@ -209,7 +209,7 @@ async def stream_pipeline(
                 state.attempt_counter += 1
 
                 # Step 4: PromptOptimizerAgent via ADK Runner
-                optimized_shot_prompt = await optimize_prompt(shot.prompt, feedback=feedback, session_service=session_service, session_id=session_id, client=client)
+                optimized_shot_prompt = await optimize_prompt(shot.prompt, voice_transcript=state.voice_transcript, feedback=feedback, session_service=session_service, session_id=session_id, client=client)
                 yield f"data: {json.dumps({'step': 4, 'agent': 'PromptOptimizerAgent', 'action': 'OPTIMIZE_PROMPT', 'details': {'shot_index': shot.shot_index, 'attempt': attempt + 1, 'raw_prompt': shot.prompt, 'optimized_prompt': optimized_shot_prompt, 'feedback': feedback}})}\n\n"
                 await asyncio.sleep(0.3)
 

@@ -133,6 +133,7 @@ async def run_adk_agent(
 
 async def optimize_prompt(
     raw_prompt: str,
+    voice_transcript: Optional[str] = None,
     feedback: Optional[str] = None,
     session_service: Optional[InMemorySessionService] = None,
     session_id: Optional[str] = None,
@@ -144,10 +145,17 @@ async def optimize_prompt(
     optimizer = agents["prompt_optimizer"]
 
     feedback_context = f"\nQuality Rater Feedback to address: '{feedback}'" if feedback else ""
+    transcript_context = (
+        f"\nExact Spoken Dialogue Transcript: '{voice_transcript}'.\n"
+        "STRICT RULE: If spoken dialogue is provided, state the EXACT spoken words to speak without adding extra greetings, unscripted intro lines, or filler words."
+        if voice_transcript else ""
+    )
+
     full_prompt = (
-        f"Raw Shot Description: '{raw_prompt}'.{feedback_context}\n"
+        f"Raw Shot Description: '{raw_prompt}'.{feedback_context}{transcript_context}\n"
         "Generate an enhanced, highly-detailed cinematic prompt optimized for Gemini Omni Flash video generation. "
-        "Keep it concise, under 60 words, focusing on lighting, camera motion, visual clarity, and object persistence."
+        "Keep it concise, under 60 words, focusing on lighting, camera motion, visual clarity, and object persistence. "
+        "Do NOT add any unscripted greetings or intro lines if dialogue is specified."
     )
 
     try:
