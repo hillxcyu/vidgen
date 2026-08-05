@@ -298,16 +298,6 @@ async def stream_pipeline(
                 except Exception:
                     prev_frame_b64 = None
 
-            # Audio Voice Chaining via FFmpeg: Extract audio from Shot 1 to lock voice identity across subsequent shots
-            if not state.reference_audio_b64:
-                try:
-                    from src.tools.video_parser import extract_audio_reference
-                    extracted_aud_b64 = extract_audio_reference(clip_filename)
-                    if extracted_aud_b64:
-                        active_audio_b64 = [extracted_aud_b64]
-                except Exception:
-                    pass
-
         # Step 9: FFMPEGStitcher
         stitched_path = os.path.join(OUTPUT_DIR, f"output_stitched_{len(generated_clip_paths)*10}s.mp4")
         state.stitched_video_path = stitch_videos(generated_clip_paths, stitched_path)

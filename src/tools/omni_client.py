@@ -41,12 +41,9 @@ def build_omni_control_string(
     if input_image_b64:
         mmc_parts.append("# Sources <FIRST_FRAME>image_0.png")
     
-    # Mode A / Reference Mode: Image and Audio Character References
+    # Mode A / Reference Mode: Image Character References (Audio references disabled for now)
     if ref_imgs and len(ref_imgs) > 0:
         ref_tags.extend([f"<IMAGE_REF_{i}>[Character A]image_{i}.png" for i in range(min(10, len(ref_imgs)))])
-    
-    if ref_auds and len(ref_auds) > 0:
-        ref_tags.extend([f"<AUDIO_REF_{i}>[Character A]audio_{i}.wav" for i in range(min(5, len(ref_auds)))])
 
     if ref_tags:
         mmc_parts.append(f"# References {' '.join(ref_tags)}")
@@ -128,15 +125,6 @@ def generate_omni_clip(
                 "type": "image",
                 "data": img_b64,
                 "mime_type": "image/png"
-            })
-
-    # Shared Audio Reference Mode (Voice Consistency)
-    if ref_auds:
-        for aud_b64 in ref_auds[:5]:
-            payload.append({
-                "type": "audio",
-                "data": aud_b64,
-                "mime_type": "audio/wav"
             })
 
     # Format full control string according to Google Omni / Video Station specification

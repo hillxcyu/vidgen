@@ -22,17 +22,16 @@ def test_build_omni_control_string_reference_mode():
     )
     assert ctrl_str == "[# References <IMAGE_REF_0>[Character A]image_0.png <IMAGE_REF_1>[Character A]image_1.png] [aspect_ratio=9:16] [resolution=1080p] [duration=5s] A panda riding a skateboard"
 
-def test_build_omni_control_string_voice_audio_reference():
+def test_build_omni_control_string_voice_transcript():
     ctrl_str = build_omni_control_string(
         prompt="A character speaking on stage",
         reference_images_b64=["ref1_b64"],
-        reference_audio_b64=["audio1_b64"],
         voice_transcript="Hello world, welcome to GenMedia!",
         aspect_ratio="16:9",
         resolution="720p",
         duration=10
     )
-    assert "[# References <IMAGE_REF_0>[Character A]image_0.png <AUDIO_REF_0>[Character A]audio_0.wav]" in ctrl_str
+    assert "[# References <IMAGE_REF_0>[Character A]image_0.png]" in ctrl_str
     assert "Character A speaks dialogue: \"Hello world, welcome to GenMedia!\"" in ctrl_str
 
 def test_generate_omni_clip_i2v_mode():
