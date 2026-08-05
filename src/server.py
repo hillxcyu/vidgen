@@ -430,19 +430,16 @@ async def serve_index():
             border-color: #38bdf8;
             background: rgba(56, 189, 248, 0.05);
         }
-        label.drop-zone {
-            display: block;
-            padding: 20px;
+        .drop-zone {
+            padding: 16px;
             text-align: center;
             border: 2px dashed var(--border-color);
             border-radius: 10px;
-            cursor: pointer;
             background: rgba(255,255,255,0.02);
             transition: background 0.2s, border-color 0.2s;
-            user-select: none;
         }
-        label.drop-zone:hover {
-            background: rgba(99, 102, 241, 0.1);
+        .drop-zone:hover {
+            background: rgba(99, 102, 241, 0.08);
             border-color: var(--accent);
         }
         .preview-grid {
@@ -499,6 +496,9 @@ async def serve_index():
             padding: 8px 16px;
             font-size: 13px;
             border-radius: 6px;
+            border: none;
+            color: #fff;
+            cursor: pointer;
         }
         .btn-secondary:hover { background-color: #475569; }
 
@@ -619,16 +619,23 @@ async def serve_index():
 
                 <!-- Dedicated Prominent Reference Asset Uploader Panel -->
                 <div class="ref-upload-panel" id="refUploadPanel">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
                         <span style="font-size: 13px; font-weight: 700; color: #38bdf8;">📷 Character & Asset Reference Images</span>
                         <span class="badge badge-info" id="refCountBadge">0 assets</span>
                     </div>
-                    <label class="drop-zone" id="dropZone" for="refFileInput">
-                        <div style="font-size: 26px; margin-bottom: 4px;">🖼️</div>
-                        <div><strong>Click or Drag & Drop Reference Images Here</strong></div>
-                        <div style="font-size: 11px; color: var(--muted-text); margin-top: 4px;">PNG, JPG, WEBP (Passed as reference visual anchors to Gemini Omni Flash)</div>
-                    </label>
-                    <input type="file" id="refFileInput" multiple accept="image/*" onchange="handleRefFiles(event)" style="display: none;">
+                    
+                    <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 12px;">
+                        <button type="button" class="btn-secondary" onclick="openFileSelector()" style="padding: 10px 18px; font-size: 13px; font-weight: 600;">📁 Choose Image Files</button>
+                        <span style="font-size: 12px; color: var(--muted-text);">Select up to 10 PNG, JPG, WEBP images</span>
+                    </div>
+
+                    <input type="file" id="refFileInput" multiple accept="image/*" style="display: none;">
+
+                    <div class="drop-zone" id="dropZone">
+                        <div style="font-size: 22px; margin-bottom: 4px;">🖼️</div>
+                        <div><strong>Or Drag & Drop Reference Image Files Here</strong></div>
+                    </div>
+
                     <div class="preview-grid" id="refPreviewGrid"></div>
                 </div>
 
@@ -688,8 +695,36 @@ async def serve_index():
             }
         }
 
-        async function handleRefFiles(event) {
-            const files = event.target ? event.target.files : (event.dataTransfer ? event.dataTransfer.files : null);
+        function openFileSelector() {
+            const input = document.getElementById("refFileInput");
+            if (input) {
+                input.click();
+            }
+        }
+
+        document.addEventListener("DOMContentLoaded", () => {
+            const input = document.getElementById("refFileInput");
+            if (input) {
+                input.addEventListener("change", (e) => {
+                    processFiles(e.target.files);
+                    e.target.value = "";
+                });
+            }
+
+            const dropZone = document.getElementById("dropZone");
+            if (dropZone) {
+                ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                    dropZone.addEventListener(eventName, (e) => { e.preventDefault(); e.stopPropagation(); }, false);
+                });
+                dropZone.addEventListener('drop', (e) => {
+                    if (e.dataTransfer && e.dataTransfer.files) {
+                        processFiles(e.dataTransfer.files);
+                    }
+                }, false);
+            }
+        });
+
+        async function processFiles(files) {
             if (!files || files.length === 0) return;
 
             const remainingSlots = 10 - refImagesB64.length;
@@ -699,7 +734,11 @@ async def serve_index():
                 try {
                     const b64 = await new Promise((resolve, reject) => {
                         const reader = new FileReader();
-                        reader.onload = (e) => resolve(e.target.result.split(',')[1]);
+                        reader.onload = (e) => {
+                            const result = e.target.result;
+                            const b64Str = result.split(',')[1];
+                            resolve(b64Str);
+                        };
                         reader.onerror = (err) => reject(err);
                         reader.readAsDataURL(file);
                     });
@@ -707,12 +746,8 @@ async def serve_index():
                         refImagesB64.push(b64);
                     }
                 } catch (err) {
-                    console.error("Error reading reference image file:", err);
+                    console.error("Error reading image file:", err);
                 }
-            }
-
-            if (event.target) {
-                event.target.value = "";
             }
 
             renderRefGrid();
@@ -726,7 +761,9 @@ async def serve_index():
         function renderRefGrid() {
             const grid = document.getElementById("refPreviewGrid");
             const badge = document.getElementById("refCountBadge");
-            badge.innerText = `${refImagesB64.length} assets`;
+            if (badge) badge.innerText = `${refImagesB64.length} assets`;
+            if (!grid) return;
+
             grid.innerHTML = "";
 
             refImagesB64.forEach((b64, idx) => {
@@ -752,30 +789,23 @@ async def serve_index():
             });
         }
 
-        // Drag and drop handlers for dropZone
-        const dropZone = document.getElementById("dropZone");
-        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-            dropZone.addEventListener(eventName, (e) => { e.preventDefault(); e.stopPropagation(); }, false);
-        });
-
-        dropZone.addEventListener('drop', (e) => {
-            handleRefFiles(e);
-        }, false);
-
         function setStep(stepNum) {
             for (let i = 1; i <= 9; i++) {
                 const step = document.getElementById(`step-${i}`);
-                step.classList.remove("active", "complete");
-                if (i < stepNum) {
-                    step.classList.add("active", "complete");
-                } else if (i === stepNum) {
-                    step.classList.add("active");
+                if (step) {
+                    step.classList.remove("active", "complete");
+                    if (i < stepNum) {
+                        step.classList.add("active", "complete");
+                    } else if (i === stepNum) {
+                        step.classList.add("active");
+                    }
                 }
             }
         }
 
         function appendLog(agent, action, details) {
             const feed = document.getElementById("trajectoryFeed");
+            if (!feed) return;
             const div = document.createElement("div");
             div.className = "log-item";
             div.innerHTML = `
@@ -790,8 +820,10 @@ async def serve_index():
         }
 
         async function runPipeline() {
-            const prompt = document.getElementById("promptInput").value.trim();
-            const shots = parseInt(document.getElementById("shotsSelect").value, 10);
+            const promptInput = document.getElementById("promptInput");
+            const prompt = promptInput ? promptInput.value.trim() : "";
+            const shotsSelect = document.getElementById("shotsSelect");
+            const shots = shotsSelect ? parseInt(shotsSelect.value, 10) : 3;
             if (!prompt) return;
 
             const genBtn = document.getElementById("genBtn");
@@ -799,10 +831,10 @@ async def serve_index():
             const resultCard = document.getElementById("resultCard");
             const trajectoryFeed = document.getElementById("trajectoryFeed");
 
-            genBtn.disabled = true;
-            spinner.style.display = "block";
-            resultCard.style.display = "none";
-            trajectoryFeed.innerHTML = "";
+            if (genBtn) genBtn.disabled = true;
+            if (spinner) spinner.style.display = "block";
+            if (resultCard) resultCard.style.display = "none";
+            if (trajectoryFeed) trajectoryFeed.innerHTML = "";
             setStep(1);
 
             // Execute POST API call to stream endpoint with full parameters
@@ -843,49 +875,56 @@ async def serve_index():
                             }
 
                             if (data.action === "PIPELINE_COMPLETE" && data.details && data.details.status === "complete") {
-                                genBtn.disabled = false;
-                                spinner.style.display = "none";
+                                if (genBtn) genBtn.disabled = false;
+                                if (spinner) spinner.style.display = "none";
 
                                 setStep(9);
                                 for (let i = 1; i <= 9; i++) {
-                                    document.getElementById(`step-${i}`).classList.add("complete");
+                                    const s = document.getElementById(`step-${i}`);
+                                    if (s) s.classList.add("complete");
                                 }
 
-                                document.getElementById("stitchedTitle").innerText = `🎬 Stitched ${data.details.shots.length * 10}s Output Video (${data.details.mode} mode)`;
+                                const title = document.getElementById("stitchedTitle");
+                                if (title) title.innerText = `🎬 Stitched ${data.details.shots.length * 10}s Output Video (${data.details.mode} mode)`;
+                                
                                 const video = document.getElementById("stitchedVideo");
-                                const videoUrl = data.details.stitched_video_url + "?t=" + new Date().getTime();
-                                video.src = videoUrl;
-                                video.load();
+                                if (video) {
+                                    const videoUrl = data.details.stitched_video_url + "?t=" + new Date().getTime();
+                                    video.src = videoUrl;
+                                    video.load();
+                                }
 
                                 const downloadBtn = document.getElementById("downloadBtn");
-                                downloadBtn.href = data.details.stitched_video_url;
+                                if (downloadBtn) downloadBtn.href = data.details.stitched_video_url;
 
                                 const grid = document.getElementById("shotsGrid");
-                                grid.innerHTML = "";
-                                data.details.shots.forEach(shot => {
-                                    grid.innerHTML += `
-                                        <div class="shot-card">
-                                            <h4>
-                                                <span>Shot #${shot.shot_index}</span>
-                                                <a href="${shot.video_url}" download class="btn-secondary" style="font-size: 11px; text-decoration: none; padding: 4px 8px;">💾 Download MP4</a>
-                                            </h4>
-                                            <p><strong>Prompt:</strong> ${shot.prompt}</p>
-                                            <p style="color: #f472b6; font-size: 12px;"><strong>Orchestrator Criteria:</strong> ${shot.evaluation_criteria || 'Visual coherence & character lock'}</p>
-                                            <video controls preload="metadata" src="${shot.video_url}?t=${new Date().getTime()}"></video>
-                                            <p style="margin-top: 10px; color: #38bdf8;"><strong>OpenCV Last Frame (I2V Chaining):</strong></p>
-                                            <img class="frame-img" src="${shot.frame_url}?t=${new Date().getTime()}" alt="Shot ${shot.shot_index} Last Frame">
-                                        </div>
-                                    `;
-                                });
-                                resultCard.style.display = "block";
+                                if (grid) {
+                                    grid.innerHTML = "";
+                                    data.details.shots.forEach(shot => {
+                                        grid.innerHTML += `
+                                            <div class="shot-card">
+                                                <h4>
+                                                    <span>Shot #${shot.shot_index}</span>
+                                                    <a href="${shot.video_url}" download class="btn-secondary" style="font-size: 11px; text-decoration: none; padding: 4px 8px;">💾 Download MP4</a>
+                                                </h4>
+                                                <p><strong>Prompt:</strong> ${shot.prompt}</p>
+                                                <p style="color: #f472b6; font-size: 12px;"><strong>Orchestrator Criteria:</strong> ${shot.evaluation_criteria || 'Visual coherence & character lock'}</p>
+                                                <video controls preload="metadata" src="${shot.video_url}?t=${new Date().getTime()}"></video>
+                                                <p style="margin-top: 10px; color: #38bdf8;"><strong>OpenCV Last Frame (I2V Chaining):</strong></p>
+                                                <img class="frame-img" src="${shot.frame_url}?t=${new Date().getTime()}" alt="Shot ${shot.shot_index} Last Frame">
+                                            </div>
+                                        `;
+                                    });
+                                }
+                                if (resultCard) resultCard.style.display = "block";
                             }
                         }
                     }
                 }
             } catch (err) {
                 alert("Execution error: " + err);
-                genBtn.disabled = false;
-                spinner.style.display = "none";
+                if (genBtn) genBtn.disabled = false;
+                if (spinner) spinner.style.display = "none";
             }
         }
     </script>
