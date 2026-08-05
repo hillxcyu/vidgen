@@ -16,5 +16,6 @@ COPY . .
 # Install python packages
 RUN pip install --no-cache-dir hatchling && pip install --no-cache-dir -e .
 
-ENTRYPOINT ["python3", "src/main.py"]
-CMD ["--help"]
+ENV PORT=3000
+
+CMD ["sh", "-c", "uvicorn src.server:app --host 0.0.0.0 --port ${PORT}"]

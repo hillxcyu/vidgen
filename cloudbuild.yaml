@@ -1,0 +1,42 @@
+steps:
+  # 1. Build the container image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/vidgen-app:$COMMIT_SHA'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/vidgen-app:latest'
+      - '.'
+
+  # 2. Push the container image to Container Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'gcr.io/$PROJECT_ID/vidgen-app:$COMMIT_SHA'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'gcr.io/$PROJECT_ID/vidgen-app:latest'
+
+  # 3. Deploy container image to Google Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'vidgen-app'
+      - '--image=gcr.io/$PROJECT_ID/vidgen-app:$COMMIT_SHA'
+      - '--region=us-central1'
+      - '--platform=managed'
+      - '--allow-unauthenticated'
+      - '--set-env-vars=GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=global,PORT=3000'
+      - '--port=3000'
+      - '--memory=2Gi'
+      - '--cpu=2'
+      - '--timeout=600'
+
+images:
+  - 'gcr.io/$PROJECT_ID/vidgen-app:$COMMIT_SHA'
+  - 'gcr.io/$PROJECT_ID/vidgen-app:latest'
