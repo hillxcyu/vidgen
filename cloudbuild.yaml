@@ -1,24 +1,24 @@
 steps:
-  # 1. Build the container image
+  # 1. Build the container image using Artifact Registry repository
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'build'
       - '-t'
-      - 'gcr.io/$PROJECT_ID/vidgen-app:$COMMIT_SHA'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/vidgen-repo/vidgen-app:$COMMIT_SHA'
       - '-t'
-      - 'gcr.io/$PROJECT_ID/vidgen-app:latest'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/vidgen-repo/vidgen-app:latest'
       - '.'
 
-  # 2. Push the container image to Container Registry
+  # 2. Push the container image to Artifact Registry
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'push'
-      - 'gcr.io/$PROJECT_ID/vidgen-app:$COMMIT_SHA'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/vidgen-repo/vidgen-app:$COMMIT_SHA'
 
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'push'
-      - 'gcr.io/$PROJECT_ID/vidgen-app:latest'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/vidgen-repo/vidgen-app:latest'
 
   # 3. Deploy container image to Google Cloud Run
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
@@ -27,7 +27,7 @@ steps:
       - 'run'
       - 'deploy'
       - 'vidgen-app'
-      - '--image=gcr.io/$PROJECT_ID/vidgen-app:$COMMIT_SHA'
+      - '--image=us-central1-docker.pkg.dev/$PROJECT_ID/vidgen-repo/vidgen-app:$COMMIT_SHA'
       - '--region=us-central1'
       - '--platform=managed'
       - '--allow-unauthenticated'
@@ -38,8 +38,8 @@ steps:
       - '--timeout=600'
 
 images:
-  - 'gcr.io/$PROJECT_ID/vidgen-app:$COMMIT_SHA'
-  - 'gcr.io/$PROJECT_ID/vidgen-app:latest'
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/vidgen-repo/vidgen-app:$COMMIT_SHA'
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/vidgen-repo/vidgen-app:latest'
 
 options:
   logging: CLOUD_LOGGING_ONLY
