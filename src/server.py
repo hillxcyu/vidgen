@@ -234,8 +234,7 @@ async def stream_pipeline(prompt: str, shots: int, mode: str, reference_assets_b
 
 @app.get("/", response_class=HTMLResponse)
 async def serve_index():
-    return """
-<!DOCTYPE html>
+    return """<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -875,13 +874,14 @@ async def serve_index():
                 var reader = res.body.getReader();
                 var decoder = new TextDecoder();
                 var buffer = "";
+                var delim = String.fromCharCode(10) + String.fromCharCode(10);
 
                 while (true) {
                     var result = await reader.read();
                     if (result.done) break;
                     buffer += decoder.decode(result.value, { stream: true });
 
-                    var lines = buffer.split("\n\n");
+                    var lines = buffer.split(delim);
                     buffer = lines.pop(); // Keep partial frame
 
                     for (var i = 0; i < lines.length; i++) {
@@ -948,5 +948,4 @@ async def serve_index():
         };
     </script>
 </body>
-</html>
-    """
+</html>"""
