@@ -51,10 +51,13 @@ def build_omni_control_string(
     mmc_mode_str = f"[{' '.join(mmc_parts)}] " if mmc_parts else ""
     fc_args_str = f"[aspect_ratio={aspect_ratio}] [resolution={resolution}] [duration={duration}s]"
 
-    # Append voice transcript / dialogue instruction if provided
+    # Append voice transcript / dialogue instruction if provided and not already included in prompt
     prompt_content = prompt
     if voice_transcript and voice_transcript.strip():
-        prompt_content = f"{prompt}. Character A speaks dialogue: \"{voice_transcript.strip()}\""
+        transcript_clean = voice_transcript.strip()
+        dialogue_tag = f"Character A speaks dialogue: \"{transcript_clean}\""
+        if dialogue_tag not in prompt and transcript_clean not in prompt:
+            prompt_content = f"{prompt}. {dialogue_tag}"
 
     full_control_string = f"{mmc_mode_str}{fc_args_str} {prompt_content}".strip()
     return full_control_string
