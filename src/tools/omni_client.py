@@ -106,13 +106,11 @@ def generate_omni_clip(
     aspect_ratio: str = "16:9",
     resolution: str = "720p",
     duration: int = 10,
-    gcs_output_uri: Optional[str] = None,
     client: Optional[genai.Client] = None,
 ) -> bytes:
     """Wrapper tool for Gemini Omni Flash (gemini-omni-flash-preview) using interactions.create API.
     
     Supports:
-    - Direct output GCS URI rendering without copying video files back and forth (gcs_output_directory / output_gcs_uri)
     - MMC Control Strings formatting (MMC mode tags, audio reference tags & FC argument tokens)
     - Mode A (Reference Mode): Image references + voice audio references + text prompt.
     - Mode B (Sequential I2V Mode): Terminal frame base64 input + text motion prompt.
@@ -161,20 +159,10 @@ def generate_omni_clip(
     })
 
     try:
-        try:
-            kwargs = {
-                "model": config.VIDEO_GEN_MODEL,
-                "input": payload
-            }
-            if gcs_output_uri:
-                kwargs["config"] = {"gcs_output_directory": gcs_output_uri}
-            interaction = client.interactions.create(**kwargs)
-        except Exception as api_err:
-            # Fallback to standard payload call without config if extra options are unsupported
-            interaction = client.interactions.create(
-                model=config.VIDEO_GEN_MODEL,
-                input=payload
-            )
+        interaction = client.interactions.create(
+            model=config.VIDEO_GEN_MODEL,
+            input=payload
+        )
 
         if hasattr(interaction, "output_video") and hasattr(interaction.output_video, "data"):
             return base64.b64decode(interaction.output_video.data)
