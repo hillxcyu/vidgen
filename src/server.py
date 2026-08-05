@@ -388,24 +388,32 @@ async def serve_index():
             gap: 12px;
             margin-bottom: 14px;
         }
-        .mode-option {
+        label.mode-option {
             flex: 1;
-            padding: 12px 16px;
+            padding: 14px 16px;
             border-radius: 10px;
             border: 1px solid var(--border-color);
             background: #090d16;
             cursor: pointer;
             display: flex;
-            align-items: center;
-            gap: 10px;
+            align-items: flex-start;
+            gap: 12px;
             font-size: 13px;
             transition: all 0.2s;
+            user-select: none;
         }
-        .mode-option.selected {
+        label.mode-option:hover {
+            border-color: #4f46e5;
+        }
+        label.mode-option.selected {
             border-color: var(--accent);
             background: rgba(99, 102, 241, 0.15);
         }
-        .mode-option input { cursor: pointer; }
+        label.mode-option input[type="radio"] {
+            margin-top: 3px;
+            cursor: pointer;
+            accent-color: var(--accent);
+        }
 
         /* Reference Image Uploader */
         .ref-upload-container {
@@ -550,20 +558,20 @@ async def serve_index():
                 <!-- Pipeline Mode Selection -->
                 <label style="font-size: 13px; color: var(--muted-text); margin-bottom: 6px; display: block;">Pipeline Generation Mode:</label>
                 <div class="mode-box">
-                    <div class="mode-option selected" id="mode-i2v" onclick="selectMode('i2v_chaining')">
-                        <input type="radio" name="mode" value="i2v_chaining" checked>
+                    <label class="mode-option selected" id="mode-i2v">
+                        <input type="radio" name="mode" value="i2v_chaining" checked onchange="selectMode('i2v_chaining')">
                         <div>
                             <strong>⚡ Sequential I2V Chaining</strong>
                             <div style="font-size: 11px; color: var(--muted-text);">OpenCV terminal frame extraction for unbroken motion continuity</div>
                         </div>
-                    </div>
-                    <div class="mode-option" id="mode-ref" onclick="selectMode('reference')">
-                        <input type="radio" name="mode" value="reference">
+                    </label>
+                    <label class="mode-option" id="mode-ref">
+                        <input type="radio" name="mode" value="reference" onchange="selectMode('reference')">
                         <div>
                             <strong>🎨 Asset Reference Mode</strong>
                             <div style="font-size: 11px; color: var(--muted-text);">Shared character & style image reference anchors</div>
                         </div>
-                    </div>
+                    </label>
                 </div>
 
                 <!-- Reference Images Upload (Visible in Reference Mode) -->
@@ -623,7 +631,6 @@ async def serve_index():
             selectedMode = mode;
             document.getElementById("mode-i2v").classList.toggle("selected", mode === "i2v_chaining");
             document.getElementById("mode-ref").classList.toggle("selected", mode === "reference");
-            document.querySelector(`input[value="${mode}"]`).checked = true;
 
             const refBox = document.getElementById("refUploadBox");
             if (mode === "reference") {
@@ -693,7 +700,7 @@ async def serve_index():
             trajectoryFeed.innerHTML = "";
             setStep(1);
 
-            // Execute POST API call to stream endpoint with full parameters (mode, reference images, shots, prompt)
+            // Execute POST API call to stream endpoint with full parameters
             try {
                 const res = await fetch("/api/stream", {
                     method: "POST",
