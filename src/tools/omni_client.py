@@ -161,14 +161,21 @@ def generate_omni_clip(
     })
 
     try:
-        kwargs = {
-            "model": config.VIDEO_GEN_MODEL,
-            "input": payload
-        }
-        if gcs_output_uri:
-            kwargs["config"] = {"gcs_output_directory": gcs_output_uri}
+        try:
+            kwargs = {
+                "model": config.VIDEO_GEN_MODEL,
+                "input": payload
+            }
+            if gcs_output_uri:
+                kwargs["config"] = {"gcs_output_directory": gcs_output_uri}
+            interaction = client.interactions.create(**kwargs)
+        except Exception as api_err:
+            # Fallback to standard payload call without config if extra options are unsupported
+            interaction = client.interactions.create(
+                model=config.VIDEO_GEN_MODEL,
+                input=payload
+            )
 
-        interaction = client.interactions.create(**kwargs)
         if hasattr(interaction, "output_video") and hasattr(interaction.output_video, "data"):
             return base64.b64decode(interaction.output_video.data)
         elif hasattr(interaction, "candidates") and len(interaction.candidates) > 0:
@@ -179,9 +186,14 @@ def generate_omni_clip(
                         return part.inline_data.data
         if hasattr(interaction, "output") and isinstance(interaction.output, bytes):
             return interaction.output
-    except Exception as e:
-        print(f"[NOTICE] Live API call to '{config.VIDEO_GEN_MODEL}' encountered: {e}")
-        print("[NOTICE] Falling back to synthetic clip generation for demo execution...")
+        
+        # If output object format is non-standard
         return _create_fallback_mp4_bytes(formatted_prompt)
+    except Exception as e:
+        import traceback
+        err_detail = f"Gemini Omni Video Gen Error ({type(e).__name__}): {e}"
+        print(f"[ERROR] {err_detail}")
+        traceback.print_exc()
+        raise RuntimeError(err_detail) from e
 
     return _create_fallback_mp4_bytes(formatted_prompt)

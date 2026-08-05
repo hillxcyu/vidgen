@@ -95,7 +95,8 @@ async def run_adk_agent(
     media_parts: Optional[List[types.Part]] = None,
     session_service: Optional[InMemorySessionService] = None,
     session_id: Optional[str] = None,
-    initial_state: Optional[Dict[str, Any]] = None
+    initial_state: Optional[Dict[str, Any]] = None,
+    root_agent: Optional[LlmAgent] = None
 ) -> str:
     """Executes an ADK LlmAgent natively using ADK Runner and shared session state management."""
     if session_service is None:
@@ -109,7 +110,8 @@ async def run_adk_agent(
         )
         session_id = session.id
 
-    runner = Runner(agent=agent, app_name="vidgen-omni", session_service=session_service)
+    target_agent = root_agent or agent
+    runner = Runner(agent=target_agent, app_name="vidgen-omni", session_service=session_service)
 
     parts = [types.Part.from_text(text=user_prompt)]
     if media_parts:
@@ -159,7 +161,8 @@ async def optimize_prompt(
     )
 
     try:
-        optimized = await run_adk_agent(optimizer, full_prompt, session_service=session_service, session_id=session_id)
+        orchestrator = agents["orchestrator"]
+        optimized = await run_adk_agent(optimizer, full_prompt, session_service=session_service, session_id=session_id, root_agent=orchestrator)
         return optimized if optimized else raw_prompt
     except Exception:
         return raw_prompt
@@ -174,13 +177,14 @@ async def audit_prompt_health(
     config = Config()
     agents = create_adk_agents(config)
     checker = agents["health_checker"]
+    orchestrator = agents["orchestrator"]
 
     audit_prompt = (
         f"Inspect candidate prompt for safety/compliance: '{prompt}'.\n"
         "Reply ONLY with 'APPROVED' if compliant or 'REJECTED' if non-compliant."
     )
     try:
-        res_text = (await run_adk_agent(checker, audit_prompt, session_service=session_service, session_id=session_id)).upper()
+        res_text = (await run_adk_agent(checker, audit_prompt, session_service=session_service, session_id=session_id, root_agent=orchestrator)).upper()
         return "APPROVED" in res_text or "REJECTED" not in res_text
     except Exception:
         return True
