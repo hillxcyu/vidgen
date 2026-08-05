@@ -861,7 +861,7 @@
                                 appendLog(data.agent, data.action, data.details);
                             }
 
-                            if (data.action === "PIPELINE_COMPLETE" && data.details && data.details.status === "complete") {
+                            if ((data.action === "PIPELINE_COMPLETE" || data.action === "COMPLETE_PIPELINE") && data.details) {
                                 if (genBtn) genBtn.disabled = false;
                                 if (spinner) spinner.style.display = "none";
 

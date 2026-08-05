@@ -248,7 +248,8 @@ async def stream_pipeline(
                 yield f"data: {json.dumps({'step': 6, 'agent': 'GeminiOmniFlash', 'action': 'RENDER_CLIP', 'details': {'shot_index': shot.shot_index, 'mode': state.mode, 'control_string': control_str, 'has_input_image': prev_frame_b64 is not None or len(state.reference_assets_b64) > 0, 'has_audio_reference': len(active_audio_b64) > 0}})}\n\n"
 
                 try:
-                    video_bytes = generate_omni_clip(
+                    video_bytes = await asyncio.to_thread(
+                        generate_omni_clip,
                         prompt=optimized_shot_prompt,
                         input_image_b64=prev_frame_b64 if state.mode == "i2v_chaining" else None,
                         reference_images_b64=state.reference_assets_b64,
@@ -300,7 +301,7 @@ async def stream_pipeline(
             # Visual Chaining via OpenCV
             if state.mode == "i2v_chaining":
                 try:
-                    prev_frame_b64 = extract_last_frame(clip_filename, output_image_path=frame_filename)
+                    prev_frame_b64 = await asyncio.to_thread(extract_last_frame, clip_filename, output_image_path=frame_filename)
                     shot.extracted_last_frame_b64 = prev_frame_b64
                     # Step 8: OpenCVParser
                     yield f"data: {json.dumps({'step': 8, 'agent': 'OpenCVVideoParser', 'action': 'EXTRACT_TERMINAL_FRAME', 'details': {'shot_index': shot.shot_index, 'frame_file': f'shot_{shot.shot_index}_last_frame.png', 'passed_to_next_shot': True}})}\n\n"
@@ -310,7 +311,7 @@ async def stream_pipeline(
 
         # Step 9: FFMPEGStitcher
         stitched_path = os.path.join(OUTPUT_DIR, f"output_stitched_{len(generated_clip_paths)*10}s.mp4")
-        state.stitched_video_path = stitch_videos(generated_clip_paths, stitched_path)
+        state.stitched_video_path = await asyncio.to_thread(stitch_videos, generated_clip_paths, stitched_path)
         video_filename = os.path.basename(state.stitched_video_path)
 
         yield f"data: {json.dumps({'step': 9, 'agent': 'FFMPEGStitcherTool', 'action': 'CONCATENATE_CLIPS', 'details': {'clips_count': len(generated_clip_paths), 'output_path': state.stitched_video_path, 'final_duration': f'{len(generated_clip_paths)*10}s'}})}\n\n"
@@ -318,21 +319,22 @@ async def stream_pipeline(
 
         # Final Event payload with full media output URLs and shot metadata
         final_payload = {
-            "status": "complete",
-            "mode": state.mode,
-            "stitched_video_url": f"/output/{video_filename}",
+            "status": "completed",
+            "message": "Multi-agent generative video pipeline completed successfully.",
+            "stitched_video_url": f"/output/{video_filename}?t={int(time.time())}",
             "shots": [
                 {
-                    "shot_index": shot.shot_index,
-                    "prompt": shot.prompt,
-                    "evaluation_criteria": shot.evaluation_criteria,
-                    "video_url": f"/output/shot_{shot.shot_index}.mp4",
-                    "frame_url": f"/output/shot_{shot.shot_index}_last_frame.png"
+                    "shot_index": s.shot_index,
+                    "prompt": s.prompt,
+                    "evaluation_criteria": s.evaluation_criteria,
+                    "video_url": f"/output/shot_{s.shot_index}.mp4?t={int(time.time())}",
+                    "frame_url": f"/output/shot_{s.shot_index}_last_frame.png?t={int(time.time())}"
                 }
-                for shot in state.shots
+                for s in state.shots
             ]
         }
-        yield f"data: {json.dumps({'step': 9, 'agent': 'OrchestratorAgent', 'action': 'PIPELINE_COMPLETE', 'details': final_payload})}\n\n"
+
+        yield f"data: {json.dumps({'step': 10, 'agent': 'OrchestratorAgent', 'action': 'COMPLETE_PIPELINE', 'details': final_payload})}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
@@ -357,7 +359,8 @@ class SaveRunRequest(BaseModel):
 
 @app.post("/api/runs/save")
 async def save_run_endpoint(req: SaveRunRequest):
-    entry = save_run(
+    entry = await asyncio.to_thread(
+        save_run,
         run_id=req.run_id,
         original_intent=req.original_intent,
         num_shots=req.num_shots,
@@ -374,10 +377,10 @@ async def save_run_endpoint(req: SaveRunRequest):
 
 @app.get("/api/runs/list")
 async def list_runs_endpoint():
-    runs = get_saved_runs()
+    runs = await asyncio.to_thread(get_saved_runs)
     return {"runs": runs}
 
 @app.delete("/api/runs/{run_id}")
 async def delete_run_endpoint(run_id: str):
-    success = delete_saved_run(run_id)
+    success = await asyncio.to_thread(delete_saved_run, run_id)
     return {"status": "deleted" if success else "not_found"}
