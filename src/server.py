@@ -336,3 +336,45 @@ async def stream_pipeline(
 @app.get("/")
 async def serve_index():
     return FileResponse(TEMPLATE_PATH, media_type="text/html")
+
+from src.tools.gcs_storage import save_run, get_saved_runs, delete_saved_run
+
+class SaveRunRequest(BaseModel):
+    run_id: str
+    original_intent: str
+    num_shots: int = 3
+    mode: str = "i2v_chaining"
+    aspect_ratio: str = "16:9"
+    resolution: str = "720p"
+    duration: int = 10
+    voice_transcript: Optional[str] = None
+    stitched_video_path: Optional[str] = None
+    shots: Optional[List[Dict[str, Any]]] = None
+    trajectory_logs: Optional[List[Dict[str, Any]]] = None
+
+@app.post("/api/runs/save")
+async def save_run_endpoint(req: SaveRunRequest):
+    entry = save_run(
+        run_id=req.run_id,
+        original_intent=req.original_intent,
+        num_shots=req.num_shots,
+        mode=req.mode,
+        aspect_ratio=req.aspect_ratio,
+        resolution=req.resolution,
+        duration=req.duration,
+        voice_transcript=req.voice_transcript,
+        stitched_video_path=req.stitched_video_path,
+        shots=req.shots,
+        trajectory_logs=req.trajectory_logs
+    )
+    return {"status": "success", "run": entry}
+
+@app.get("/api/runs/list")
+async def list_runs_endpoint():
+    runs = get_saved_runs()
+    return {"runs": runs}
+
+@app.delete("/api/runs/{run_id}")
+async def delete_run_endpoint(run_id: str):
+    success = delete_saved_run(run_id)
+    return {"status": "deleted" if success else "not_found"}
