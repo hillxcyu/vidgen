@@ -1,0 +1,11 @@
+name: vidgen-omni
+title: Multi-Agent Generative Media Pipeline (GenMedia-Omni)
+version: 0.1.0
+description: ADK 2.0 multi-agent pipeline using gemini-3.6-flash and gemini-omni-flash-preview for sequential 30s video generation.
+entrypoint: src/main.py
+framework: adk-2.0
+orchestrator_model: gemini-3.6-flash
+video_model: gemini-omni-flash-preview
+environment:
+  GOOGLE_CLOUD_LOCATION: global
+  GOOGLE_GENAI_USE_VERTEXAI: "true"

@@ -1,0 +1,1 @@
+# vidgen-omni package root

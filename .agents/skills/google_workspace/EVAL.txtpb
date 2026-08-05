@@ -1,0 +1,40 @@
+# proto-file: learning/gemini/agents/evaluation/evalin/proto/eval_suite.proto
+# proto-message: EvalSuite
+# txtpbfmt: wrap_strings_after_newlines
+
+suite_name: "google_workspace"
+timeout_seconds: 300
+
+cases {
+  name: "tool_selection"
+  prompt: "I need to find some content that might be in my Gmail, Drive, or Calendar. I'm not sure where exactly it is. Which tool should I use to search across all of them?\n"
+  expectations:
+    "The agent must:\n"
+    "- Recommend the CSA CLI for cross-corpus semantic search\n"
+    "- Explain it can search across Gmail, Calendar, Drive, Chat, and Keep\n"
+    "- Mention that corpora should be run combined for best results"
+  expectations: "Agent output contains at least one of: CSA, semantic, corpora"
+}
+
+cases {
+  name: "workspace_routing"
+  prompt: "I want to read a Google Doc, create a spreadsheet, and download a file from Drive. What tools handle each of these tasks?\n"
+  expectations:
+    "The agent must:\n"
+    "- Map gdocs CLI for reading Google Docs\n"
+    "- Map gsheets CLI for creating spreadsheets\n"
+    "- Map gdrive CLI for downloading Drive files\n"
+    "- Mention the dedicated skill for each product has full documentation"
+  expectations: "Agent output contains at least one of: gdocs, gsheets, gdrive"
+}
+
+cases {
+  name: "download_images"
+  prompt: "I'm reading a Google Doc and it contains images. How do I download those images to a local directory?\n"
+  expectations:
+    "The agent must:\n"
+    "- Explain using gdocs read to extract image URLs\n"
+    "- Show using curl to download images from the URLs\n"
+    "- Mention saving to /tmp/agent_artifacts/ directory"
+  expectations: "Agent output contains at least one of: curl, Image, download"
+}
