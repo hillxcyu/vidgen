@@ -625,11 +625,11 @@ async def serve_index():
                     </div>
                     
                     <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 12px;">
-                        <button type="button" class="btn-secondary" onclick="openFileSelector()" style="padding: 10px 18px; font-size: 13px; font-weight: 600;">📁 Choose Image Files</button>
+                        <button type="button" class="btn-secondary" onclick="triggerFileInput()" style="padding: 10px 18px; font-size: 13px; font-weight: 600;">📁 Choose Image Files</button>
                         <span style="font-size: 12px; color: var(--muted-text);">Select up to 10 PNG, JPG, WEBP images</span>
                     </div>
 
-                    <input type="file" id="refFileInput" multiple accept="image/*" style="display: none;">
+                    <input type="file" id="refFileInput" multiple accept="image/*" onchange="handleRefFiles(event)" style="display: none;">
 
                     <div class="drop-zone" id="dropZone">
                         <div style="font-size: 22px; margin-bottom: 4px;">🖼️</div>
@@ -682,72 +682,64 @@ async def serve_index():
     </div>
 
     <script>
-        let selectedMode = "i2v_chaining";
-        let refImagesB64 = [];
+        var selectedMode = "i2v_chaining";
+        var refImagesB64 = [];
 
         function selectMode(mode) {
             selectedMode = mode;
-            const refPanel = document.getElementById("refUploadPanel");
-            if (mode === "reference") {
-                refPanel.classList.add("active-panel");
-            } else {
-                refPanel.classList.remove("active-panel");
+            var refPanel = document.getElementById("refUploadPanel");
+            if (refPanel) {
+                if (mode === "reference") {
+                    refPanel.classList.add("active-panel");
+                } else {
+                    refPanel.classList.remove("active-panel");
+                }
             }
         }
 
-        function openFileSelector() {
-            const input = document.getElementById("refFileInput");
-            if (input) {
-                input.click();
+        function triggerFileInput() {
+            var fileInput = document.getElementById("refFileInput");
+            if (fileInput) {
+                fileInput.click();
             }
         }
 
-        document.addEventListener("DOMContentLoaded", () => {
-            const input = document.getElementById("refFileInput");
-            if (input) {
-                input.addEventListener("change", (e) => {
-                    processFiles(e.target.files);
-                    e.target.value = "";
-                });
+        async function handleRefFiles(event) {
+            var files = null;
+            if (event.target && event.target.files && event.target.files.length > 0) {
+                files = event.target.files;
+            } else if (event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files.length > 0) {
+                files = event.dataTransfer.files;
             }
 
-            const dropZone = document.getElementById("dropZone");
-            if (dropZone) {
-                ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-                    dropZone.addEventListener(eventName, (e) => { e.preventDefault(); e.stopPropagation(); }, false);
-                });
-                dropZone.addEventListener('drop', (e) => {
-                    if (e.dataTransfer && e.dataTransfer.files) {
-                        processFiles(e.dataTransfer.files);
-                    }
-                }, false);
-            }
-        });
-
-        async function processFiles(files) {
             if (!files || files.length === 0) return;
 
-            const remainingSlots = 10 - refImagesB64.length;
-            const fileList = Array.from(files).slice(0, remainingSlots);
+            var remainingSlots = 10 - refImagesB64.length;
+            var fileList = Array.from(files).slice(0, remainingSlots);
 
-            for (const file of fileList) {
+            for (var i = 0; i < fileList.length; i++) {
+                var file = fileList[i];
                 try {
-                    const b64 = await new Promise((resolve, reject) => {
-                        const reader = new FileReader();
-                        reader.onload = (e) => {
-                            const result = e.target.result;
-                            const b64Str = result.split(',')[1];
-                            resolve(b64Str);
+                    var b64 = await new Promise(function(resolve, reject) {
+                        var reader = new FileReader();
+                        reader.onload = function(e) {
+                            var raw = e.target.result;
+                            var parts = raw.split(',');
+                            resolve(parts[1] || parts[0]);
                         };
-                        reader.onerror = (err) => reject(err);
+                        reader.onerror = function(err) { reject(err); };
                         reader.readAsDataURL(file);
                     });
                     if (b64) {
                         refImagesB64.push(b64);
                     }
                 } catch (err) {
-                    console.error("Error reading image file:", err);
+                    console.error("FileReader error:", err);
                 }
+            }
+
+            if (event.target) {
+                event.target.value = "";
             }
 
             renderRefGrid();
@@ -759,39 +751,58 @@ async def serve_index():
         }
 
         function renderRefGrid() {
-            const grid = document.getElementById("refPreviewGrid");
-            const badge = document.getElementById("refCountBadge");
-            if (badge) badge.innerText = `${refImagesB64.length} assets`;
+            var grid = document.getElementById("refPreviewGrid");
+            var badge = document.getElementById("refCountBadge");
+            if (badge) badge.innerText = refImagesB64.length + " assets";
             if (!grid) return;
 
             grid.innerHTML = "";
 
-            refImagesB64.forEach((b64, idx) => {
-                const wrapper = document.createElement("div");
-                wrapper.className = "thumb-wrapper";
+            for (var i = 0; i < refImagesB64.length; i++) {
+                (function(idx) {
+                    var wrapper = document.createElement("div");
+                    wrapper.className = "thumb-wrapper";
 
-                const img = document.createElement("img");
-                img.className = "thumb-img";
-                img.src = "data:image/png;base64," + b64;
-                img.alt = "Ref Image " + (idx + 1);
+                    var img = document.createElement("img");
+                    img.className = "thumb-img";
+                    img.src = "data:image/png;base64," + refImagesB64[idx];
+                    img.alt = "Ref Image " + (idx + 1);
 
-                const btn = document.createElement("button");
-                btn.className = "remove-btn";
-                btn.innerText = "✕";
-                btn.onclick = (e) => {
-                    e.stopPropagation();
-                    removeRefImage(idx);
-                };
+                    var btn = document.createElement("button");
+                    btn.type = "button";
+                    btn.className = "remove-btn";
+                    btn.innerText = "✕";
+                    btn.onclick = function(e) {
+                        if (e) e.stopPropagation();
+                        removeRefImage(idx);
+                    };
 
-                wrapper.appendChild(img);
-                wrapper.appendChild(btn);
-                grid.appendChild(wrapper);
-            });
+                    wrapper.appendChild(img);
+                    wrapper.appendChild(btn);
+                    grid.appendChild(wrapper);
+                })(i);
+            }
         }
 
+        window.addEventListener("DOMContentLoaded", function() {
+            var dropZone = document.getElementById("dropZone");
+            if (dropZone) {
+                ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(function(eventName) {
+                    dropZone.addEventListener(eventName, function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                    }, false);
+                });
+
+                dropZone.addEventListener('drop', function(e) {
+                    handleRefFiles(e);
+                }, false);
+            }
+        });
+
         function setStep(stepNum) {
-            for (let i = 1; i <= 9; i++) {
-                const step = document.getElementById(`step-${i}`);
+            for (var i = 1; i <= 9; i++) {
+                var step = document.getElementById("step-" + i);
                 if (step) {
                     step.classList.remove("active", "complete");
                     if (i < stepNum) {
@@ -804,9 +815,9 @@ async def serve_index():
         }
 
         function appendLog(agent, action, details) {
-            const feed = document.getElementById("trajectoryFeed");
+            var feed = document.getElementById("trajectoryFeed");
             if (!feed) return;
-            const div = document.createElement("div");
+            var div = document.createElement("div");
             div.className = "log-item";
             div.innerHTML = `
                 <div class="log-header">
@@ -820,16 +831,16 @@ async def serve_index():
         }
 
         async function runPipeline() {
-            const promptInput = document.getElementById("promptInput");
-            const prompt = promptInput ? promptInput.value.trim() : "";
-            const shotsSelect = document.getElementById("shotsSelect");
-            const shots = shotsSelect ? parseInt(shotsSelect.value, 10) : 3;
+            var promptInput = document.getElementById("promptInput");
+            var prompt = promptInput ? promptInput.value.trim() : "";
+            var shotsSelect = document.getElementById("shotsSelect");
+            var shots = shotsSelect ? parseInt(shotsSelect.value, 10) : 3;
             if (!prompt) return;
 
-            const genBtn = document.getElementById("genBtn");
-            const spinner = document.getElementById("spinner");
-            const resultCard = document.getElementById("resultCard");
-            const trajectoryFeed = document.getElementById("trajectoryFeed");
+            var genBtn = document.getElementById("genBtn");
+            var spinner = document.getElementById("spinner");
+            var resultCard = document.getElementById("resultCard");
+            var trajectoryFeed = document.getElementById("trajectoryFeed");
 
             if (genBtn) genBtn.disabled = true;
             if (spinner) spinner.style.display = "block";
@@ -839,7 +850,7 @@ async def serve_index():
 
             // Execute POST API call to stream endpoint with full parameters
             try {
-                const res = await fetch("/api/stream", {
+                var res = await fetch("/api/stream", {
                     method: "POST",
                     headers: {"Content-Type": "application/json"},
                     body: JSON.stringify({
@@ -850,21 +861,22 @@ async def serve_index():
                     })
                 });
 
-                const reader = res.body.getReader();
-                const decoder = new TextDecoder();
-                let buffer = "";
+                var reader = res.body.getReader();
+                var decoder = new TextDecoder();
+                var buffer = "";
 
                 while (true) {
-                    const { value, done } = await reader.read();
-                    if (done) break;
-                    buffer += decoder.decode(value, { stream: true });
+                    var result = await reader.read();
+                    if (result.done) break;
+                    buffer += decoder.decode(result.value, { stream: true });
 
-                    const lines = buffer.split("\n\n");
+                    var lines = buffer.split("\n\n");
                     buffer = lines.pop(); // Keep partial frame
 
-                    for (const line of lines) {
+                    for (var i = 0; i < lines.length; i++) {
+                        var line = lines[i];
                         if (line.startsWith("data: ")) {
-                            const data = JSON.parse(line.replace("data: ", ""));
+                            var data = JSON.parse(line.replace("data: ", ""));
 
                             if (data.step) {
                                 setStep(data.step);
@@ -879,28 +891,28 @@ async def serve_index():
                                 if (spinner) spinner.style.display = "none";
 
                                 setStep(9);
-                                for (let i = 1; i <= 9; i++) {
-                                    const s = document.getElementById(`step-${i}`);
+                                for (var k = 1; k <= 9; k++) {
+                                    var s = document.getElementById("step-" + k);
                                     if (s) s.classList.add("complete");
                                 }
 
-                                const title = document.getElementById("stitchedTitle");
+                                var title = document.getElementById("stitchedTitle");
                                 if (title) title.innerText = `🎬 Stitched ${data.details.shots.length * 10}s Output Video (${data.details.mode} mode)`;
                                 
-                                const video = document.getElementById("stitchedVideo");
+                                var video = document.getElementById("stitchedVideo");
                                 if (video) {
-                                    const videoUrl = data.details.stitched_video_url + "?t=" + new Date().getTime();
+                                    var videoUrl = data.details.stitched_video_url + "?t=" + new Date().getTime();
                                     video.src = videoUrl;
                                     video.load();
                                 }
 
-                                const downloadBtn = document.getElementById("downloadBtn");
+                                var downloadBtn = document.getElementById("downloadBtn");
                                 if (downloadBtn) downloadBtn.href = data.details.stitched_video_url;
 
-                                const grid = document.getElementById("shotsGrid");
+                                var grid = document.getElementById("shotsGrid");
                                 if (grid) {
                                     grid.innerHTML = "";
-                                    data.details.shots.forEach(shot => {
+                                    data.details.shots.forEach(function(shot) {
                                         grid.innerHTML += `
                                             <div class="shot-card">
                                                 <h4>
