@@ -93,13 +93,22 @@ async def run_adk_agent(
     agent: LlmAgent,
     user_prompt: str,
     media_parts: Optional[List[types.Part]] = None,
-    session_service: Optional[InMemorySessionService] = None
+    session_service: Optional[InMemorySessionService] = None,
+    session_id: Optional[str] = None,
+    initial_state: Optional[Dict[str, Any]] = None
 ) -> str:
-    """Executes an ADK LlmAgent natively using ADK Runner and session management."""
+    """Executes an ADK LlmAgent natively using ADK Runner and shared session state management."""
     if session_service is None:
         session_service = InMemorySessionService()
 
-    session = await session_service.create_session(app_name="vidgen-omni", user_id="xcyu")
+    if session_id is None:
+        session = await session_service.create_session(
+            app_name="vidgen-omni",
+            user_id="xcyu",
+            state=initial_state or {}
+        )
+        session_id = session.id
+
     runner = Runner(agent=agent, app_name="vidgen-omni", session_service=session_service)
 
     parts = [types.Part.from_text(text=user_prompt)]
@@ -110,7 +119,7 @@ async def run_adk_agent(
     try:
         async for event in runner.run_async(
             user_id="xcyu",
-            session_id=session.id,
+            session_id=session_id,
             new_message=types.Content(parts=parts)
         ):
             if event.message and event.message.parts:
@@ -122,7 +131,13 @@ async def run_adk_agent(
 
     return response_text.strip()
 
-async def optimize_prompt(raw_prompt: str, feedback: Optional[str] = None, client: Optional[genai.Client] = None) -> str:
+async def optimize_prompt(
+    raw_prompt: str,
+    feedback: Optional[str] = None,
+    session_service: Optional[InMemorySessionService] = None,
+    session_id: Optional[str] = None,
+    client: Optional[genai.Client] = None
+) -> str:
     """Prompt Optimizer Agent: Enhances raw storyboard prompts using ADK LlmAgent & Runner."""
     config = Config()
     agents = create_adk_agents(config)
@@ -136,12 +151,17 @@ async def optimize_prompt(raw_prompt: str, feedback: Optional[str] = None, clien
     )
 
     try:
-        optimized = await run_adk_agent(optimizer, full_prompt)
+        optimized = await run_adk_agent(optimizer, full_prompt, session_service=session_service, session_id=session_id)
         return optimized if optimized else raw_prompt
     except Exception:
         return raw_prompt
 
-async def audit_prompt_health(prompt: str, client: Optional[genai.Client] = None) -> bool:
+async def audit_prompt_health(
+    prompt: str,
+    session_service: Optional[InMemorySessionService] = None,
+    session_id: Optional[str] = None,
+    client: Optional[genai.Client] = None
+) -> bool:
     """Health Checker Agent: Audits candidate prompt safety using ADK LlmAgent & Runner."""
     config = Config()
     agents = create_adk_agents(config)
@@ -152,7 +172,7 @@ async def audit_prompt_health(prompt: str, client: Optional[genai.Client] = None
         "Reply ONLY with 'APPROVED' if compliant or 'REJECTED' if non-compliant."
     )
     try:
-        res_text = (await run_adk_agent(checker, audit_prompt)).upper()
+        res_text = (await run_adk_agent(checker, audit_prompt, session_service=session_service, session_id=session_id)).upper()
         return "APPROVED" in res_text or "REJECTED" not in res_text
     except Exception:
         return True
@@ -162,6 +182,8 @@ async def evaluate_clip_quality(
     prompt: str,
     video_path: str,
     evaluation_criteria: Optional[str] = None,
+    session_service: Optional[InMemorySessionService] = None,
+    session_id: Optional[str] = None,
     client: Optional[genai.Client] = None
 ) -> Dict[str, Any]:
     """Quality Rater Agent: Evaluates clip quality using Orchestrator-generated criteria and MP4 video bytes via ADK Runner."""
@@ -203,7 +225,7 @@ async def evaluate_clip_quality(
     )
 
     try:
-        text = await run_adk_agent(rater, eval_prompt, media_parts=media_parts)
+        text = await run_adk_agent(rater, eval_prompt, media_parts=media_parts, session_service=session_service, session_id=session_id)
         if text.startswith("```"):
             text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
         if text.startswith("json"):

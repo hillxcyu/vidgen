@@ -88,7 +88,7 @@ async def stream_pipeline(
     duration: int,
     reference_assets_b64: List[str]
 ):
-    """Core SSE generator executing all 7 agent stages with complete parameter & control string support."""
+    """Core SSE generator executing all 7 agent stages with complete parameter & ADK shared session state support."""
     async def event_generator():
         client = get_genai_client()
         num_shots = max(1, min(10, shots or 3))
@@ -104,8 +104,27 @@ async def stream_pipeline(
         config = Config()
         agents = create_adk_agents(config)
 
+        # Initialize shared ADK SessionService and ADK Session with global state
+        from google.adk.sessions import InMemorySessionService
+        session_service = InMemorySessionService()
+        adk_session = await session_service.create_session(
+            app_name="vidgen-omni",
+            user_id="xcyu",
+            state={
+                "original_intent": prompt,
+                "num_shots": state.num_shots,
+                "mode": state.mode,
+                "aspect_ratio": state.aspect_ratio,
+                "resolution": state.resolution,
+                "duration": state.duration,
+                "reference_assets_count": len(state.reference_assets_b64),
+                "reference_assets_b64": state.reference_assets_b64
+            }
+        )
+        session_id = adk_session.id
+
         # Step 1: OrchestratorAgent Initialization
-        yield f"data: {json.dumps({'step': 1, 'agent': 'OrchestratorAgent', 'action': 'INITIATE_PIPELINE', 'details': {'prompt': prompt, 'num_shots': state.num_shots, 'mode': state.mode, 'aspect_ratio': state.aspect_ratio, 'resolution': state.resolution, 'duration': state.duration, 'reference_assets_count': len(state.reference_assets_b64)}})}\n\n"
+        yield f"data: {json.dumps({'step': 1, 'agent': 'OrchestratorAgent', 'action': 'INITIATE_PIPELINE', 'details': {'prompt': prompt, 'num_shots': state.num_shots, 'mode': state.mode, 'aspect_ratio': state.aspect_ratio, 'resolution': state.resolution, 'duration': state.duration, 'adk_session_id': session_id, 'reference_assets_count': len(state.reference_assets_b64)}})}\n\n"
         await asyncio.sleep(0.3)
 
         # Step 2: ScreenwriterAgent via ADK Runner
@@ -120,7 +139,7 @@ async def stream_pipeline(
                 f"Return ONLY a JSON list of {state.num_shots} items, where each item has keys: "
                 "'scene_number' (int 1 to N), 'description' (str), 'camera_angle' (str), 'evaluation_criteria' (str)."
             )
-            text = await run_adk_agent(screenwriter, screenplay_prompt)
+            text = await run_adk_agent(screenwriter, screenplay_prompt, session_service=session_service, session_id=session_id)
             if text.startswith("```"):
                 text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
             if text.startswith("json"):
@@ -174,12 +193,12 @@ async def stream_pipeline(
                 state.attempt_counter += 1
 
                 # Step 4: PromptOptimizerAgent via ADK Runner
-                optimized_shot_prompt = await optimize_prompt(shot.prompt, feedback=feedback, client=client)
+                optimized_shot_prompt = await optimize_prompt(shot.prompt, feedback=feedback, session_service=session_service, session_id=session_id, client=client)
                 yield f"data: {json.dumps({'step': 4, 'agent': 'PromptOptimizerAgent', 'action': 'OPTIMIZE_PROMPT', 'details': {'shot_index': shot.shot_index, 'attempt': attempt + 1, 'raw_prompt': shot.prompt, 'optimized_prompt': optimized_shot_prompt, 'feedback': feedback}})}\n\n"
                 await asyncio.sleep(0.3)
 
                 # Step 5: HealthCheckerAgent via ADK Runner
-                is_healthy = await audit_prompt_health(optimized_shot_prompt, client=client)
+                is_healthy = await audit_prompt_health(optimized_shot_prompt, session_service=session_service, session_id=session_id, client=client)
                 yield f"data: {json.dumps({'step': 5, 'agent': 'HealthCheckerAgent', 'action': 'AUDIT_PROMPT', 'details': {'shot_index': shot.shot_index, 'verdict': 'APPROVED' if is_healthy else 'REJECTED_REVERTED', 'safety_status': 'CLEAR', 'ethical_ai_score': '99/100'}})}\n\n"
                 await asyncio.sleep(0.3)
 
@@ -227,6 +246,8 @@ async def stream_pipeline(
                     optimized_shot_prompt,
                     video_path=clip_filename,
                     evaluation_criteria=shot.evaluation_criteria,
+                    session_service=session_service,
+                    session_id=session_id,
                     client=client
                 )
                 score = eval_result.get("score", 0.9)
