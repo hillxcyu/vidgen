@@ -2,7 +2,7 @@ import base64
 import os
 import subprocess
 import tempfile
-from typing import Optional
+from typing import Optional, List
 import cv2
 
 def extract_last_frame(video_path: str, output_image_path: Optional[str] = None) -> str:
@@ -38,6 +38,39 @@ def extract_last_frame(video_path: str, output_image_path: Optional[str] = None)
         raise RuntimeError("Failed to encode frame as PNG")
 
     return base64.b64encode(buffer.tobytes()).decode("utf-8")
+
+def extract_keyframes(video_path: str, num_keyframes: int = 3) -> List[str]:
+    """Extracts evenly spaced keyframe image samples across an MP4 video file
+    and returns a list of base64 PNG encoded strings for multi-frame subject drift auditing.
+    """
+    if not os.path.exists(video_path) or os.path.getsize(video_path) == 0:
+        return []
+
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        return []
+
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    if total_frames <= 0:
+        cap.release()
+        return []
+
+    sample_indices = [
+        max(0, min(total_frames - 1, int(total_frames * (i + 1) / (num_keyframes + 1))))
+        for i in range(num_keyframes)
+    ]
+
+    keyframes_b64 = []
+    for idx in sample_indices:
+        cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
+        ret, frame = cap.read()
+        if ret and frame is not None:
+            success, buffer = cv2.imencode(".png", frame)
+            if success:
+                keyframes_b64.append(base64.b64encode(buffer.tobytes()).decode("utf-8"))
+
+    cap.release()
+    return keyframes_b64
 
 def extract_audio_reference(video_path: str, output_wav_path: Optional[str] = None) -> Optional[str]:
     """Extracts the audio track from an MP4 video file as a WAV audio file using ffmpeg

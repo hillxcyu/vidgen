@@ -226,10 +226,23 @@ async def evaluate_clip_quality(
 
     eval_prompt = (
         f"Visually inspect and evaluate shot #{shot_index} generated for prompt: '{prompt}'.{criteria_context}\n"
-        "Conduct a temporal audit for object stability: check character identity lock, motion smoothness, lighting, "
-        "and verify that key visual assets, subject accessories, garments, and props do not abruptly vanish, flicker, or re-emerge mid-clip.\n"
-        "If the video clip is missing, broken, static black, or incomplete, give a score of 0.0.\n"
-        "Return ONLY a JSON object with keys: 'score' (float 0.0 - 1.0) and 'feedback' (str)."
+        "Conduct a strict 5-Category Major Subject Drift Detection audit across the clip keyframes:\n"
+        "1. Face Identity Drift: Are facial features, skin tone, and geometry locked?\n"
+        "2. Product Drift: Are product shape, branding, color, and surface details persistent?\n"
+        "3. Clothing Drift: Is garment style, color, texture, and outfit continuity maintained without popping or changing?\n"
+        "4. Accessories & Props Drift: Do handheld items, jewelry, glasses, hats, or key props remain locked without vanishing?\n"
+        "5. Background & Environment Drift: Is environment setting, lighting direction, and scene context stable?\n\n"
+        "Return ONLY a JSON object with keys:\n"
+        "  'score': float (0.0 to 1.0),\n"
+        "  'drift_detected': bool,\n"
+        "  'drift_breakdown': {\n"
+        "    'face_identity_drift': bool,\n"
+        "    'product_drift': bool,\n"
+        "    'clothing_drift': bool,\n"
+        "    'accessories_drift': bool,\n"
+        "    'background_drift': bool\n"
+        "  },\n"
+        "  'feedback': str"
     )
 
     try:
@@ -240,10 +253,35 @@ async def evaluate_clip_quality(
             text = text[4:].strip()
         val = json.loads(text)
         score = float(val.get("score", 0.0))
+        drift_detected = bool(val.get("drift_detected", False))
+        raw_breakdown = val.get("drift_breakdown", {})
+        drift_breakdown = {
+            "face_identity_drift": bool(raw_breakdown.get("face_identity_drift", False)),
+            "product_drift": bool(raw_breakdown.get("product_drift", False)),
+            "clothing_drift": bool(raw_breakdown.get("clothing_drift", False)),
+            "accessories_drift": bool(raw_breakdown.get("accessories_drift", False)),
+            "background_drift": bool(raw_breakdown.get("background_drift", False))
+        }
         feedback = str(val.get("feedback", "Evaluation completed"))
-        return {"score": score, "feedback": feedback}
+        return {
+            "score": score,
+            "drift_detected": drift_detected or any(drift_breakdown.values()),
+            "drift_breakdown": drift_breakdown,
+            "feedback": feedback
+        }
     except Exception as e:
-        return {"score": 0.0, "feedback": f"FAILED: Quality evaluation process error: {e}"}
+        return {
+            "score": 0.0,
+            "drift_detected": True,
+            "drift_breakdown": {
+                "face_identity_drift": False,
+                "product_drift": False,
+                "clothing_drift": False,
+                "accessories_drift": False,
+                "background_drift": False
+            },
+            "feedback": f"FAILED: Quality evaluation process error: {e}"
+        }
 
 def run_pre_production(state: PipelineState, client: Optional[genai.Client] = None) -> PipelineState:
     """Pre-production block: Uses ADK Master Orchestrator, Screenwriter, and Storyboarder agents via Runner."""

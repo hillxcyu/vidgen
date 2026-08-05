@@ -278,15 +278,17 @@ async def stream_pipeline(
                     client=client
                 )
                 score = eval_result.get("score", 0.9)
+                drift_detected = eval_result.get("drift_detected", False)
+                drift_breakdown = eval_result.get("drift_breakdown", {})
                 state.quality_rating = score
 
-                yield f"data: {json.dumps({'step': 7, 'agent': 'QualityRaterAgent', 'action': 'EVALUATE_QUALITY', 'details': {'shot_index': shot.shot_index, 'video_path': clip_filename, 'criteria_evaluated': shot.evaluation_criteria, 'attempt': attempt + 1, 'score': score, 'feedback': eval_result.get('feedback', 'Good visual quality'), 'verdict': 'PASSED' if score >= 0.8 else 'REATTEMPT_REQUIRED'}})}\n\n"
+                yield f"data: {json.dumps({'step': 7, 'agent': 'QualityRaterAgent', 'action': 'EVALUATE_QUALITY', 'details': {'shot_index': shot.shot_index, 'video_path': clip_filename, 'criteria_evaluated': shot.evaluation_criteria, 'attempt': attempt + 1, 'score': score, 'drift_detected': drift_detected, 'drift_breakdown': drift_breakdown, 'feedback': eval_result.get('feedback', 'Good visual quality'), 'verdict': 'PASSED' if score >= 0.8 and not drift_detected else 'REATTEMPT_REQUIRED'}})}\n\n"
                 await asyncio.sleep(0.3)
 
-                if score >= 0.8 or attempt == max_attempts - 1:
+                if (score >= 0.8 and not drift_detected) or attempt == max_attempts - 1:
                     break
                 else:
-                    feedback = eval_result.get("feedback", "Refine visual continuity and prevent object disappearance")
+                    feedback = eval_result.get("feedback", "Refine visual continuity and prevent subject drift")
 
             shot.video_path = clip_filename
             shot.status = "completed"

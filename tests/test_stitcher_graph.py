@@ -35,7 +35,7 @@ async def mock_run_adk_agent(agent, prompt, media_parts=None, session_service=No
     elif agent.name == "HealthCheckerAgent":
         return "APPROVED"
     elif agent.name == "QualityRaterAgent":
-        return '{"score": 0.9, "feedback": "Good quality"}'
+        return '{"score": 0.9, "drift_detected": false, "drift_breakdown": {"face_identity_drift": false, "product_drift": false, "clothing_drift": false, "accessories_drift": false, "background_drift": false}, "feedback": "Good quality"}'
     return "OK"
 
 @patch("src.agents.stitcher_graph.run_adk_agent", side_effect=mock_run_adk_agent)
