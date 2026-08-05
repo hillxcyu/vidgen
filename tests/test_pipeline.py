@@ -99,14 +99,15 @@ def test_cli_execution_mock():
     assert "Multi-Agent Generative Media Pipeline" in res.stdout.decode("utf-8")
 
 def test_evaluate_clip_quality_missing_or_empty_video():
+    import asyncio
     from src.agents.stitcher_graph import evaluate_clip_quality
 
     # 1. Missing file evaluation test
-    res_missing = evaluate_clip_quality(
+    res_missing = asyncio.run(evaluate_clip_quality(
         shot_index=1,
         prompt="Test shot",
         video_path="/tmp/non_existent_video_path_9999.mp4"
-    )
+    ))
     assert res_missing["score"] == 0.0
     assert "FAILED" in res_missing["feedback"]
 
@@ -115,14 +116,13 @@ def test_evaluate_clip_quality_missing_or_empty_video():
         empty_path = tmp.name
 
     try:
-        res_empty = evaluate_clip_quality(
+        res_empty = asyncio.run(evaluate_clip_quality(
             shot_index=2,
             prompt="Empty shot",
             video_path=empty_path
-        )
+        ))
         assert res_empty["score"] == 0.0
         assert "FAILED" in res_empty["feedback"]
     finally:
         if os.path.exists(empty_path):
             os.remove(empty_path)
-

@@ -122,7 +122,7 @@ async def run_adk_agent(
 
     return response_text.strip()
 
-def optimize_prompt(raw_prompt: str, feedback: Optional[str] = None, client: Optional[genai.Client] = None) -> str:
+async def optimize_prompt(raw_prompt: str, feedback: Optional[str] = None, client: Optional[genai.Client] = None) -> str:
     """Prompt Optimizer Agent: Enhances raw storyboard prompts using ADK LlmAgent & Runner."""
     config = Config()
     agents = create_adk_agents(config)
@@ -136,12 +136,12 @@ def optimize_prompt(raw_prompt: str, feedback: Optional[str] = None, client: Opt
     )
 
     try:
-        optimized = asyncio.run(run_adk_agent(optimizer, full_prompt))
+        optimized = await run_adk_agent(optimizer, full_prompt)
         return optimized if optimized else raw_prompt
     except Exception:
         return raw_prompt
 
-def audit_prompt_health(prompt: str, client: Optional[genai.Client] = None) -> bool:
+async def audit_prompt_health(prompt: str, client: Optional[genai.Client] = None) -> bool:
     """Health Checker Agent: Audits candidate prompt safety using ADK LlmAgent & Runner."""
     config = Config()
     agents = create_adk_agents(config)
@@ -152,12 +152,12 @@ def audit_prompt_health(prompt: str, client: Optional[genai.Client] = None) -> b
         "Reply ONLY with 'APPROVED' if compliant or 'REJECTED' if non-compliant."
     )
     try:
-        res_text = asyncio.run(run_adk_agent(checker, audit_prompt)).upper()
+        res_text = (await run_adk_agent(checker, audit_prompt)).upper()
         return "APPROVED" in res_text or "REJECTED" not in res_text
     except Exception:
         return True
 
-def evaluate_clip_quality(
+async def evaluate_clip_quality(
     shot_index: int,
     prompt: str,
     video_path: str,
@@ -203,7 +203,7 @@ def evaluate_clip_quality(
     )
 
     try:
-        text = asyncio.run(run_adk_agent(rater, eval_prompt, media_parts=media_parts))
+        text = await run_adk_agent(rater, eval_prompt, media_parts=media_parts)
         if text.startswith("```"):
             text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
         if text.startswith("json"):
@@ -305,7 +305,7 @@ def run_production_loop(state: PipelineState, output_dir: str = "/tmp/vidgen_out
             state.attempt_counter += 1
 
             # 1. Prompt Optimizer Agent (runs via ADK Runner)
-            optimized_shot_prompt = optimize_prompt(shot.prompt, feedback=feedback, client=client)
+            optimized_shot_prompt = asyncio.run(optimize_prompt(shot.prompt, feedback=feedback, client=client))
             state.log_event(
                 agent="PromptOptimizerAgent",
                 action="OPTIMIZE_PROMPT",
@@ -319,7 +319,7 @@ def run_production_loop(state: PipelineState, output_dir: str = "/tmp/vidgen_out
             )
 
             # 2. Health Checker Agent Audit (runs via ADK Runner)
-            is_healthy = audit_prompt_health(optimized_shot_prompt, client=client)
+            is_healthy = asyncio.run(audit_prompt_health(optimized_shot_prompt, client=client))
             state.log_event(
                 agent="HealthCheckerAgent",
                 action="AUDIT_PROMPT",
@@ -361,13 +361,13 @@ def run_production_loop(state: PipelineState, output_dir: str = "/tmp/vidgen_out
                 f.write(video_bytes)
 
             # 4. Quality Rater Agent Evaluation (Passes Orchestrator criteria & MP4 video bytes)
-            eval_result = evaluate_clip_quality(
+            eval_result = asyncio.run(evaluate_clip_quality(
                 shot.shot_index,
                 optimized_shot_prompt,
                 video_path=clip_filename,
                 evaluation_criteria=shot.evaluation_criteria,
                 client=client
-            )
+            ))
             score = eval_result.get("score", 0.9)
             state.quality_rating = score
 

@@ -142,12 +142,12 @@ async def stream_pipeline(prompt: str, shots: int, mode: str, reference_assets_b
                 state.attempt_counter += 1
 
                 # Step 4: PromptOptimizerAgent via ADK Runner
-                optimized_shot_prompt = optimize_prompt(shot.prompt, feedback=feedback, client=client)
+                optimized_shot_prompt = await optimize_prompt(shot.prompt, feedback=feedback, client=client)
                 yield f"data: {json.dumps({'step': 4, 'agent': 'PromptOptimizerAgent', 'action': 'OPTIMIZE_PROMPT', 'details': {'shot_index': shot.shot_index, 'attempt': attempt + 1, 'raw_prompt': shot.prompt, 'optimized_prompt': optimized_shot_prompt, 'feedback': feedback}})}\n\n"
                 await asyncio.sleep(0.3)
 
                 # Step 5: HealthCheckerAgent via ADK Runner
-                is_healthy = audit_prompt_health(optimized_shot_prompt, client=client)
+                is_healthy = await audit_prompt_health(optimized_shot_prompt, client=client)
                 yield f"data: {json.dumps({'step': 5, 'agent': 'HealthCheckerAgent', 'action': 'AUDIT_PROMPT', 'details': {'shot_index': shot.shot_index, 'verdict': 'APPROVED' if is_healthy else 'REJECTED_REVERTED', 'safety_status': 'CLEAR', 'ethical_ai_score': '99/100'}})}\n\n"
                 await asyncio.sleep(0.3)
 
@@ -174,7 +174,7 @@ async def stream_pipeline(prompt: str, shots: int, mode: str, reference_assets_b
                     f.write(video_bytes)
 
                 # Step 7: QualityRaterAgent via ADK Runner
-                eval_result = evaluate_clip_quality(
+                eval_result = await evaluate_clip_quality(
                     shot.shot_index,
                     optimized_shot_prompt,
                     video_path=clip_filename,
