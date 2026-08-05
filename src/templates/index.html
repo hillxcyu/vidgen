@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GenMedia-Omni: Multi-Agent Video Pipeline Studio</title>
+    <style>
+        :root {
+            --bg-color: #0b0f19;
+            --card-bg: #151d30;
+            --accent: #6366f1;
+            --accent-hover: #4f46e5;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --text-color: #f8fafc;
+            --muted-text: #94a3b8;
+            --border-color: #2a364f;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 24px;
+            display: flex;
+            justify-content: center;
+        }
+        .container {
+            max-width: 1280px;
+            width: 100%;
+        }
+        header {
+            text-align: center;
+            margin-bottom: 28px;
+        }
+        h1 {
+            font-size: 32px;
+            color: #ffffff;
+            margin-bottom: 6px;
+            background: linear-gradient(135deg, #a5b4fc, #6366f1);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        p.subtitle {
+            color: var(--muted-text);
+            font-size: 15px;
+            margin: 0;
+        }
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+            margin-bottom: 24px;
+        }
+        @media (max-width: 960px) {
+            .grid-2 { grid-template-columns: 1fr; }
+        }
+        .card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 14px;
+            padding: 24px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+        }
+        .card h3 {
+            margin-top: 0;
+            margin-bottom: 16px;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        /* Workflow Stepper */
+        .stepper {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+            background: #090d16;
+            padding: 16px;
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            overflow-x: auto;
+        }
+        .step {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+            min-width: 95px;
+            opacity: 0.4;
+            transition: opacity 0.3s;
+        }
+        .step.active { opacity: 1; }
+        .step.active:not(.complete) .circle {
+            border: 3px solid var(--accent);
+            border-top-color: transparent;
+            animation: spin 0.9s linear infinite;
+            background-color: transparent;
+            color: var(--accent);
+        }
+        .step.complete .circle {
+            background-color: var(--success);
+            color: #fff;
+            border: none;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .circle {
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            background-color: var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+        .label { font-size: 11px; color: var(--muted-text); text-align: center; font-weight: 500; }
+
+        /* Form Controls & Layout */
+        .form-row {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 14px;
+            align-items: center;
+        }
+        input[type="text"] {
+            flex: 1;
+            padding: 14px 18px;
+            border-radius: 10px;
+            border: 1px solid var(--border-color);
+            background-color: #090d16;
+            color: #fff;
+            font-size: 15px;
+        }
+        select {
+            padding: 14px 14px;
+            border-radius: 10px;
+            border: 1px solid var(--border-color);
+            background-color: #090d16;
+            color: #fff;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        .mode-box {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 14px;
+        }
+        label.mode-option {
+            flex: 1;
+            padding: 14px 16px;
+            border-radius: 10px;
+            border: 1px solid var(--border-color);
+            background: #090d16;
+            cursor: pointer;
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            font-size: 13px;
+            transition: all 0.2s;
+            user-select: none;
+        }
+        label.mode-option:hover {
+            border-color: #4f46e5;
+        }
+        label.mode-option:has(input:checked) {
+            border-color: var(--accent);
+            background: rgba(99, 102, 241, 0.15);
+        }
+        label.mode-option input[type="radio"] {
+            margin-top: 3px;
+            cursor: pointer;
+            accent-color: var(--accent);
+        }
+
+        /* Prominent Reference Image Uploader Panel */
+        .ref-upload-panel {
+            margin-bottom: 16px;
+            padding: 16px;
+            background: #090d16;
+            border: 1px dashed var(--border-color);
+            border-radius: 12px;
+            transition: all 0.3s;
+        }
+        .ref-upload-panel.active-panel {
+            border-color: #38bdf8;
+            background: rgba(56, 189, 248, 0.05);
+        }
+        
+        /* Native Button Label Styling */
+        label.btn-file-select {
+            display: inline-block;
+            background-color: #334155;
+            color: #fff;
+            padding: 10px 18px;
+            font-size: 13px;
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+            user-select: none;
+            transition: background-color 0.2s;
+        }
+        label.btn-file-select:hover {
+            background-color: #475569;
+        }
+
+        .drop-zone {
+            padding: 16px;
+            text-align: center;
+            border: 2px dashed var(--border-color);
+            border-radius: 10px;
+            background: rgba(255,255,255,0.02);
+            transition: background 0.2s, border-color 0.2s;
+        }
+        .drop-zone:hover {
+            background: rgba(99, 102, 241, 0.08);
+            border-color: var(--accent);
+        }
+        .preview-grid {
+            display: flex;
+            gap: 12px;
+            margin-top: 14px;
+            flex-wrap: wrap;
+        }
+        .thumb-wrapper {
+            position: relative;
+            width: 70px;
+            height: 70px;
+        }
+        .thumb-img {
+            width: 70px;
+            height: 70px;
+            border-radius: 8px;
+            object-fit: cover;
+            border: 2px solid var(--accent);
+        }
+        .remove-btn {
+            position: absolute;
+            top: -6px;
+            right: -6px;
+            background: #ef4444;
+            color: #fff;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            cursor: pointer;
+            border: none;
+            padding: 0;
+        }
+
+        button {
+            padding: 14px 28px;
+            border-radius: 10px;
+            border: none;
+            background-color: var(--accent);
+            color: #fff;
+            font-weight: 600;
+            font-size: 15px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        button:hover { background-color: var(--accent-hover); transform: translateY(-1px); }
+        button:disabled { background-color: #475569; cursor: not-allowed; transform: none; }
+        .btn-secondary {
+            background-color: #334155;
+            padding: 8px 16px;
+            font-size: 13px;
+            border-radius: 6px;
+            border: none;
+            color: #fff;
+            cursor: pointer;
+        }
+        .btn-secondary:hover { background-color: #475569; }
+
+        .spinner {
+            display: none;
+            text-align: center;
+            margin: 16px 0 0 0;
+            color: var(--warning);
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        /* Trajectory Audit Log Feed */
+        .trajectory-feed {
+            height: 480px;
+            overflow-y: auto;
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 16px;
+            background: #090d16;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 13px;
+        }
+        .log-item {
+            margin-bottom: 12px;
+            padding: 10px;
+            border-radius: 6px;
+            background: rgba(255,255,255,0.03);
+            border-left: 3px solid var(--accent);
+            animation: fadeIn 0.3s ease-in-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(4px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .log-header {
+            display: flex;
+            justify-content: space-between;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+        .log-agent { color: #38bdf8; }
+        .log-action { color: #f472b6; }
+        .log-details { color: #cbd5e1; font-size: 12px; white-space: pre-wrap; word-break: break-all; }
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        .badge-success { background: rgba(16, 185, 129, 0.2); color: #34d399; }
+        .badge-info { background: rgba(56, 189, 248, 0.2); color: #38bdf8; }
+
+        /* Media Player */
+        video { width: 100%; border-radius: 10px; background: #000; margin-top: 12px; }
+        .shots-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 16px;
+            margin-top: 16px;
+        }
+        .shot-card {
+            background: #090d16;
+            padding: 16px;
+            border-radius: 10px;
+            border: 1px solid var(--border-color);
+        }
+        .shot-card h4 { margin: 0 0 8px 0; color: #38bdf8; font-size: 16px; display: flex; justify-content: space-between; }
+        .shot-card p { margin: 0 0 10px 0; font-size: 13px; color: var(--muted-text); line-height: 1.4; }
+        img.frame-img { width: 100%; border-radius: 8px; margin-top: 8px; border: 1px solid var(--border-color); }
+        .action-row { display: flex; gap: 10px; margin-top: 14px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎬 GenMedia-Omni Pipeline Studio</h1>
+            <p class="subtitle">Google ADK Multi-Agent Execution & Real-Time Audit Trajectory Visualizer</p>
+        </header>
+
+        <!-- Stepper Graph -->
+        <div class="stepper" id="stepper">
+            <div class="step" id="step-1"><div class="circle">1</div><div class="label">Orchestrator</div></div>
+            <div class="step" id="step-2"><div class="circle">2</div><div class="label">Screenwriter</div></div>
+            <div class="step" id="step-3"><div class="circle">3</div><div class="label">Storyboarder</div></div>
+            <div class="step" id="step-4"><div class="circle">4</div><div class="label">Optimizer</div></div>
+            <div class="step" id="step-5"><div class="circle">5</div><div class="label">Health Auditor</div></div>
+            <div class="step" id="step-6"><div class="circle">6</div><div class="label">Omni Flash</div></div>
+            <div class="step" id="step-7"><div class="circle">7</div><div class="label">Quality Rater</div></div>
+            <div class="step" id="step-8"><div class="circle">8</div><div class="label">OpenCV Parser</div></div>
+            <div class="step" id="step-9"><div class="circle">9</div><div class="label">FFMPEG Stitch</div></div>
+        </div>
+
+        <div class="grid-2">
+            <!-- Execution Control Card -->
+            <div class="card">
+                <h3>🚀 Multi-Agent Studio Control</h3>
+                
+                <!-- Pipeline Mode Selection -->
+                <label style="font-size: 13px; color: var(--muted-text); margin-bottom: 6px; display: block;">Pipeline Generation Mode:</label>
+                <div class="mode-box">
+                    <label class="mode-option" id="mode-i2v">
+                        <input type="radio" name="mode" value="i2v_chaining" checked onchange="window.selectMode('i2v_chaining')">
+                        <div>
+                            <strong>⚡ Sequential I2V Chaining</strong>
+                            <div style="font-size: 11px; color: var(--muted-text);">OpenCV terminal frame extraction for unbroken motion continuity</div>
+                        </div>
+                    </label>
+                    <label class="mode-option" id="mode-ref">
+                        <input type="radio" name="mode" value="reference" onchange="window.selectMode('reference')">
+                        <div>
+                            <strong>🎨 Asset Reference Mode</strong>
+                            <div style="font-size: 11px; color: var(--muted-text);">Shared character & style image reference anchors</div>
+                        </div>
+                    </label>
+                </div>
+
+                <!-- Dedicated Prominent Reference Asset Uploader Panel -->
+                <div class="ref-upload-panel" id="refUploadPanel">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                        <span style="font-size: 13px; font-weight: 700; color: #38bdf8;">📷 Character & Asset Reference Images</span>
+                        <span class="badge badge-info" id="refCountBadge">0 assets</span>
+                    </div>
+                    
+                    <div style="display: flex; gap: 12px; align-items: center; margin-bottom: 12px;">
+                        <label for="refFileInput" class="btn-file-select">📁 Choose Image Files</label>
+                        <span style="font-size: 12px; color: var(--muted-text);">Select up to 10 PNG, JPG, WEBP images</span>
+                        <input type="file" id="refFileInput" multiple accept="image/*" onchange="window.handleRefFiles(event)" style="position: absolute; width: 0; height: 0; opacity: 0; pointer-events: none;">
+                    </div>
+
+                    <div class="drop-zone" id="dropZone">
+                        <div style="font-size: 22px; margin-bottom: 4px;">🖼️</div>
+                        <div><strong>Or Drag & Drop Reference Image Files Here</strong></div>
+                    </div>
+
+                    <div class="preview-grid" id="refPreviewGrid"></div>
+                </div>
+
+                <!-- Prompt & Shots Row -->
+                <div class="form-row">
+                    <input type="text" id="promptInput" value="A red panda skiing in Hakuba" placeholder="Enter video prompt intent...">
+                    <select id="shotsSelect">
+                        <option value="2">2 Shots (20s)</option>
+                        <option value="3" selected>3 Shots (30s)</option>
+                        <option value="4">4 Shots (40s)</option>
+                        <option value="5">5 Shots (50s)</option>
+                        <option value="6">6 Shots (60s)</option>
+                    </select>
+                </div>
+
+                <button id="genBtn" onclick="window.runPipeline()" style="width: 100%;">🚀 Execute Multi-Agent Graph</button>
+                <div class="spinner" id="spinner">⚙️ Real-Time Multi-Agent SSE Stream Active...</div>
+            </div>
+
+            <!-- Audit Trajectory Log Feed -->
+            <div class="card">
+                <h3>📡 Real-Time Agent Communication & Audit Trajectory Stream</h3>
+                <div class="trajectory-feed" id="trajectoryFeed">
+                    <div class="log-item">
+                        <div class="log-header"><span class="log-agent">OrchestratorAgent</span><span class="badge badge-success">READY</span></div>
+                        <div class="log-details">System initialized. Awaiting pipeline execution trigger...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Output Media Showcase -->
+        <div class="card" id="resultCard" style="display: none;">
+            <h3 id="stitchedTitle">🎬 Stitched Output Video</h3>
+            <video id="stitchedVideo" controls autoplay preload="metadata"></video>
+            
+            <div class="action-row">
+                <a id="downloadBtn" download="output_stitched.mp4" class="btn-secondary" style="text-decoration: none; color: #fff;">💾 Download Stitched MP4 Video</a>
+            </div>
+
+            <h3 style="margin-top: 28px;">🎞️ Individual Shot Breakdown, Orchestrator Criteria & Terminal Frames</h3>
+            <div class="shots-grid" id="shotsGrid"></div>
+        </div>
+    </div>
+
+    <script>
+        window.selectedMode = "i2v_chaining";
+        window.refImagesB64 = [];
+
+        window.selectMode = function(mode) {
+            window.selectedMode = mode;
+            var refPanel = document.getElementById("refUploadPanel");
+            if (refPanel) {
+                if (mode === "reference") {
+                    refPanel.classList.add("active-panel");
+                } else {
+                    refPanel.classList.remove("active-panel");
+                }
+            }
+        };
+
+        window.handleRefFiles = async function(event) {
+            var files = null;
+            if (event && event.target && event.target.files && event.target.files.length > 0) {
+                files = event.target.files;
+            } else if (event && event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files.length > 0) {
+                files = event.dataTransfer.files;
+            }
+
+            if (!files || files.length === 0) return;
+
+            var remainingSlots = 10 - window.refImagesB64.length;
+            var fileList = Array.from(files).slice(0, remainingSlots);
+
+            for (var i = 0; i < fileList.length; i++) {
+                var file = fileList[i];
+                try {
+                    var b64 = await new Promise(function(resolve, reject) {
+                        var reader = new FileReader();
+                        reader.onload = function(e) {
+                            var raw = e.target.result;
+                            var parts = raw.split(',');
+                            resolve(parts[1] || parts[0]);
+                        };
+                        reader.onerror = function(err) { reject(err); };
+                        reader.readAsDataURL(file);
+                    });
+                    if (b64) {
+                        window.refImagesB64.push(b64);
+                    }
+                } catch (err) {
+                    console.error("FileReader error:", err);
+                }
+            }
+
+            if (event && event.target && event.target.value) {
+                event.target.value = "";
+            }
+
+            window.renderRefGrid();
+        };
+
+        window.removeRefImage = function(index) {
+            window.refImagesB64.splice(index, 1);
+            window.renderRefGrid();
+        };
+
+        window.renderRefGrid = function() {
+            var grid = document.getElementById("refPreviewGrid");
+            var badge = document.getElementById("refCountBadge");
+            if (badge) badge.innerText = window.refImagesB64.length + " assets";
+            if (!grid) return;
+
+            grid.innerHTML = "";
+
+            for (var i = 0; i < window.refImagesB64.length; i++) {
+                (function(idx) {
+                    var wrapper = document.createElement("div");
+                    wrapper.className = "thumb-wrapper";
+
+                    var img = document.createElement("img");
+                    img.className = "thumb-img";
+                    img.src = "data:image/png;base64," + window.refImagesB64[idx];
+                    img.alt = "Ref Image " + (idx + 1);
+
+                    var btn = document.createElement("button");
+                    btn.type = "button";
+                    btn.className = "remove-btn";
+                    btn.innerText = "✕";
+                    btn.onclick = function(e) {
+                        if (e) e.stopPropagation();
+                        window.removeRefImage(idx);
+                    };
+
+                    wrapper.appendChild(img);
+                    wrapper.appendChild(btn);
+                    grid.appendChild(wrapper);
+                })(i);
+            }
+        };
+
+        window.addEventListener("DOMContentLoaded", function() {
+            var dropZone = document.getElementById("dropZone");
+            if (dropZone) {
+                ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(function(eventName) {
+                    dropZone.addEventListener(eventName, function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                    }, false);
+                });
+
+                dropZone.addEventListener('drop', function(e) {
+                    window.handleRefFiles(e);
+                }, false);
+            }
+        });
+
+        function setStep(stepNum) {
+            for (var i = 1; i <= 9; i++) {
+                var step = document.getElementById("step-" + i);
+                if (step) {
+                    step.classList.remove("active", "complete");
+                    if (i < stepNum) {
+                        step.classList.add("active", "complete");
+                    } else if (i === stepNum) {
+                        step.classList.add("active");
+                    }
+                }
+            }
+        }
+
+        function appendLog(agent, action, details) {
+            var feed = document.getElementById("trajectoryFeed");
+            if (!feed) return;
+            var div = document.createElement("div");
+            div.className = "log-item";
+            var headerDiv = document.createElement("div");
+            headerDiv.className = "log-header";
+            headerDiv.innerHTML = '<span class="log-agent">🤖 ' + agent + '</span><span class="log-action">' + action + '</span>';
+            var detailsDiv = document.createElement("div");
+            detailsDiv.className = "log-details";
+            detailsDiv.innerText = JSON.stringify(details, null, 2);
+            div.appendChild(headerDiv);
+            div.appendChild(detailsDiv);
+            feed.appendChild(div);
+            feed.scrollTop = feed.scrollHeight;
+        }
+
+        window.runPipeline = async function() {
+            var promptInput = document.getElementById("promptInput");
+            var prompt = promptInput ? promptInput.value.trim() : "";
+            var shotsSelect = document.getElementById("shotsSelect");
+            var shots = shotsSelect ? parseInt(shotsSelect.value, 10) : 3;
+            if (!prompt) return;
+
+            var genBtn = document.getElementById("genBtn");
+            var spinner = document.getElementById("spinner");
+            var resultCard = document.getElementById("resultCard");
+            var trajectoryFeed = document.getElementById("trajectoryFeed");
+
+            if (genBtn) genBtn.disabled = true;
+            if (spinner) spinner.style.display = "block";
+            if (resultCard) resultCard.style.display = "none";
+            if (trajectoryFeed) trajectoryFeed.innerHTML = "";
+            setStep(1);
+
+            // Execute POST API call to stream endpoint with full parameters
+            try {
+                var res = await fetch("/api/stream", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({
+                        prompt: prompt,
+                        num_shots: shots,
+                        mode: window.selectedMode,
+                        reference_assets_b64: window.refImagesB64
+                    })
+                });
+
+                var reader = res.body.getReader();
+                var decoder = new TextDecoder();
+                var buffer = "";
+                var delim = "\n\n";
+
+                while (true) {
+                    var result = await reader.read();
+                    if (result.done) break;
+                    buffer += decoder.decode(result.value, { stream: true });
+
+                    var lines = buffer.split(delim);
+                    buffer = lines.pop(); // Keep partial frame
+
+                    for (var i = 0; i < lines.length; i++) {
+                        var line = lines[i];
+                        if (line.startsWith("data: ")) {
+                            var data = JSON.parse(line.replace("data: ", ""));
+
+                            if (data.step) {
+                                setStep(data.step);
+                            }
+
+                            if (data.agent && data.action) {
+                                appendLog(data.agent, data.action, data.details);
+                            }
+
+                            if (data.action === "PIPELINE_COMPLETE" && data.details && data.details.status === "complete") {
+                                if (genBtn) genBtn.disabled = false;
+                                if (spinner) spinner.style.display = "none";
+
+                                setStep(9);
+                                for (var k = 1; k <= 9; k++) {
+                                    var s = document.getElementById("step-" + k);
+                                    if (s) s.classList.add("complete");
+                                }
+
+                                var title = document.getElementById("stitchedTitle");
+                                if (title) title.innerText = "🎬 Stitched " + (data.details.shots.length * 10) + "s Output Video (" + data.details.mode + " mode)";
+                                
+                                var video = document.getElementById("stitchedVideo");
+                                if (video) {
+                                    var videoUrl = data.details.stitched_video_url + "?t=" + new Date().getTime();
+                                    video.src = videoUrl;
+                                    video.load();
+                                }
+
+                                var downloadBtn = document.getElementById("downloadBtn");
+                                if (downloadBtn) downloadBtn.href = data.details.stitched_video_url;
+
+                                var grid = document.getElementById("shotsGrid");
+                                if (grid) {
+                                    grid.innerHTML = "";
+                                    data.details.shots.forEach(function(shot) {
+                                        var card = document.createElement("div");
+                                        card.className = "shot-card";
+                                        card.innerHTML = '<h4><span>Shot #' + shot.shot_index + '</span><a href="' + shot.video_url + '" download class="btn-secondary" style="font-size: 11px; text-decoration: none; padding: 4px 8px;">💾 Download MP4</a></h4>' +
+                                            '<p><strong>Prompt:</strong> ' + shot.prompt + '</p>' +
+                                            '<p style="color: #f472b6; font-size: 12px;"><strong>Orchestrator Criteria:</strong> ' + (shot.evaluation_criteria || 'Visual coherence & character lock') + '</p>' +
+                                            '<video controls preload="metadata" src="' + shot.video_url + '?t=' + new Date().getTime() + '"></video>' +
+                                            '<p style="margin-top: 10px; color: #38bdf8;"><strong>OpenCV Last Frame (I2V Chaining):</strong></p>' +
+                                            '<img class="frame-img" src="' + shot.frame_url + '?t=' + new Date().getTime() + '" alt="Shot ' + shot.shot_index + ' Last Frame">';
+                                        grid.appendChild(card);
+                                    });
+                                }
+                                if (resultCard) resultCard.style.display = "block";
+                            }
+                        }
+                    }
+                }
+            } catch (err) {
+                alert("Execution error: " + err);
+                if (genBtn) genBtn.disabled = false;
+                if (spinner) spinner.style.display = "none";
+            }
+        };
+    </script>
+</body>
+</html>

@@ -97,3 +97,32 @@ def test_cli_execution_mock():
     ]
     res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
     assert "Multi-Agent Generative Media Pipeline" in res.stdout.decode("utf-8")
+
+def test_evaluate_clip_quality_missing_or_empty_video():
+    from src.agents.stitcher_graph import evaluate_clip_quality
+
+    # 1. Missing file evaluation test
+    res_missing = evaluate_clip_quality(
+        shot_index=1,
+        prompt="Test shot",
+        video_path="/tmp/non_existent_video_path_9999.mp4"
+    )
+    assert res_missing["score"] == 0.0
+    assert "FAILED" in res_missing["feedback"]
+
+    # 2. Empty 0-byte file evaluation test
+    with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp:
+        empty_path = tmp.name
+
+    try:
+        res_empty = evaluate_clip_quality(
+            shot_index=2,
+            prompt="Empty shot",
+            video_path=empty_path
+        )
+        assert res_empty["score"] == 0.0
+        assert "FAILED" in res_empty["feedback"]
+    finally:
+        if os.path.exists(empty_path):
+            os.remove(empty_path)
+

@@ -169,14 +169,28 @@ def evaluate_clip_quality(
     agents = create_adk_agents(config)
     rater = agents["quality_rater"]
 
+    # Strict check: If video file is missing or 0 bytes, fail quality evaluation immediately with 0.0 score
+    if not os.path.exists(video_path) or os.path.getsize(video_path) == 0:
+        return {
+            "score": 0.0,
+            "feedback": f"FAILED: Video shot #{shot_index} generation failed or output file is empty (0 bytes)."
+        }
+
     media_parts = []
-    if os.path.exists(video_path):
-        try:
-            with open(video_path, "rb") as f:
-                video_bytes = f.read()
-            media_parts.append(types.Part.from_bytes(data=video_bytes, mime_type="video/mp4"))
-        except Exception:
-            pass
+    try:
+        with open(video_path, "rb") as f:
+            video_bytes = f.read()
+        if not video_bytes or len(video_bytes) == 0:
+            return {
+                "score": 0.0,
+                "feedback": f"FAILED: Video shot #{shot_index} contains 0 bytes."
+            }
+        media_parts.append(types.Part.from_bytes(data=video_bytes, mime_type="video/mp4"))
+    except Exception as e:
+        return {
+            "score": 0.0,
+            "feedback": f"FAILED: Could not read video file at {video_path}: {e}"
+        }
 
     criteria_context = f"\nOrchestrator Evaluation Rubric: '{evaluation_criteria}'" if evaluation_criteria else ""
 
@@ -184,6 +198,7 @@ def evaluate_clip_quality(
         f"Visually inspect and evaluate shot #{shot_index} generated for prompt: '{prompt}'.{criteria_context}\n"
         "Conduct a temporal audit for object stability: check character identity lock, motion smoothness, lighting, "
         "and verify that key visual assets, subject accessories, garments, and props do not abruptly vanish, flicker, or re-emerge mid-clip.\n"
+        "If the video clip is missing, broken, static black, or incomplete, give a score of 0.0.\n"
         "Return ONLY a JSON object with keys: 'score' (float 0.0 - 1.0) and 'feedback' (str)."
     )
 
@@ -194,9 +209,11 @@ def evaluate_clip_quality(
         if text.startswith("json"):
             text = text[4:].strip()
         val = json.loads(text)
-        return {"score": float(val.get("score", 0.9)), "feedback": str(val.get("feedback", "High visual quality"))}
-    except Exception:
-        return {"score": 0.9, "feedback": "Passed multimodal video evaluation"}
+        score = float(val.get("score", 0.0))
+        feedback = str(val.get("feedback", "Evaluation completed"))
+        return {"score": score, "feedback": feedback}
+    except Exception as e:
+        return {"score": 0.0, "feedback": f"FAILED: Quality evaluation process error: {e}"}
 
 def run_pre_production(state: PipelineState, client: Optional[genai.Client] = None) -> PipelineState:
     """Pre-production block: Uses ADK Master Orchestrator, Screenwriter, and Storyboarder agents via Runner."""
