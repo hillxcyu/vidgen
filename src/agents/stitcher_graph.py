@@ -253,44 +253,33 @@ async def evaluate_clip_quality(
         import re
         text = await run_adk_agent(rater, eval_prompt, media_parts=media_parts, session_service=session_service, session_id=session_id)
         json_match = re.search(r"\{.*\}", text, re.DOTALL)
-        if json_match:
-            clean_text = json_match.group(0)
-            val = json.loads(clean_text)
-            score = float(val.get("score", 0.9))
-            drift_detected = bool(val.get("drift_detected", False))
-            raw_breakdown = val.get("drift_breakdown", {})
-            drift_breakdown = {
-                "face_identity_drift": bool(raw_breakdown.get("face_identity_drift", False)),
-                "product_drift": bool(raw_breakdown.get("product_drift", False)),
-                "clothing_drift": bool(raw_breakdown.get("clothing_drift", False)),
-                "accessories_drift": bool(raw_breakdown.get("accessories_drift", False)),
-                "background_drift": bool(raw_breakdown.get("background_drift", False))
-            }
-            feedback = str(val.get("feedback", "Good visual quality and temporal continuity"))
-            return {
-                "score": score,
-                "drift_detected": drift_detected or any(drift_breakdown.values()),
-                "drift_breakdown": drift_breakdown,
-                "feedback": feedback
-            }
-        else:
-            return {
-                "score": 0.9,
-                "drift_detected": False,
-                "drift_breakdown": {
-                    "face_identity_drift": False,
-                    "product_drift": False,
-                    "clothing_drift": False,
-                    "accessories_drift": False,
-                    "background_drift": False
-                },
-                "feedback": "Visual quality and subject persistence verified."
-            }
+        if not json_match:
+            raise ValueError(f"QualityRaterAgent response did not contain valid JSON output: '{text[:150]}...'")
+
+        clean_text = json_match.group(0)
+        val = json.loads(clean_text)
+        score = float(val.get("score", 0.0))
+        drift_detected = bool(val.get("drift_detected", False))
+        raw_breakdown = val.get("drift_breakdown", {})
+        drift_breakdown = {
+            "face_identity_drift": bool(raw_breakdown.get("face_identity_drift", False)),
+            "product_drift": bool(raw_breakdown.get("product_drift", False)),
+            "clothing_drift": bool(raw_breakdown.get("clothing_drift", False)),
+            "accessories_drift": bool(raw_breakdown.get("accessories_drift", False)),
+            "background_drift": bool(raw_breakdown.get("background_drift", False))
+        }
+        feedback = str(val.get("feedback", "Evaluation completed"))
+        return {
+            "score": score,
+            "drift_detected": drift_detected or any(drift_breakdown.values()),
+            "drift_breakdown": drift_breakdown,
+            "feedback": feedback
+        }
     except Exception as e:
         print(f"[QUALITY RATER ERROR]: {e}")
         return {
-            "score": 0.9,
-            "drift_detected": False,
+            "score": 0.0,
+            "drift_detected": True,
             "drift_breakdown": {
                 "face_identity_drift": False,
                 "product_drift": False,
@@ -298,7 +287,7 @@ async def evaluate_clip_quality(
                 "accessories_drift": False,
                 "background_drift": False
             },
-            "feedback": "Visual quality and subject persistence verified."
+            "feedback": f"FAILED: Quality evaluation process error: {e}"
         }
 
 def run_pre_production(state: PipelineState, client: Optional[genai.Client] = None) -> PipelineState:
