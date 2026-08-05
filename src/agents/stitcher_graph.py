@@ -157,8 +157,14 @@ def audit_prompt_health(prompt: str, client: Optional[genai.Client] = None) -> b
     except Exception:
         return True
 
-def evaluate_clip_quality(shot_index: int, prompt: str, video_path: str, client: Optional[genai.Client] = None) -> Dict[str, Any]:
-    """Quality Rater Agent: Evaluates clip quality using ADK LlmAgent & Runner with multimodal video parts."""
+def evaluate_clip_quality(
+    shot_index: int,
+    prompt: str,
+    video_path: str,
+    evaluation_criteria: Optional[str] = None,
+    client: Optional[genai.Client] = None
+) -> Dict[str, Any]:
+    """Quality Rater Agent: Evaluates clip quality using Orchestrator-generated criteria and MP4 video bytes via ADK Runner."""
     config = Config()
     agents = create_adk_agents(config)
     rater = agents["quality_rater"]
@@ -172,9 +178,11 @@ def evaluate_clip_quality(shot_index: int, prompt: str, video_path: str, client:
         except Exception:
             pass
 
+    criteria_context = f"\nOrchestrator Evaluation Rubric: '{evaluation_criteria}'" if evaluation_criteria else ""
+
     eval_prompt = (
-        f"Visually inspect and evaluate shot #{shot_index} generated for prompt: '{prompt}'.\n"
-        "Check character identity lock, motion smoothness, lighting stability, and visual artifacts.\n"
+        f"Visually inspect and evaluate shot #{shot_index} generated for prompt: '{prompt}'.{criteria_context}\n"
+        "Check character identity lock, motion smoothness, lighting stability, and adherence to Orchestrator criteria.\n"
         "Return ONLY a JSON object with keys: 'score' (float 0.0 - 1.0) and 'feedback' (str)."
     )
 
@@ -210,8 +218,9 @@ def run_pre_production(state: PipelineState, client: Optional[genai.Client] = No
     if not state.storyboard:
         prompt = (
             f"User request: '{state.original_intent}'. "
-            f"Generate a {state.num_shots}-scene video storyboard. Return ONLY a JSON list of {state.num_shots} items, "
-            f"where each item has keys: 'scene_number' (int 1 to {state.num_shots}), 'description' (str), 'camera_angle' (str)."
+            f"Generate a {state.num_shots}-scene video storyboard with custom quality inspection criteria for each scene. "
+            f"Return ONLY a JSON list of {state.num_shots} items, where each item has keys: "
+            "'scene_number' (int 1 to N), 'description' (str), 'camera_angle' (str), 'evaluation_criteria' (str)."
         )
         try:
             text = asyncio.run(run_adk_agent(screenwriter, prompt))
@@ -225,7 +234,8 @@ def run_pre_production(state: PipelineState, client: Optional[genai.Client] = No
                 StoryboardEntry(
                     scene_number=item.get("scene_number", idx + 1),
                     description=item.get("description", f"Scene {idx + 1}"),
-                    camera_angle=item.get("camera_angle", "medium")
+                    camera_angle=item.get("camera_angle", "medium"),
+                    evaluation_criteria=item.get("evaluation_criteria", "Check character identity lock and smooth motion.")
                 )
                 for idx, item in enumerate(raw_storyboard[:state.num_shots])
             ]
@@ -235,7 +245,8 @@ def run_pre_production(state: PipelineState, client: Optional[genai.Client] = No
                 StoryboardEntry(
                     scene_number=i + 1,
                     description=f"{state.original_intent} - Shot {i + 1}",
-                    camera_angle=angles[i % len(angles)]
+                    camera_angle=angles[i % len(angles)],
+                    evaluation_criteria="Check character identity lock, lighting stability, and smooth motion."
                 )
                 for i in range(state.num_shots)
             ]
@@ -247,7 +258,11 @@ def run_pre_production(state: PipelineState, client: Optional[genai.Client] = No
     )
 
     state.shots = [
-        VideoShot(shot_index=sb.scene_number, prompt=f"{sb.camera_angle} shot: {sb.description}")
+        VideoShot(
+            shot_index=sb.scene_number,
+            prompt=f"{sb.camera_angle} shot: {sb.description}",
+            evaluation_criteria=sb.evaluation_criteria
+        )
         for sb in state.storyboard
     ]
     return state
@@ -326,8 +341,14 @@ def run_production_loop(state: PipelineState, output_dir: str = "/tmp/vidgen_out
             with open(clip_filename, "wb") as f:
                 f.write(video_bytes)
 
-            # 4. Quality Rater Agent Evaluation (runs via ADK Runner with video bytes)
-            eval_result = evaluate_clip_quality(shot.shot_index, optimized_shot_prompt, video_path=clip_filename, client=client)
+            # 4. Quality Rater Agent Evaluation (Passes Orchestrator criteria & MP4 video bytes)
+            eval_result = evaluate_clip_quality(
+                shot.shot_index,
+                optimized_shot_prompt,
+                video_path=clip_filename,
+                evaluation_criteria=shot.evaluation_criteria,
+                client=client
+            )
             score = eval_result.get("score", 0.9)
             state.quality_rating = score
 
@@ -337,6 +358,7 @@ def run_production_loop(state: PipelineState, output_dir: str = "/tmp/vidgen_out
                 details={
                     "shot_index": shot.shot_index,
                     "video_path": clip_filename,
+                    "criteria_evaluated": shot.evaluation_criteria,
                     "attempt": attempt + 1,
                     "score": score,
                     "feedback": eval_result.get("feedback", "Good visual quality"),

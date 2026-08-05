@@ -59,8 +59,9 @@ async def stream_pipeline_endpoint(prompt: str, shots: Optional[int] = 3, mode: 
         try:
             screenplay_prompt = (
                 f"User request: '{state.original_intent}'. "
-                f"Generate a {state.num_shots}-scene video storyboard. Return ONLY a JSON list of {state.num_shots} items, "
-                f"where each item has keys: 'scene_number' (int 1 to {state.num_shots}), 'description' (str), 'camera_angle' (str)."
+                f"Generate a {state.num_shots}-scene video storyboard with custom quality evaluation criteria for each scene. "
+                f"Return ONLY a JSON list of {state.num_shots} items, where each item has keys: "
+                "'scene_number' (int 1 to N), 'description' (str), 'camera_angle' (str), 'evaluation_criteria' (str)."
             )
             text = await run_adk_agent(screenwriter, screenplay_prompt)
             if text.startswith("```"):
@@ -73,7 +74,8 @@ async def stream_pipeline_endpoint(prompt: str, shots: Optional[int] = 3, mode: 
                 StoryboardEntry(
                     scene_number=item.get("scene_number", idx + 1),
                     description=item.get("description", f"Scene {idx + 1}"),
-                    camera_angle=item.get("camera_angle", "medium")
+                    camera_angle=item.get("camera_angle", "medium"),
+                    evaluation_criteria=item.get("evaluation_criteria", "Check character identity lock and smooth motion.")
                 )
                 for idx, item in enumerate(raw_storyboard[:state.num_shots])
             ]
@@ -83,7 +85,8 @@ async def stream_pipeline_endpoint(prompt: str, shots: Optional[int] = 3, mode: 
                 StoryboardEntry(
                     scene_number=i + 1,
                     description=f"{state.original_intent} - Shot {i + 1}",
-                    camera_angle=angles[i % len(angles)]
+                    camera_angle=angles[i % len(angles)],
+                    evaluation_criteria="Check character identity lock, lighting stability, and smooth motion."
                 )
                 for i in range(state.num_shots)
             ]
@@ -93,7 +96,11 @@ async def stream_pipeline_endpoint(prompt: str, shots: Optional[int] = 3, mode: 
         await asyncio.sleep(0.3)
 
         state.shots = [
-            VideoShot(shot_index=sb.scene_number, prompt=f"{sb.camera_angle} shot: {sb.description}")
+            VideoShot(
+                shot_index=sb.scene_number,
+                prompt=f"{sb.camera_angle} shot: {sb.description}",
+                evaluation_criteria=sb.evaluation_criteria
+            )
             for sb in state.storyboard
         ]
 
@@ -141,12 +148,18 @@ async def stream_pipeline_endpoint(prompt: str, shots: Optional[int] = 3, mode: 
                 with open(clip_filename, "wb") as f:
                     f.write(video_bytes)
 
-                # Step 7: QualityRaterAgent via ADK Runner
-                eval_result = evaluate_clip_quality(shot.shot_index, optimized_shot_prompt, video_path=clip_filename, client=client)
+                # Step 7: QualityRaterAgent via ADK Runner (Passes Orchestrator criteria & MP4 video bytes)
+                eval_result = evaluate_clip_quality(
+                    shot.shot_index,
+                    optimized_shot_prompt,
+                    video_path=clip_filename,
+                    evaluation_criteria=shot.evaluation_criteria,
+                    client=client
+                )
                 score = eval_result.get("score", 0.9)
                 state.quality_rating = score
 
-                yield f"data: {json.dumps({'step': 7, 'agent': 'QualityRaterAgent', 'action': 'EVALUATE_QUALITY', 'details': {'shot_index': shot.shot_index, 'video_path': clip_filename, 'attempt': attempt + 1, 'score': score, 'feedback': eval_result.get('feedback', 'Good visual quality'), 'verdict': 'PASSED' if score >= 0.8 else 'REATTEMPT_REQUIRED'}})}\n\n"
+                yield f"data: {json.dumps({'step': 7, 'agent': 'QualityRaterAgent', 'action': 'EVALUATE_QUALITY', 'details': {'shot_index': shot.shot_index, 'video_path': clip_filename, 'criteria_evaluated': shot.evaluation_criteria, 'attempt': attempt + 1, 'score': score, 'feedback': eval_result.get('feedback', 'Good visual quality'), 'verdict': 'PASSED' if score >= 0.8 else 'REATTEMPT_REQUIRED'}})}\n\n"
                 await asyncio.sleep(0.3)
 
                 if score >= 0.8 or attempt == max_attempts - 1:
@@ -184,6 +197,7 @@ async def stream_pipeline_endpoint(prompt: str, shots: Optional[int] = 3, mode: 
                 {
                     "shot_index": shot.shot_index,
                     "prompt": shot.prompt,
+                    "evaluation_criteria": shot.evaluation_criteria,
                     "video_url": f"/output/shot_{shot.shot_index}.mp4",
                     "frame_url": f"/output/shot_{shot.shot_index}_last_frame.png"
                 }
@@ -566,6 +580,7 @@ async def serve_index():
                             <div class="shot-card">
                                 <h4>Shot #${shot.shot_index}</h4>
                                 <p>${shot.prompt}</p>
+                                <p style="color: #f472b6; font-size: 12px;"><strong>Orchestrator Criteria:</strong> ${shot.evaluation_criteria || 'Visual coherence & character lock'}</p>
                                 <video controls preload="metadata" src="${shot.video_url}?t=${new Date().getTime()}"></video>
                                 <p style="margin-top: 10px; color: #38bdf8;"><strong>OpenCV Last Frame (I2V Chaining):</strong></p>
                                 <img class="frame-img" src="${shot.frame_url}?t=${new Date().getTime()}" alt="Shot ${shot.shot_index} Last Frame">

@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 class VideoShot(BaseModel):
     shot_index: int
     prompt: str
+    evaluation_criteria: Optional[str] = None
     video_path: Optional[str] = None
     extracted_last_frame_b64: Optional[str] = None
     status: str = "pending"
@@ -12,6 +13,7 @@ class StoryboardEntry(BaseModel):
     scene_number: int
     description: str
     camera_angle: str = "medium"
+    evaluation_criteria: Optional[str] = None
     visual_elements: List[str] = Field(default_factory=list)
 
 class PipelineState(BaseModel):
