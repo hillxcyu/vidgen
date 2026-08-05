@@ -419,15 +419,44 @@
                     <div class="preview-grid" id="refPreviewGrid"></div>
                 </div>
 
+                <!-- Google Omni Control String Parameters Row -->
+                <div class="form-row" style="margin-bottom: 14px;">
+                    <div style="flex: 1;">
+                        <label style="font-size: 11px; color: var(--muted-text); display: block; margin-bottom: 4px;">Aspect Ratio</label>
+                        <select id="aspectSelect" style="width: 100%;">
+                            <option value="16:9" selected>16:9 (Landscape)</option>
+                            <option value="9:16">9:16 (Vertical)</option>
+                        </select>
+                    </div>
+                    <div style="flex: 1;">
+                        <label style="font-size: 11px; color: var(--muted-text); display: block; margin-bottom: 4px;">Resolution</label>
+                        <select id="resSelect" style="width: 100%;">
+                            <option value="720p" selected>720p (HD)</option>
+                            <option value="1080p">1080p (FHD)</option>
+                            <option value="368p">368p (Draft)</option>
+                        </select>
+                    </div>
+                    <div style="flex: 1;">
+                        <label style="font-size: 11px; color: var(--muted-text); display: block; margin-bottom: 4px;">Shot Duration</label>
+                        <select id="durationSelect" style="width: 100%;">
+                            <option value="10" selected>10s per shot</option>
+                            <option value="5">5s per shot</option>
+                            <option value="8">8s per shot</option>
+                            <option value="15">15s per shot</option>
+                            <option value="30">30s per shot</option>
+                        </select>
+                    </div>
+                </div>
+
                 <!-- Prompt & Shots Row -->
                 <div class="form-row">
                     <input type="text" id="promptInput" value="A red panda skiing in Hakuba" placeholder="Enter video prompt intent...">
                     <select id="shotsSelect">
-                        <option value="2">2 Shots (20s)</option>
-                        <option value="3" selected>3 Shots (30s)</option>
-                        <option value="4">4 Shots (40s)</option>
-                        <option value="5">5 Shots (50s)</option>
-                        <option value="6">6 Shots (60s)</option>
+                        <option value="2">2 Shots</option>
+                        <option value="3" selected>3 Shots</option>
+                        <option value="4">4 Shots</option>
+                        <option value="5">5 Shots</option>
+                        <option value="6">6 Shots</option>
                     </select>
                 </div>
 
@@ -609,6 +638,14 @@
             var prompt = promptInput ? promptInput.value.trim() : "";
             var shotsSelect = document.getElementById("shotsSelect");
             var shots = shotsSelect ? parseInt(shotsSelect.value, 10) : 3;
+
+            var aspectSelect = document.getElementById("aspectSelect");
+            var aspect = aspectSelect ? aspectSelect.value : "16:9";
+            var resSelect = document.getElementById("resSelect");
+            var resVal = resSelect ? resSelect.value : "720p";
+            var durationSelect = document.getElementById("durationSelect");
+            var durationVal = durationSelect ? parseInt(durationSelect.value, 10) : 10;
+
             if (!prompt) return;
 
             var genBtn = document.getElementById("genBtn");
@@ -622,7 +659,7 @@
             if (trajectoryFeed) trajectoryFeed.innerHTML = "";
             setStep(1);
 
-            // Execute POST API call to stream endpoint with full parameters
+            // Execute POST API call to stream endpoint with full parameters & control string configuration
             try {
                 var res = await fetch("/api/stream", {
                     method: "POST",
@@ -631,6 +668,9 @@
                         prompt: prompt,
                         num_shots: shots,
                         mode: window.selectedMode,
+                        aspect_ratio: aspect,
+                        resolution: resVal,
+                        duration: durationVal,
                         reference_assets_b64: window.refImagesB64
                     })
                 });

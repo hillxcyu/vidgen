@@ -333,13 +333,24 @@ def run_production_loop(state: PipelineState, output_dir: str = "/tmp/vidgen_out
             if not is_healthy:
                 optimized_shot_prompt = shot.prompt
 
-            # 3. Gemini Omni Flash Video Generation
+            from src.tools.omni_client import build_omni_control_string
+            control_str = build_omni_control_string(
+                prompt=optimized_shot_prompt,
+                input_image_b64=prev_frame_b64 if state.mode == "i2v_chaining" else None,
+                reference_images_b64=state.reference_assets_b64 if state.mode == "reference" else None,
+                aspect_ratio=state.aspect_ratio,
+                resolution=state.resolution,
+                duration=state.duration
+            )
+
+            # 3. Gemini Omni Flash Video Generation with Control String Formatting
             state.log_event(
                 agent="GeminiOmniFlash",
                 action="RENDER_CLIP",
                 details={
                     "shot_index": shot.shot_index,
                     "mode": state.mode,
+                    "control_string": control_str,
                     "has_input_image": prev_frame_b64 is not None
                 }
             )
@@ -348,12 +359,18 @@ def run_production_loop(state: PipelineState, output_dir: str = "/tmp/vidgen_out
                 video_bytes = generate_omni_clip(
                     prompt=optimized_shot_prompt,
                     input_image_b64=prev_frame_b64,
+                    aspect_ratio=state.aspect_ratio,
+                    resolution=state.resolution,
+                    duration=state.duration,
                     client=client
                 )
             else:
                 video_bytes = generate_omni_clip(
                     prompt=optimized_shot_prompt,
                     reference_images_b64=state.reference_assets_b64,
+                    aspect_ratio=state.aspect_ratio,
+                    resolution=state.resolution,
+                    duration=state.duration,
                     client=client
                 )
 

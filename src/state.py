@@ -20,6 +20,9 @@ class PipelineState(BaseModel):
     original_intent: str
     num_shots: int = Field(default=3, ge=1, le=10)
     mode: Literal["reference", "i2v_chaining"] = "i2v_chaining"
+    aspect_ratio: str = "16:9"
+    resolution: str = "720p"
+    duration: int = 10
     reference_assets_b64: List[str] = Field(default_factory=list)
     screenplay_draft: Optional[str] = None
     storyboard: List[StoryboardEntry] = Field(default_factory=list)
