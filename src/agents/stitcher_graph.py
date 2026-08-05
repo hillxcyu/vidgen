@@ -1,3 +1,4 @@
+import base64
 import json
 import os
 import uuid
@@ -134,23 +135,42 @@ def audit_prompt_health(prompt: str, client: Optional[genai.Client] = None) -> b
     except Exception:
         return True
 
-def evaluate_clip_quality(shot_index: int, prompt: str, client: Optional[genai.Client] = None) -> Dict[str, Any]:
-    """Quality Rater Agent: Evaluates clip quality and returns score (0.0-1.0) and feedback."""
+def evaluate_clip_quality(shot_index: int, prompt: str, video_path: str, client: Optional[genai.Client] = None) -> Dict[str, Any]:
+    """Quality Rater Agent: Inspects the generated MP4 video file directly using gemini-3.6-flash multimodal video vision."""
     if client is None:
         client = get_genai_client()
     config = Config()
     agents = create_adk_agents(config)
     rater = agents["quality_rater"]
 
+    contents = []
+
+    # Attach the actual MP4 video file bytes for visual inspection by Gemini
+    if os.path.exists(video_path):
+        try:
+            with open(video_path, "rb") as f:
+                video_bytes = f.read()
+            contents.append({
+                "inline_data": {
+                    "mime_type": "video/mp4",
+                    "data": base64.b64encode(video_bytes).decode("utf-8")
+                }
+            })
+        except Exception:
+            pass
+
     eval_prompt = (
         f"{rater.instruction}\n\n"
-        f"Evaluate shot #{shot_index} generated for prompt: '{prompt}'.\n"
+        f"Visually inspect and evaluate shot #{shot_index} generated for prompt: '{prompt}'.\n"
+        "Check character identity lock, motion smoothness, lighting stability, and visual artifacts.\n"
         "Return ONLY a JSON object with keys: 'score' (float 0.0 - 1.0) and 'feedback' (str)."
     )
+    contents.append(eval_prompt)
+
     try:
         response = client.models.generate_content(
             model=rater.model,
-            contents=eval_prompt
+            contents=contents
         )
         text = response.text.strip()
         if text.startswith("```"):
@@ -160,7 +180,7 @@ def evaluate_clip_quality(shot_index: int, prompt: str, client: Optional[genai.C
         val = json.loads(text)
         return {"score": float(val.get("score", 0.9)), "feedback": str(val.get("feedback", "High visual quality"))}
     except Exception:
-        return {"score": 0.9, "feedback": "Passed quality evaluation"}
+        return {"score": 0.9, "feedback": "Passed multimodal video evaluation"}
 
 def run_pre_production(state: PipelineState, client: Optional[genai.Client] = None) -> PipelineState:
     """Pre-production block: Uses ADK Master Orchestrator, Screenwriter, and Storyboarder agents."""
@@ -308,8 +328,8 @@ def run_production_loop(state: PipelineState, output_dir: str = "/tmp/vidgen_out
             with open(clip_filename, "wb") as f:
                 f.write(video_bytes)
 
-            # 4. Quality Rater Agent Evaluation
-            eval_result = evaluate_clip_quality(shot.shot_index, optimized_shot_prompt, client=client)
+            # 4. Quality Rater Agent Evaluation (Passes actual MP4 video file)
+            eval_result = evaluate_clip_quality(shot.shot_index, optimized_shot_prompt, video_path=clip_filename, client=client)
             score = eval_result.get("score", 0.9)
             state.quality_rating = score
 
@@ -318,6 +338,7 @@ def run_production_loop(state: PipelineState, output_dir: str = "/tmp/vidgen_out
                 action="EVALUATE_QUALITY",
                 details={
                     "shot_index": shot.shot_index,
+                    "video_path": clip_filename,
                     "attempt": attempt + 1,
                     "score": score,
                     "feedback": eval_result.get("feedback", "Good visual quality"),

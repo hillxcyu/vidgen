@@ -143,12 +143,12 @@ async def stream_pipeline_endpoint(prompt: str, shots: Optional[int] = 3, mode: 
                 with open(clip_filename, "wb") as f:
                     f.write(video_bytes)
 
-                # Step 7: QualityRaterAgent
-                eval_result = evaluate_clip_quality(shot.shot_index, optimized_shot_prompt, client=client)
+                # Step 7: QualityRaterAgent (Passes MP4 video file for multimodal visual evaluation)
+                eval_result = evaluate_clip_quality(shot.shot_index, optimized_shot_prompt, video_path=clip_filename, client=client)
                 score = eval_result.get("score", 0.9)
                 state.quality_rating = score
 
-                yield f"data: {json.dumps({'step': 7, 'agent': 'QualityRaterAgent', 'action': 'EVALUATE_QUALITY', 'details': {'shot_index': shot.shot_index, 'attempt': attempt + 1, 'score': score, 'feedback': eval_result.get('feedback', 'Good visual quality'), 'verdict': 'PASSED' if score >= 0.8 else 'REATTEMPT_REQUIRED'}})}\n\n"
+                yield f"data: {json.dumps({'step': 7, 'agent': 'QualityRaterAgent', 'action': 'EVALUATE_QUALITY', 'details': {'shot_index': shot.shot_index, 'video_path': clip_filename, 'attempt': attempt + 1, 'score': score, 'feedback': eval_result.get('feedback', 'Good visual quality'), 'verdict': 'PASSED' if score >= 0.8 else 'REATTEMPT_REQUIRED'}})}\n\n"
                 await asyncio.sleep(0.3)
 
                 if score >= 0.8 or attempt == max_attempts - 1:
