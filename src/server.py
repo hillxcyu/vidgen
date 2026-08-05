@@ -621,7 +621,7 @@ async def serve_index():
                         <span style="font-size: 13px; font-weight: 700; color: #38bdf8;">📷 Character & Asset Reference Images</span>
                         <span class="badge badge-info" id="refCountBadge">0 assets</span>
                     </div>
-                    <div class="drop-zone" id="dropZone" onclick="document.getElementById('refFileInput').click()">
+                    <div class="drop-zone" id="dropZone" onclick="triggerFileInput()">
                         <div style="font-size: 26px; margin-bottom: 4px;">🖼️</div>
                         <div><strong>Click or Drag & Drop Reference Images Here</strong></div>
                         <div style="font-size: 11px; color: var(--muted-text); margin-top: 4px;">PNG, JPG, WEBP (Passed as reference visual anchors to Gemini Omni Flash)</div>
@@ -686,20 +686,35 @@ async def serve_index():
             }
         }
 
-        function handleRefFiles(event) {
+        function triggerFileInput() {
+            document.getElementById('refFileInput').click();
+        }
+
+        async function handleRefFiles(event) {
             const files = event.target.files;
             if (!files || files.length === 0) return;
 
-            Array.from(files).forEach(file => {
-                if (refImagesB64.length >= 10) return;
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    const b64 = e.target.result.split(',')[1];
-                    refImagesB64.push(b64);
-                    renderRefGrid();
-                };
-                reader.readAsDataURL(file);
+            const remainingSlots = 10 - refImagesB64.length;
+            const fileList = Array.from(files).slice(0, remainingSlots);
+
+            const readPromises = fileList.map(file => {
+                return new Promise((resolve) => {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        const b64 = e.target.result.split(',')[1];
+                        resolve(b64);
+                    };
+                    reader.readAsDataURL(file);
+                });
             });
+
+            const newB64s = await Promise.all(readPromises);
+            refImagesB64.push(...newB64s);
+
+            // Reset file input so re-selecting same files triggers onchange
+            event.target.value = "";
+
+            renderRefGrid();
         }
 
         function removeRefImage(index) {
@@ -710,16 +725,29 @@ async def serve_index():
         function renderRefGrid() {
             const grid = document.getElementById("refPreviewGrid");
             const badge = document.getElementById("refCountBadge");
-            badge.innerText = `${refImagesB64.length} uploaded`;
+            badge.innerText = `${refImagesB64.length} assets`;
             grid.innerHTML = "";
 
             refImagesB64.forEach((b64, idx) => {
-                grid.innerHTML += `
-                    <div class="thumb-wrapper">
-                        <img class="thumb-img" src="data:image/png;base64,${b64}" alt="Ref Image ${idx + 1}">
-                        <button class="remove-btn" onclick="removeRefImage(${idx})" title="Remove image">✕</button>
-                    </div>
-                `;
+                const wrapper = document.createElement("div");
+                wrapper.className = "thumb-wrapper";
+
+                const img = document.createElement("img");
+                img.className = "thumb-img";
+                img.src = "data:image/png;base64," + b64;
+                img.alt = "Ref Image " + (idx + 1);
+
+                const btn = document.createElement("button");
+                btn.className = "remove-btn";
+                btn.innerText = "✕";
+                btn.onclick = (e) => {
+                    e.stopPropagation();
+                    removeRefImage(idx);
+                };
+
+                wrapper.appendChild(img);
+                wrapper.appendChild(btn);
+                grid.appendChild(wrapper);
             });
         }
 
@@ -732,7 +760,7 @@ async def serve_index():
         dropZone.addEventListener('drop', (e) => {
             const dt = e.dataTransfer;
             const files = dt.files;
-            handleRefFiles({ target: { files: files } });
+            handleRefFiles({ target: { files: files, value: "" } });
         }, false);
 
         function setStep(stepNum) {
