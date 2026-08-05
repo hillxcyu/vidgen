@@ -37,13 +37,19 @@ def build_omni_control_string(
     mmc_parts = []
     ref_tags = []
 
-    # Mode B: Image-to-Video Chaining (First Frame Source)
+    # Image-to-Video Chaining Source Tag (<FIRST_FRAME>image_0.png)
+    image_offset = 0
     if input_image_b64:
         mmc_parts.append("# Sources <FIRST_FRAME>image_0.png")
+        image_offset = 1
     
-    # Mode A / Reference Mode: Image Character References (Audio references disabled for now)
+    # Image Character & Object Reference Tags (<IMAGE_REF_i>[Character A] / <IMAGE_REF_i>[no_character])
     if ref_imgs and len(ref_imgs) > 0:
-        ref_tags.extend([f"<IMAGE_REF_{i}>[Character A]image_{i}.png" for i in range(min(10, len(ref_imgs)))])
+        for i in range(min(10, len(ref_imgs))):
+            img_idx = i + image_offset
+            # Tag the primary reference (index 0) as character entity, subsequent references as object/prop [no_character]
+            entity_tag = "[Character A]" if i == 0 else "[no_character]"
+            ref_tags.append(f"<IMAGE_REF_{i}>{entity_tag}image_{img_idx}.png")
 
     if ref_tags:
         mmc_parts.append(f"# References {' '.join(ref_tags)}")
