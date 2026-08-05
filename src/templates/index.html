@@ -944,6 +944,18 @@
             }
         };
 
+        function formatMediaUrl(url, path, defaultFileName) {
+            if (url && url.length > 0) return url;
+            if (path && path.length > 0) {
+                var cleanPath = path.replace(/^\/+/, "");
+                return "/" + cleanPath;
+            }
+            if (defaultFileName) {
+                return "/output/" + defaultFileName;
+            }
+            return "";
+        }
+
         window.loadShowcaseList = async function() {
             try {
                 var res = await fetch("/api/runs/list");
@@ -963,7 +975,7 @@
                     var card = document.createElement("div");
                     card.className = "showcase-card";
                     var syncBadge = run.gcs_synced ? '<span class="badge badge-success">☁️ GCS Synced</span>' : '<span class="badge badge-info">💾 Local</span>';
-                    var videoSrc = run.stitched_video_url || (run.stitched_video_path ? "/" + run.stitched_video_path : "");
+                    var videoSrc = formatMediaUrl(run.stitched_video_url, run.stitched_video_path, "output_stitched.mp4");
                     
                     card.innerHTML = '<h4>' + run.original_intent + '</h4>' +
                         '<div class="meta"><span>' + run.pinned_at + '</span> <span>' + run.num_shots + ' Shots</span> ' + syncBadge + '</div>' +
@@ -1031,14 +1043,15 @@
                 var title = document.getElementById("stitchedTitle");
                 if (title) title.innerText = "🎬 Pinned Showcase: " + run.original_intent;
 
+                var mainVideoUrl = formatMediaUrl(run.stitched_video_url, run.stitched_video_path, "output_stitched.mp4");
                 var video = document.getElementById("stitchedVideo");
-                if (video && run.stitched_video_url) {
-                    video.src = run.stitched_video_url;
+                if (video && mainVideoUrl) {
+                    video.src = mainVideoUrl;
                     video.load();
                 }
 
                 var downloadBtn = document.getElementById("downloadBtn");
-                if (downloadBtn && run.stitched_video_url) downloadBtn.href = run.stitched_video_url;
+                if (downloadBtn && mainVideoUrl) downloadBtn.href = mainVideoUrl;
 
                 var grid = document.getElementById("shotsGrid");
                 if (grid && run.shots) {
@@ -1046,8 +1059,8 @@
                     run.shots.forEach(function(shot) {
                         var card = document.createElement("div");
                         card.className = "shot-card";
-                        var clipUrl = shot.gcs_video_url || shot.video_url;
-                        var frameUrl = shot.gcs_frame_url || shot.frame_url;
+                        var clipUrl = formatMediaUrl(shot.gcs_video_url, shot.video_url, "shot_" + shot.shot_index + ".mp4");
+                        var frameUrl = formatMediaUrl(shot.gcs_frame_url, shot.frame_url, "shot_" + shot.shot_index + "_last_frame.png");
 
                         card.innerHTML = '<h4><span>Shot #' + shot.shot_index + '</span><a href="' + clipUrl + '" download class="btn-secondary" style="font-size: 11px; text-decoration: none; padding: 4px 8px;">💾 Download MP4</a></h4>' +
                             '<p><strong>Prompt:</strong> ' + shot.prompt + '</p>' +

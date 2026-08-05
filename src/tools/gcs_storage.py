@@ -63,7 +63,10 @@ def upload_file_to_gcs(bucket: Optional[Any], local_path: str, gcs_blob_name: st
     try:
         blob = bucket.blob(gcs_blob_name)
         blob.upload_from_filename(local_path)
-        # Attempt public URL or standard GCS URI
+        try:
+            blob.make_public()
+        except Exception:
+            pass
         return f"https://storage.googleapis.com/{bucket.name}/{gcs_blob_name}"
     except Exception as e:
         print(f"[NOTICE] GCS upload failed for {local_path}: {e}")
@@ -108,6 +111,12 @@ def save_run(
             s_idx = shot.get("shot_index", 1)
             local_clip = os.path.join(output_dir, f"shot_{s_idx}.mp4")
             local_frame = os.path.join(output_dir, f"shot_{s_idx}_last_frame.png")
+
+            # Guarantee valid local fallback paths for static web serving
+            if not shot_copy.get("video_url"):
+                shot_copy["video_url"] = f"/output/shot_{s_idx}.mp4"
+            if not shot_copy.get("frame_url"):
+                shot_copy["frame_url"] = f"/output/shot_{s_idx}_last_frame.png"
 
             if os.path.exists(local_clip):
                 url = upload_file_to_gcs(bucket, local_clip, f"showcase/{run_id}/shot_{s_idx}.mp4")
