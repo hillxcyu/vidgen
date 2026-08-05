@@ -405,7 +405,7 @@ async def serve_index():
         label.mode-option:hover {
             border-color: #4f46e5;
         }
-        label.mode-option.selected {
+        label.mode-option:has(input:checked) {
             border-color: var(--accent);
             background: rgba(99, 102, 241, 0.15);
         }
@@ -558,7 +558,7 @@ async def serve_index():
                 <!-- Pipeline Mode Selection -->
                 <label style="font-size: 13px; color: var(--muted-text); margin-bottom: 6px; display: block;">Pipeline Generation Mode:</label>
                 <div class="mode-box">
-                    <label class="mode-option selected" id="mode-i2v">
+                    <label class="mode-option" id="mode-i2v">
                         <input type="radio" name="mode" value="i2v_chaining" checked onchange="selectMode('i2v_chaining')">
                         <div>
                             <strong>⚡ Sequential I2V Chaining</strong>
@@ -629,9 +629,6 @@ async def serve_index():
 
         function selectMode(mode) {
             selectedMode = mode;
-            document.getElementById("mode-i2v").classList.toggle("selected", mode === "i2v_chaining");
-            document.getElementById("mode-ref").classList.toggle("selected", mode === "reference");
-
             const refBox = document.getElementById("refUploadBox");
             if (mode === "reference") {
                 refBox.classList.add("visible");
