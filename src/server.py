@@ -376,7 +376,7 @@ async def serve_index():
             color: #fff;
             font-size: 15px;
         }
-        select, input[type="file"] {
+        select {
             padding: 14px 14px;
             border-radius: 10px;
             border: 1px solid var(--border-color);
@@ -430,16 +430,18 @@ async def serve_index():
             border-color: #38bdf8;
             background: rgba(56, 189, 248, 0.05);
         }
-        .drop-zone {
+        label.drop-zone {
+            display: block;
             padding: 20px;
             text-align: center;
             border: 2px dashed var(--border-color);
             border-radius: 10px;
             cursor: pointer;
             background: rgba(255,255,255,0.02);
-            transition: background 0.2s;
+            transition: background 0.2s, border-color 0.2s;
+            user-select: none;
         }
-        .drop-zone:hover {
+        label.drop-zone:hover {
             background: rgba(99, 102, 241, 0.1);
             border-color: var(--accent);
         }
@@ -621,12 +623,12 @@ async def serve_index():
                         <span style="font-size: 13px; font-weight: 700; color: #38bdf8;">📷 Character & Asset Reference Images</span>
                         <span class="badge badge-info" id="refCountBadge">0 assets</span>
                     </div>
-                    <div class="drop-zone" id="dropZone" onclick="triggerFileInput()">
+                    <label class="drop-zone" id="dropZone" for="refFileInput">
                         <div style="font-size: 26px; margin-bottom: 4px;">🖼️</div>
                         <div><strong>Click or Drag & Drop Reference Images Here</strong></div>
                         <div style="font-size: 11px; color: var(--muted-text); margin-top: 4px;">PNG, JPG, WEBP (Passed as reference visual anchors to Gemini Omni Flash)</div>
                         <input type="file" id="refFileInput" multiple accept="image/*" onchange="handleRefFiles(event)" style="display: none;">
-                    </div>
+                    </label>
                     <div class="preview-grid" id="refPreviewGrid"></div>
                 </div>
 
@@ -684,10 +686,6 @@ async def serve_index():
             } else {
                 refPanel.classList.remove("active-panel");
             }
-        }
-
-        function triggerFileInput() {
-            document.getElementById('refFileInput').click();
         }
 
         async function handleRefFiles(event) {
