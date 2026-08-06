@@ -463,7 +463,6 @@ async def run_adk_pipeline_background(adk_session: Session):
                     client=client
                 )
                 score = eval_result.get("score", 0.9)
-                drift_detected = eval_result.get("drift_detected", False)
                 reason = eval_result.get("reason", [])
                 state.quality_rating = score
 
@@ -479,14 +478,13 @@ async def run_adk_pipeline_background(adk_session: Session):
                         'attempt': attempt + 1,
                         'score': score,
                         'reason': reason,
-                        'drift_detected': drift_detected,
                         'feedback': eval_result.get('feedback', 'Good visual quality'),
-                        'verdict': eval_result.get('verdict', 'PASSED' if score >= 0.8 and not drift_detected else 'REATTEMPT_REQUIRED')
+                        'verdict': eval_result.get('verdict', 'PASSED' if score >= 0.8 else 'REATTEMPT_REQUIRED')
                     }
                 }, state_dict)
                 await asyncio.sleep(0.3)
 
-                if (score >= 0.8 and not drift_detected) or attempt == shot_max_attempts - 1:
+                if score >= 0.8 or attempt == shot_max_attempts - 1:
                     break
                 else:
                     feedback = eval_result.get("feedback", "Refine visual continuity and prevent subject drift")

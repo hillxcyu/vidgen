@@ -22,8 +22,8 @@ This document maintains a comprehensive list of all implemented features in **vi
 
 ## 🎨 Generation & Quality Control
 
-5. **5-Category Major Subject Drift Detection & Quality Rater Feedback Loop**
-   - **Technical Implementation:** `QualityRaterAgent` executes `consolidate_rubric_with_llm` and enforces `response_schema=QualityEvaluationResult` via Google GenAI SDK for zero-parsing-error multimodal visual quality audits with retry loops.
+5. **Simplified Multi-Criterion Quality Evaluation & Feedback Loop**
+   - **Technical Implementation:** `QualityRaterAgent` executes `consolidate_rubric_with_llm` and enforces `response_schema=QualityEvaluationResult` (`score`, `reason`, `verdict`, `feedback`), calculating overall quality score directly from the minimum per-criterion score.
 
 6. **Single-Shot Continuous Take Enforcement**
    - **Technical Implementation:** System prompt instructions force `PromptOptimizerAgent` to generate continuous single camera tracking shots while forbidding internal jump cuts or scene switches.

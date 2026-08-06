@@ -207,13 +207,9 @@ class QualityEvaluationResult(BaseModel):
         default_factory=list,
         description="Detailed list evaluating each individual consolidated criterion with its specific score and findings."
     )
-    drift_detected: bool = Field(
-        default=False,
-        description="True if any subject drift or critical visual defect was detected across keyframes."
-    )
     verdict: str = Field(
         default="REATTEMPT_REQUIRED",
-        description="Overall verdict: 'PASSED' if score >= 0.8 and no critical drift, else 'REATTEMPT_REQUIRED'."
+        description="Overall verdict: 'PASSED' if score >= 0.8, else 'REATTEMPT_REQUIRED'."
     )
     feedback: str = Field(
         default="",
@@ -311,7 +307,6 @@ async def evaluate_clip_quality(
         res = QualityEvaluationResult(
             score=0.0,
             reason=[CriterionEvaluation(criterion_name="Video File Integrity", score=0.0, comments="File missing or 0 bytes")],
-            drift_detected=True,
             verdict="REATTEMPT_REQUIRED",
             feedback=f"FAILED: Video shot #{shot_index} generation failed or output file is empty (0 bytes)."
         )
@@ -327,7 +322,6 @@ async def evaluate_clip_quality(
             res = QualityEvaluationResult(
                 score=0.0,
                 reason=[CriterionEvaluation(criterion_name="Video File Integrity", score=0.0, comments="File contains 0 bytes")],
-                drift_detected=True,
                 verdict="REATTEMPT_REQUIRED",
                 feedback=f"FAILED: Video shot #{shot_index} contains 0 bytes."
             )
@@ -339,7 +333,6 @@ async def evaluate_clip_quality(
         res = QualityEvaluationResult(
             score=0.0,
             reason=[CriterionEvaluation(criterion_name="Video File Access", score=0.0, comments=str(e))],
-            drift_detected=True,
             verdict="REATTEMPT_REQUIRED",
             feedback=f"FAILED: Could not read video file at {video_path}: {e}"
         )
@@ -355,7 +348,7 @@ async def evaluate_clip_quality(
         f"CONSOLIDATED EVALUATION RUBRIC:\n{rubric_str}\n\n"
         "Visually inspect the MP4 clip keyframes against this consolidated rubric.\n"
         "Assess each criterion in the rubric, assign a score (0.0 to 1.0) and specific comments for each.\n"
-        "Calculate the overall score (0.0 to 1.0). If score < 0.8 or any subject drift occurred, set drift_detected=true and verdict='REATTEMPT_REQUIRED'."
+        "Calculate the overall score (0.0 to 1.0). If score < 0.8 on any criterion, set verdict='REATTEMPT_REQUIRED'."
     )
 
     eval_res = None
@@ -398,15 +391,14 @@ async def evaluate_clip_quality(
             print(f"[QUALITY RATER ADK ATTEMPT {retry_attempt+1} NOTICE]: {adk_err}")
 
     if eval_res:
-        # Deterministic verification: Force drift_detected = True if overall score < 0.8 or any criterion score < 0.8
-        if eval_res.score < 0.8 or any(item.score < 0.8 for item in eval_res.reason):
-            eval_res.drift_detected = True
-            eval_res.verdict = "REATTEMPT_REQUIRED"
+        # Minimum score across individual criteria determines overall score & verdict
+        min_criterion_score = min([item.score for item in eval_res.reason], default=eval_res.score)
+        eval_res.score = min(eval_res.score, min_criterion_score)
+        eval_res.verdict = "PASSED" if eval_res.score >= 0.8 else "REATTEMPT_REQUIRED"
     else:
         eval_res = QualityEvaluationResult(
             score=0.5,
             reason=[CriterionEvaluation(criterion_name="Visual Audit Execution", score=0.5, comments=f"Audit parsing notice: {last_error}")],
-            drift_detected=True,
             verdict="REATTEMPT_REQUIRED",
             feedback=f"REATTEMPT REQUIRED: Quality audit encountered parsing error ({last_error}). Requesting prompt refinement."
         )
