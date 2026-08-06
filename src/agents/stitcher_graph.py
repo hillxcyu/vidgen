@@ -558,8 +558,7 @@ def run_production_loop(state: PipelineState, output_dir: str = "/tmp/vidgen_out
                 details={
                     "shot_index": shot.shot_index,
                     "mode": state.mode,
-                    "raw_prompt": shot.prompt,
-                    "optimized_prompt": optimized_shot_prompt,
+                    "prompt": optimized_shot_prompt,
                     "has_input_image": prev_frame_b64 is not None
                 }
             )

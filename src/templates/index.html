@@ -806,7 +806,7 @@
                         summaryText = " — Status: " + details.status;
                     }
                 } else if (agent.includes("GeminiOmniFlash")) {
-                    var pStr = details.optimized_prompt || details.prompt || details.raw_prompt || "";
+                    var pStr = details.prompt || details.optimized_prompt || details.raw_prompt || "";
                     summaryText = " — Shot #" + (details.shot_index || 1) + ": " + stripControlString(pStr);
                 } else if (details.raw_prompt) {
                     summaryText = " — " + stripControlString(details.raw_prompt);

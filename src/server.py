@@ -457,7 +457,7 @@ async def run_adk_pipeline_background(adk_session: Session):
                     'step': 6,
                     'agent': 'GeminiOmniFlash',
                     'action': 'RENDER_CLIP',
-                    'details': {'shot_index': shot.shot_index, 'mode': state.mode, 'raw_prompt': shot.prompt, 'optimized_prompt': optimized_shot_prompt, 'has_input_image': prev_frame_b64 is not None or len(state.reference_assets_b64) > 0, 'has_audio_reference': len(active_audio_b64) > 0}
+                    'details': {'shot_index': shot.shot_index, 'mode': state.mode, 'prompt': optimized_shot_prompt, 'has_input_image': prev_frame_b64 is not None or len(state.reference_assets_b64) > 0, 'has_audio_reference': len(active_audio_b64) > 0}
                 }, state_dict)
 
                 try:
