@@ -759,13 +759,12 @@
 
         function stripControlString(str) {
             if (!str || typeof str !== 'string') return str || "";
-            // Remove [# Sources ...] and [# References ...] blocks
-            var clean = str.replace(/\[#\s*(Sources|References)[^\]]*\]/gi, "");
-            // Remove [aspect_ratio=...], [resolution=...], [duration=...] tags
-            clean = clean.replace(/\[(aspect_ratio|resolution|duration)=[^\]]*\]/gi, "");
-            // Remove any remaining MMC image tags like <FIRST_FRAME>image_0.png or <IMAGE_REF_0>[Character A]image_1.png
-            clean = clean.replace(/<FIRST_FRAME>[^\s]+/gi, "");
-            clean = clean.replace(/<IMAGE_REF_\d+>(\[[^\]]+\])?[^\s]+/gi, "");
+            // Remove [# ...] MMC blocks (e.g. [# Sources ...] or [# References ...])
+            var clean = str.replace(/\[#[\s\S]*?\]/gi, "");
+            // Remove [aspect_ratio=...], [resolution=...], [duration=...], etc.
+            clean = clean.replace(/\[(aspect_ratio|resolution|duration|mode|camera_angle)=[^\]]*\]/gi, "");
+            // Remove any remaining MMC image/audio tags like <FIRST_FRAME> or <IMAGE_REF_x>
+            clean = clean.replace(/<(FIRST_FRAME|IMAGE_REF_\d+|AUDIO_REF_\d+)>[^\s]*/gi, "");
             return clean.replace(/\s+/g, " ").trim();
         }
 
@@ -779,11 +778,12 @@
             if (details) {
                 var verdict = String(details.verdict || "").toUpperCase();
                 var status = String(details.status || "").toUpperCase();
-                var feedback = String(details.feedback || "").toUpperCase();
                 var act = String(action || "").toUpperCase();
+
+                // Only flag actual failures/rejections/reattempts, not PromptOptimizer receiving feedback
                 if (verdict.includes("REATTEMPT") || verdict.includes("REJECT") || verdict.includes("FAIL") ||
-                    status.includes("FAIL") || feedback.includes("FAIL") || act.includes("REVERT") ||
-                    details.drift_detected === true || (typeof details.score === 'number' && details.score < 0.8)) {
+                    status.includes("FAIL") || act.includes("FAIL") || act.includes("REVERT") ||
+                    (agent === "QualityRaterAgent" && (details.drift_detected === true || (typeof details.score === 'number' && details.score < 0.8)))) {
                     isFailed = true;
                 }
             }
@@ -794,7 +794,9 @@
 
             var summaryText = "";
             if (details) {
-                if (details.optimized_prompt) {
+                if (details.control_string) {
+                    summaryText = " — Shot #" + (details.shot_index || 1) + ": " + stripControlString(details.control_string);
+                } else if (details.optimized_prompt) {
                     summaryText = " — " + stripControlString(details.optimized_prompt);
                 } else if (details.raw_prompt) {
                     summaryText = " — " + stripControlString(details.raw_prompt);

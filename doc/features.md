@@ -42,7 +42,7 @@ This document maintains a comprehensive list of all implemented features in **vi
    - **Technical Implementation:** Pinned runs persist stitched MP4s, shot clips, terminal frame PNGs, and JSON manifests to Google Cloud Storage (`gs://...`) with public HTTP URL generation (`make_public()`).
 
 10. **Real-Time Audit Trajectory Visualizer with Folded Communication Cards & Hidden Control Strings**
-    - **Technical Implementation:** SSE endpoint streams live agent interactions, hiding MMC control tags (`[# Sources ...]`) from display cards while keeping raw control strings folded inside expandable `<details>` log JSONs.
+    - **Technical Implementation:** SSE endpoint streams live agent interactions, running `stripControlString()` on `GeminiOmniFlash` headers and isolating red failure tags (`🔴 FAILED`) strictly to failing agents rather than downstream prompt optimizers receiving feedback.
 
 11. **Asynchronous Non-Blocking Uvicorn Threadpool Offloading**
     - **Technical Implementation:** Synchronous Vertex AI calls, OpenCV frame extractions, FFMPEG concatenations, and GCS storage tasks are offloaded via `await asyncio.to_thread(...)` to prevent blocking FastAPI's async event loop.
