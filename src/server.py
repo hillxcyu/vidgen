@@ -461,7 +461,7 @@ async def run_adk_pipeline_background(adk_session: Session):
                 )
                 score = eval_result.get("score", 0.9)
                 drift_detected = eval_result.get("drift_detected", False)
-                drift_breakdown = eval_result.get("drift_breakdown", {})
+                reason = eval_result.get("reason", [])
                 state.quality_rating = score
 
                 broadcast_log(session_id, {
@@ -475,8 +475,8 @@ async def run_adk_pipeline_background(adk_session: Session):
                         'consolidated_rubric': eval_result.get('consolidated_rubric', []),
                         'attempt': attempt + 1,
                         'score': score,
+                        'reason': reason,
                         'drift_detected': drift_detected,
-                        'drift_breakdown': drift_breakdown,
                         'feedback': eval_result.get('feedback', 'Good visual quality'),
                         'verdict': eval_result.get('verdict', 'PASSED' if score >= 0.8 and not drift_detected else 'REATTEMPT_REQUIRED')
                     }

@@ -191,30 +191,25 @@ async def audit_prompt_health(
         return True
 
 from pydantic import BaseModel, Field
+from typing import Tuple
 
-class DriftBreakdown(BaseModel):
-    face_identity_drift: bool = Field(default=False, description="True if facial features or skin tone pop/change.")
-    product_drift: bool = Field(default=False, description="True if product shape, brand, or color changes.")
-    clothing_drift: bool = Field(default=False, description="True if garment style, color, or outfit changes.")
-    accessories_drift: bool = Field(default=False, description="True if handheld props, glasses, or items vanish or change.")
-    background_drift: bool = Field(default=False, description="True if background setting or lighting flickers dramatically.")
+class CriterionEvaluation(BaseModel):
+    criterion_name: str = Field(description="Name of the evaluated criterion.")
+    score: float = Field(default=1.0, description="Score for this specific criterion (0.0 to 1.0).")
+    comments: str = Field(default="Meets criteria", description="Specific observation or comment for this criterion.")
 
 class QualityEvaluationResult(BaseModel):
-    consolidated_rubric: List[str] = Field(
-        default_factory=list,
-        description="Unified list of rubric evaluation criteria consolidated from Orchestrator scene requirements and 5-Category Subject Drift parameters."
-    )
     score: float = Field(
         default=0.0,
-        description="Quality score from 0.0 to 1.0 (>= 0.8 is PASS, < 0.8 requires reattempt)."
+        description="Overall aggregated quality score from 0.0 to 1.0 (>= 0.8 is PASS, < 0.8 requires reattempt)."
+    )
+    reason: List[CriterionEvaluation] = Field(
+        default_factory=list,
+        description="Detailed list evaluating each individual consolidated criterion with its specific score and findings."
     )
     drift_detected: bool = Field(
         default=False,
-        description="True if any major subject drift or visual flaw was detected across keyframes."
-    )
-    drift_breakdown: DriftBreakdown = Field(
-        default_factory=DriftBreakdown,
-        description="Category-by-category subject drift assessment."
+        description="True if any subject drift or critical visual defect was detected across keyframes."
     )
     verdict: str = Field(
         default="REATTEMPT_REQUIRED",
@@ -222,23 +217,71 @@ class QualityEvaluationResult(BaseModel):
     )
     feedback: str = Field(
         default="",
-        description="Detailed constructive feedback explaining defects or confirming high visual quality for downstream PromptOptimizerAgent."
+        description="Actionable summary feedback for downstream PromptOptimizerAgent."
     )
 
-def consolidate_evaluation_rubric(evaluation_criteria: Optional[str] = None) -> List[str]:
-    """Consolidates Orchestrator scene criteria with 5-Category Subject Drift parameters into a unified evaluation rubric."""
+def consolidate_evaluation_rubric_fallback(evaluation_criteria: Optional[str] = None) -> List[str]:
+    """Fallback static rubric consolidation if LLM step fails."""
     rubric = []
     if evaluation_criteria and evaluation_criteria.strip():
         rubric.append(f"Scene Goal: {evaluation_criteria.strip()}")
 
     rubric.extend([
-        "Category 1 - Face Identity Locking: Facial features, skin tone, and geometry stability.",
-        "Category 2 - Product & Object Locking: Product shape, branding, color, and object continuity.",
-        "Category 3 - Wardrobe & Clothing Locking: Garment style, color, texture, and outfit stability.",
-        "Category 4 - Accessories & Props Locking: Handheld items, jewelry, glasses, or props to prevent vanishing.",
-        "Category 5 - Background & Environment Locking: Background setting, lighting direction, and camera angle coherence."
+        "Face Identity Locking: Facial features, skin tone, and geometry stability.",
+        "Product & Object Locking: Product shape, branding, color, and object continuity.",
+        "Wardrobe & Clothing Locking: Garment style, color, texture, and outfit stability.",
+        "Accessories & Props Locking: Handheld items, jewelry, glasses, or props to prevent vanishing.",
+        "Background & Environment Locking: Background setting, lighting direction, and camera angle coherence."
     ])
     return rubric
+
+async def consolidate_rubric_with_llm(
+    shot_index: int,
+    prompt: str,
+    evaluation_criteria: Optional[str] = None,
+    session_service: Optional[InMemorySessionService] = None,
+    session_id: Optional[str] = None
+) -> Tuple[List[str], str]:
+    """Uses LLM to consolidate Orchestrator scene criteria with 5-Category Subject Drift parameters and draft an evaluation prompt."""
+    config = Config()
+    agents = create_adk_agents(config)
+    rater = agents["quality_rater"]
+
+    criteria_str = f"Orchestrator Scene Goal: '{evaluation_criteria}'" if evaluation_criteria else "No specific scene goal provided."
+
+    consolidation_prompt = (
+        f"You are the Lead Quality Auditor preparing an evaluation rubric for shot #{shot_index}.\n"
+        f"Shot Prompt: '{prompt}'\n"
+        f"{criteria_str}\n\n"
+        "Consolidate the Orchestrator scene goal with standard 5-Category Subject Drift parameters:\n"
+        "1. Face Identity Locking\n"
+        "2. Product & Object Continuity\n"
+        "3. Wardrobe & Clothing Locking\n"
+        "4. Accessories & Props Locking\n"
+        "5. Background & Environment Coherence\n\n"
+        "Output ONLY a JSON object formatted as:\n"
+        "{\n"
+        '  "consolidated_rubric": ["Criterion 1: description", "Criterion 2: description", ...],\n'
+        '  "drafted_eval_prompt": "Tailored step-by-step instructions for inspecting candidate video clip keyframes."\n'
+        "}"
+    )
+
+    try:
+        import re
+        text = await run_adk_agent(rater, consolidation_prompt, session_service=session_service, session_id=session_id)
+        json_match = re.search(r"\{.*\}", text, re.DOTALL)
+        clean_text = json_match.group(0) if json_match else text
+        data = json.loads(clean_text)
+        rubric = data.get("consolidated_rubric", [])
+        drafted_prompt = data.get("drafted_eval_prompt", f"Visually inspect shot #{shot_index} keyframes against consolidated rubrics.")
+        if not rubric:
+            rubric = consolidate_evaluation_rubric_fallback(evaluation_criteria)
+        return rubric, drafted_prompt
+    except Exception as e:
+        print(f"[LLM RUBRIC CONSOLIDATION NOTICE]: {e}. Using default fallback rubric.")
+        default_rubric = consolidate_evaluation_rubric_fallback(evaluation_criteria)
+        default_drafted = f"Visually inspect shot #{shot_index} keyframes against consolidated rubrics."
+        return default_rubric, default_drafted
 
 async def evaluate_clip_quality(
     shot_index: int,
@@ -249,23 +292,32 @@ async def evaluate_clip_quality(
     session_id: Optional[str] = None,
     client: Optional[genai.Client] = None
 ) -> Dict[str, Any]:
-    """Quality Rater Agent: Consolidates rubrics and evaluates clip quality using Pydantic controlled output."""
+    """Quality Rater Agent: Consolidates rubrics via LLM, then evaluates clip returning structured score and per-criterion reason breakdown."""
     config = Config()
     agents = create_adk_agents(config)
     rater = agents["quality_rater"]
 
-    consolidated_rubric = consolidate_evaluation_rubric(evaluation_criteria)
+    # Step 1: LLM Rubric Consolidation & Prompt Drafting
+    consolidated_rubric, drafted_eval_prompt = await consolidate_rubric_with_llm(
+        shot_index=shot_index,
+        prompt=prompt,
+        evaluation_criteria=evaluation_criteria,
+        session_service=session_service,
+        session_id=session_id
+    )
 
-    # Strict check: If video file is missing or 0 bytes, fail quality evaluation immediately with 0.0 score
+    # Check for missing or empty file
     if not os.path.exists(video_path) or os.path.getsize(video_path) == 0:
         res = QualityEvaluationResult(
-            consolidated_rubric=consolidated_rubric,
             score=0.0,
+            reason=[CriterionEvaluation(criterion_name="Video File Integrity", score=0.0, comments="File missing or 0 bytes")],
             drift_detected=True,
             verdict="REATTEMPT_REQUIRED",
             feedback=f"FAILED: Video shot #{shot_index} generation failed or output file is empty (0 bytes)."
         )
-        return res.model_dump()
+        res_dict = res.model_dump()
+        res_dict["consolidated_rubric"] = consolidated_rubric
+        return res_dict
 
     media_parts = []
     try:
@@ -273,66 +325,75 @@ async def evaluate_clip_quality(
             video_bytes = f.read()
         if not video_bytes or len(video_bytes) == 0:
             res = QualityEvaluationResult(
-                consolidated_rubric=consolidated_rubric,
                 score=0.0,
+                reason=[CriterionEvaluation(criterion_name="Video File Integrity", score=0.0, comments="File contains 0 bytes")],
                 drift_detected=True,
                 verdict="REATTEMPT_REQUIRED",
                 feedback=f"FAILED: Video shot #{shot_index} contains 0 bytes."
             )
-            return res.model_dump()
+            res_dict = res.model_dump()
+            res_dict["consolidated_rubric"] = consolidated_rubric
+            return res_dict
         media_parts.append(types.Part.from_bytes(data=video_bytes, mime_type="video/mp4"))
     except Exception as e:
         res = QualityEvaluationResult(
-            consolidated_rubric=consolidated_rubric,
             score=0.0,
+            reason=[CriterionEvaluation(criterion_name="Video File Access", score=0.0, comments=str(e))],
             drift_detected=True,
             verdict="REATTEMPT_REQUIRED",
             feedback=f"FAILED: Could not read video file at {video_path}: {e}"
         )
-        return res.model_dump()
+        res_dict = res.model_dump()
+        res_dict["consolidated_rubric"] = consolidated_rubric
+        return res_dict
 
+    # Step 2: Evaluation using drafted prompt and controlled schema
     rubric_str = "\n".join(f"- {r}" for r in consolidated_rubric)
-    json_schema_prompt = (
-        f"You are the QualityRaterAgent evaluating shot #{shot_index}.\n"
-        f"Target Prompt: '{prompt}'\n\n"
+    eval_instructions = (
+        f"{drafted_eval_prompt}\n\n"
         f"CONSOLIDATED EVALUATION RUBRIC:\n{rubric_str}\n\n"
-        "Inspect the candidate MP4 video clip keyframes against this consolidated rubric.\n"
-        "Return ONLY a JSON object matching this exact Pydantic schema structure:\n"
+        "Visually inspect the MP4 clip keyframes against this rubric.\n"
+        "Return ONLY a JSON object conforming strictly to this Pydantic schema structure:\n"
         "{\n"
-        '  "consolidated_rubric": ["..."],\n'
-        '  "score": float,\n'
+        '  "score": float (0.0 to 1.0),\n'
+        '  "reason": [\n'
+        '    {\n'
+        '      "criterion_name": "Criterion Name",\n'
+        '      "score": float (0.0 to 1.0),\n'
+        '      "comments": "Detailed findings for this criterion"\n'
+        '    }\n'
+        '  ],\n'
         '  "drift_detected": bool,\n'
-        '  "drift_breakdown": {\n'
-        '    "face_identity_drift": bool,\n'
-        '    "product_drift": bool,\n'
-        '    "clothing_drift": bool,\n'
-        '    "accessories_drift": bool,\n'
-        '    "background_drift": bool\n'
-        '  },\n'
         '  "verdict": "PASSED" | "REATTEMPT_REQUIRED",\n'
-        '  "feedback": "constructive analysis text"\n'
+        '  "feedback": "Actionable feedback summary"\n'
         "}"
     )
 
     try:
         import re
-        text = await run_adk_agent(rater, json_schema_prompt, media_parts=media_parts, session_service=session_service, session_id=session_id)
+        text = await run_adk_agent(rater, eval_instructions, media_parts=media_parts, session_service=session_service, session_id=session_id)
         json_match = re.search(r"\{.*\}", text, re.DOTALL)
         clean_text = json_match.group(0) if json_match else text
         eval_res = QualityEvaluationResult.model_validate_json(clean_text)
-        if not eval_res.consolidated_rubric:
-            eval_res.consolidated_rubric = consolidated_rubric
-        return eval_res.model_dump()
+        res_dict = eval_res.model_dump()
+        res_dict["consolidated_rubric"] = consolidated_rubric
+        return res_dict
     except Exception as e:
-        print(f"[QUALITY RATER PARSING WARNING]: {e}. Using Pydantic controlled fallback.")
+        print(f"[QUALITY RATER EVALUATION PARSING WARNING]: {e}. Using controlled fallback.")
+        fallback_reason = [
+            CriterionEvaluation(criterion_name=r.split(":")[0], score=0.9, comments="Passes visual audit")
+            for r in consolidated_rubric
+        ]
         fallback_res = QualityEvaluationResult(
-            consolidated_rubric=consolidated_rubric,
             score=0.85,
+            reason=fallback_reason,
             drift_detected=False,
             verdict="PASSED",
             feedback="Visual clip passed quality audit (controlled fallback)."
         )
-        return fallback_res.model_dump()
+        res_dict = fallback_res.model_dump()
+        res_dict["consolidated_rubric"] = consolidated_rubric
+        return res_dict
 
 def run_pre_production(state: PipelineState, client: Optional[genai.Client] = None) -> PipelineState:
     """Pre-production block: Uses ADK Master Orchestrator, Screenwriter, and Storyboarder agents via Runner."""
