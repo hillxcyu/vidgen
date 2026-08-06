@@ -797,8 +797,9 @@
 
             var summaryText = "";
             if (details) {
-                if (agent.includes("GeminiOmniFlash") && (details.prompt || details.optimized_prompt)) {
-                    summaryText = " — Shot #" + (details.shot_index || 1) + ": " + stripControlString(details.prompt || details.optimized_prompt);
+                if (agent.includes("GeminiOmniFlash")) {
+                    var pStr = details.optimized_prompt || details.prompt || details.raw_prompt || "";
+                    summaryText = " — Shot #" + (details.shot_index || 1) + ": " + stripControlString(pStr);
                 } else if (details.raw_prompt) {
                     summaryText = " — " + stripControlString(details.raw_prompt);
                 } else if (details.prompt) {
