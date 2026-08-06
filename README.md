@@ -1,10 +1,10 @@
-# 🎬 GenMedia-Omni: Multi-Agent Generative Media Pipeline
+# 🎬 vidgen: Multi-Agent Generative Media Pipeline
 
 [![Google ADK 2.0](https://img.shields.io/badge/Google%20ADK-2.6.2-blue)](https://github.com/hillxcyu/vidgen)
 [![Docker](https://img.shields.io/badge/Docker-Containerized-blue)](https://docker.com)
-[![Pytest](https://img.shields.io/badge/Pytest-18%2F18%20Passed-green)](https://pytest.org)
+[![Pytest](https://img.shields.io/badge/Pytest-27%2F27%20Passed-green)](https://pytest.org)
 
-**GenMedia-Omni** is a high-code multi-agent generative video pipeline built with **Google Agent Development Kit (ADK 2.0)**, **Gemini 3.6 Flash**, and **Gemini Omni Flash** (`gemini-omni-flash-preview`).
+**vidgen** is a high-code multi-agent generative video pipeline built with **Google Agent Development Kit (ADK 2.0)**, **Gemini 3.6 Flash**, and **Gemini Omni Flash** (`gemini-omni-flash-preview`).
 
 It coordinates a team of 5 specialized AI agents to expand raw user prompts into multi-shot videos with unbroken visual identity and motion continuity via **Sequential Image-to-Video (I2V) Prompt Chaining**.
 
@@ -68,9 +68,9 @@ It coordinates a team of 5 specialized AI agents to expand raw user prompts into
 
 - **Google ADK 2.0 Integration (`google.adk`):** Built natively using ADK `LlmAgent`, `Workflow`, `FunctionNode`, `Edge`, `Event`, and `Session` abstractions.
 - **Sequential Image-to-Video (I2V) Chaining:** Uses OpenCV to extract the terminal frame (Frame #100) of Shot $N$ as a Base64 payload, supplying it as the starting visual anchor for Shot $N+1$ in Gemini Omni Flash.
-- **Quality Feedback Loop:** The `QualityRaterAgent` scores visual quality ($0.0 - 1.0$). If `score < 0.8`, actionable feedback is routed back to `PromptOptimizerAgent` for a re-attempt.
-- **Dynamic Shot Count:** Supports configurable shot counts (2 to 5 shots, producing 20s to 50s stitched MP4 output).
-- **Real-Time Audit Trajectory Visualizer:** Server-Sent Events (SSE) stream live agent communication logs and audit verdicts to a Web Studio UI.
+- **5-Category Major Subject Drift Detection:** `QualityRaterAgent` audits clips across Face Identity, Product, Clothing, Accessories/Props, and Environment/Background stability. If `score < 0.8` or drift is detected, actionable feedback is routed back to `PromptOptimizerAgent` for a re-attempt.
+- **Showcase Run Pinning & GCS Sync:** Allows pinning showcased video runs to a slide-out drawer panel and syncing stitched MP4s, shot clips, last frames, and manifest JSON to Google Cloud Storage (`gs://...`).
+- **Real-Time Audit Trajectory Visualizer:** Server-Sent Events (SSE) stream live agent communication logs and audit verdicts to a Web Studio UI with folded message cards and hidden control strings.
 
 ---
 
@@ -114,6 +114,7 @@ docker compose run --rm app --prompt "A red panda skiing in Hakuba" --shots 3 --
 ├── pyproject.toml              # Dependencies (google-adk, google-genai, fastapi, uvicorn)
 ├── README.md                   # Project documentation
 ├── agent.yaml                  # ADK 2.0 agent deployment manifest
+├── cloudbuild.yaml             # Google Cloud Build CI/CD deployment pipeline
 ├── src/
 │   ├── agents/
 │   │   └── stitcher_graph.py   # ADK Workflow graph & agent definitions
@@ -123,12 +124,13 @@ docker compose run --rm app --prompt "A red panda skiing in Hakuba" --shots 3 --
 │   ├── tools/                  # Python primitives registered as ADK FunctionTools
 │   │   ├── omni_client.py      # Gemini Omni Flash wrapper (interactions.create)
 │   │   ├── video_parser.py     # OpenCV terminal frame extractor
+│   │   ├── gcs_storage.py      # Showcase run pinning & GCS bucket manager
 │   │   └── stitcher.py         # FFMPEG stream-copy video concatenator
 │   ├── config.py               # Vertex AI ADC authentication
 │   ├── state.py                # PipelineState & VideoShot Pydantic models
 │   ├── main.py                 # CLI entry point
 │   └── server.py               # FastAPI Web Studio & SSE streaming server
-└── tests/                      # 18 Pytest unit & integration tests
+└── tests/                      # 27 Pytest unit & integration tests
 ```
 
 ---
