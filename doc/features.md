@@ -42,7 +42,7 @@ This document maintains a comprehensive list of all implemented features in **vi
    - **Technical Implementation:** Pinned runs persist stitched MP4s, shot clips, frame PNGs, full audit trajectory log arrays, and JSON manifests to GCS (`gs://...`), prioritizing public GCS HTTPS URLs with fallback to local `/output/` static paths.
 
 10. **Real-Time Audit Trajectory Visualizer with Folded Communication Cards & Hidden Control Strings**
-    - **Technical Implementation:** SSE endpoint streams live agent interactions, running `stripControlString()` on `GeminiOmniFlash` headers and isolating red failure tags (`🔴 FAILED`) strictly to failing agents rather than downstream prompt optimizers receiving feedback.
+    - **Technical Implementation:** SSE endpoint streams live agent interactions, rendering original prompt headers and omitting `control_string` fields for `GeminiOmniFlash` while isolating red failure tags (`🔴 FAILED`) strictly to failing agents.
 
 11. **Asynchronous Non-Blocking Uvicorn Threadpool Offloading**
     - **Technical Implementation:** Synchronous Vertex AI calls, OpenCV frame extractions, FFMPEG concatenations, and GCS storage tasks are offloaded via `await asyncio.to_thread(...)` to prevent blocking FastAPI's async event loop.

@@ -523,14 +523,16 @@ def run_production_loop(state: PipelineState, output_dir: str = "/tmp/vidgen_out
                 duration=state.duration
             )
 
-            # 3. Gemini Omni Flash Video Generation with Control String Formatting
+            # 3. Gemini Omni Flash Video Generation
             state.log_event(
                 agent="GeminiOmniFlash",
                 action="RENDER_CLIP",
                 details={
                     "shot_index": shot.shot_index,
                     "mode": state.mode,
-                    "control_string": control_str,
+                    "raw_prompt": shot.prompt,
+                    "prompt": shot.prompt,
+                    "optimized_prompt": optimized_shot_prompt,
                     "has_input_image": prev_frame_b64 is not None
                 }
             )
