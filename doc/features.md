@@ -10,7 +10,7 @@ This document maintains a comprehensive list of all implemented features in **vi
    - **Technical Implementation:** Coordinates 7 specialized agents (`Orchestrator`, `Screenwriter`, `Storyboarder`, `PromptOptimizer`, `HealthChecker`, `QualityRater`, `OmniFlash`) built natively using Google ADK `LlmAgent`, `Runner`, and DAG workflow primitives.
 
 2. **Google ADK Session Management & Decoupled Background Execution**
-   - **Technical Implementation:** Detaches execution into an `asyncio.Task` bound to ADK `InMemorySessionService`, persisting state across page refreshes and isolating concurrent users via unique ADK session IDs.
+   - **Technical Implementation:** Detaches execution into an `asyncio.Task` bound to ADK `InMemorySessionService`, persisting state snapshots to disk (`output/sessions/*.json`) & GCS for cross-instance Cloud Run recovery on page refresh.
 
 3. **Sequential Image-to-Video (I2V) Prompt Chaining**
    - **Technical Implementation:** Extracts terminal frame (Frame #100) of Shot $N$ using OpenCV as a Base64 image payload to visually anchor Shot $N+1$ in Gemini Omni Flash.

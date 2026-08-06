@@ -50,12 +50,20 @@ def get_session_subscribers(session_id: str) -> List[asyncio.Queue]:
         session_subscribers[session_id] = []
     return session_subscribers[session_id]
 
+from src.tools.gcs_storage import persist_session_state, retrieve_session_state
+
 def broadcast_log(session_id: str, event_data: Dict[str, Any], state_dict: Dict[str, Any]):
-    """Appends event log to ADK Session state and broadcasts to active SSE subscriber queues."""
+    """Appends event log to ADK Session state, persists snapshot, and broadcasts to active SSE subscribers."""
     logs = state_dict.setdefault("trajectory_logs", [])
     logs.append(event_data)
     if "step" in event_data:
         state_dict["step"] = event_data["step"]
+
+    # Persist session state snapshot asynchronously
+    try:
+        asyncio.create_task(asyncio.to_thread(persist_session_state, session_id, state_dict))
+    except Exception:
+        pass
 
     subscribers = session_subscribers.get(session_id, [])
     for q in list(subscribers):
@@ -63,6 +71,31 @@ def broadcast_log(session_id: str, event_data: Dict[str, Any], state_dict: Dict[
             q.put_nowait(event_data)
         except Exception:
             pass
+
+async def get_or_restore_adk_session(session_id: str) -> Optional[Session]:
+    """Retrieves session from in-memory ADK SessionService or recovers snapshot from disk/GCS."""
+    user_id = "user_default"
+    session = None
+    try:
+        session = await adk_session_service.get_session(
+            app_name="vidgen",
+            user_id=user_id,
+            session_id=session_id
+        )
+    except Exception:
+        session = None
+
+    if not session:
+        restored_state = await asyncio.to_thread(retrieve_session_state, session_id)
+        if restored_state:
+            session = await adk_session_service.create_session(
+                app_name="vidgen",
+                user_id=user_id,
+                session_id=session_id,
+                state=restored_state
+            )
+
+    return session
 
 class GenerateRequest(BaseModel):
     prompt: str
@@ -80,19 +113,11 @@ class GenerateRequest(BaseModel):
 @app.post("/api/pipeline/start")
 async def start_pipeline_endpoint(req: GenerateRequest):
     """Starts a decoupled background pipeline execution powered by Google ADK SessionService."""
-    user_id = "user_default"
     session_id = req.session_id
 
     existing_session = None
     if session_id and session_id not in ["undefined", "null", ""]:
-        try:
-            existing_session = await adk_session_service.get_session(
-                app_name="vidgen",
-                user_id=user_id,
-                session_id=session_id
-            )
-        except Exception:
-            existing_session = None
+        existing_session = await get_or_restore_adk_session(session_id)
 
     if not existing_session:
         initial_state = {
@@ -113,7 +138,8 @@ async def start_pipeline_endpoint(req: GenerateRequest):
         }
         adk_session = await adk_session_service.create_session(
             app_name="vidgen",
-            user_id=user_id,
+            user_id="user_default",
+            session_id=session_id if session_id and session_id not in ["undefined", "null", ""] else None,
             state=initial_state
         )
         session_id = adk_session.id
@@ -133,46 +159,29 @@ async def start_pipeline_endpoint(req: GenerateRequest):
 @app.get("/api/pipeline/session/{session_id}")
 async def get_adk_session_status(session_id: str):
     """Retrieves full ADK Session state for page re-hydration and status inspection."""
-    user_id = "user_default"
-    try:
-        session = await adk_session_service.get_session(
-            app_name="vidgen",
-            user_id=user_id,
-            session_id=session_id
-        )
-        if not session:
-            raise HTTPException(status_code=404, detail="ADK Session not found")
-        return {
-            "session_id": session.id,
-            "status": session.state.get("status", "unknown"),
-            "step": session.state.get("step", 0),
-            "trajectory_logs": session.state.get("trajectory_logs", []),
-            "result": session.state.get("result"),
-            "request_data": {
-                "prompt": session.state.get("original_intent"),
-                "num_shots": session.state.get("num_shots"),
-                "mode": session.state.get("mode"),
-                "aspect_ratio": session.state.get("aspect_ratio"),
-                "resolution": session.state.get("resolution"),
-                "duration": session.state.get("duration")
-            }
+    session = await get_or_restore_adk_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="ADK Session not found")
+    return {
+        "session_id": session.id,
+        "status": session.state.get("status", "unknown"),
+        "step": session.state.get("step", 0),
+        "trajectory_logs": session.state.get("trajectory_logs", []),
+        "result": session.state.get("result"),
+        "request_data": {
+            "prompt": session.state.get("original_intent"),
+            "num_shots": session.state.get("num_shots"),
+            "mode": session.state.get("mode"),
+            "aspect_ratio": session.state.get("aspect_ratio"),
+            "resolution": session.state.get("resolution"),
+            "duration": session.state.get("duration")
         }
-    except Exception as e:
-        raise HTTPException(status_code=404, detail=f"Session lookup error: {e}")
+    }
 
 @app.get("/api/pipeline/stream/{session_id}")
 async def stream_adk_pipeline(session_id: str):
     """Live and re-attaching SSE trajectory stream bound to ADK Session."""
-    user_id = "user_default"
-    try:
-        session = await adk_session_service.get_session(
-            app_name="vidgen",
-            user_id=user_id,
-            session_id=session_id
-        )
-    except Exception:
-        session = None
-
+    session = await get_or_restore_adk_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="ADK Session not found")
 

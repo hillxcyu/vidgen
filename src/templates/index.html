@@ -1193,6 +1193,9 @@
                         } else if (sessionData.status === "completed" && sessionData.result) {
                             renderCompletedPipelineResult(sessionData.result, savedSessionId);
                         }
+                    } else {
+                        console.warn("Session expired or not found:", savedSessionId);
+                        localStorage.removeItem("vidgen_active_session_id");
                     }
                 } catch (err) {
                     console.warn("Could not restore active session:", err);

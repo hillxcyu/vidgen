@@ -257,3 +257,57 @@ def delete_saved_run(run_id: str, output_dir: str = "output") -> bool:
         print(f"[NOTICE] Error deleting GCS manifest for {run_id}: {e}")
 
     return True
+
+def persist_session_state(session_id: str, state_dict: Dict[str, Any], output_dir: str = "output") -> None:
+    """Persists session state dict locally and syncs to GCS bucket for cross-instance recovery."""
+    if not session_id:
+        return
+    sessions_dir = os.path.join(output_dir, "sessions")
+    os.makedirs(sessions_dir, exist_ok=True)
+    local_file = os.path.join(sessions_dir, f"{session_id}.json")
+
+    clean_state = {k: v for k, v in state_dict.items() if k not in ["reference_assets_b64", "reference_audio_b64"]}
+    try:
+        with open(local_file, "w", encoding="utf-8") as f:
+            json.dump(clean_state, f, indent=2)
+    except Exception as e:
+        print(f"[NOTICE] Error writing local session file: {e}")
+
+    try:
+        client = get_storage_client()
+        bucket_name = get_default_bucket_name()
+        if client:
+            bucket = ensure_gcs_bucket(client, bucket_name)
+            if bucket:
+                blob = bucket.blob(f"sessions/{session_id}.json")
+                blob.upload_from_string(json.dumps(clean_state, indent=2), content_type="application/json")
+    except Exception as gcs_err:
+        print(f"[NOTICE] GCS session sync notice: {gcs_err}")
+
+def retrieve_session_state(session_id: str, output_dir: str = "output") -> Optional[Dict[str, Any]]:
+    """Retrieves session state dict from local disk or GCS bucket."""
+    if not session_id:
+        return None
+
+    local_file = os.path.join(output_dir, "sessions", f"{session_id}.json")
+    if os.path.exists(local_file):
+        try:
+            with open(local_file, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+
+    try:
+        client = get_storage_client()
+        bucket_name = get_default_bucket_name()
+        if client:
+            bucket = client.bucket(bucket_name)
+            if bucket.exists():
+                blob = bucket.blob(f"sessions/{session_id}.json")
+                if blob.exists():
+                    content = blob.download_as_text()
+                    return json.loads(content)
+    except Exception as gcs_err:
+        print(f"[NOTICE] Error retrieving GCS session: {gcs_err}")
+
+    return None
