@@ -820,54 +820,81 @@
             feed.scrollTop = feed.scrollHeight;
         }
 
-        window.runPipeline = async function() {
-            var promptInput = document.getElementById("promptInput");
-            var prompt = promptInput ? promptInput.value.trim() : "";
-            var shotsSelect = document.getElementById("shotsSelect");
-            var shots = shotsSelect ? parseInt(shotsSelect.value, 10) : 3;
-
-            var aspectSelect = document.getElementById("aspectSelect");
-            var aspect = aspectSelect ? aspectSelect.value : "16:9";
-            var resSelect = document.getElementById("resSelect");
-            var resVal = resSelect ? resSelect.value : "720p";
-            var durationSelect = document.getElementById("durationSelect");
-            var durationVal = durationSelect ? parseInt(durationSelect.value, 10) : 10;
-            var maxAttemptsSelect = document.getElementById("maxAttemptsSelect");
-            var maxAttemptsVal = maxAttemptsSelect ? parseInt(maxAttemptsSelect.value, 10) : 2;
-            var transcriptInput = document.getElementById("transcriptInput");
-            var transcriptVal = transcriptInput ? transcriptInput.value.trim() : "";
-
-            if (!prompt) return;
-
+        function renderCompletedPipelineResult(details, sessionId) {
             var genBtn = document.getElementById("genBtn");
             var spinner = document.getElementById("spinner");
             var resultCard = document.getElementById("resultCard");
-            var trajectoryFeed = document.getElementById("trajectoryFeed");
+
+            if (genBtn) genBtn.disabled = false;
+            if (spinner) spinner.style.display = "none";
+
+            setStep(9);
+            for (var k = 1; k <= 9; k++) {
+                var s = document.getElementById("step-" + k);
+                if (s) s.classList.add("complete");
+            }
+
+            var title = document.getElementById("stitchedTitle");
+            if (title && details.shots) title.innerText = "🎬 Stitched Output Video (" + details.shots.length * 10 + "s)";
+            
+            var video = document.getElementById("stitchedVideo");
+            if (video && details.stitched_video_url) {
+                var videoUrl = details.stitched_video_url + "?t=" + new Date().getTime();
+                video.src = videoUrl;
+                video.load();
+            }
+
+            var downloadBtn = document.getElementById("downloadBtn");
+            if (downloadBtn && details.stitched_video_url) downloadBtn.href = details.stitched_video_url;
+
+            var grid = document.getElementById("shotsGrid");
+            if (grid && details.shots) {
+                grid.innerHTML = "";
+                details.shots.forEach(function(shot) {
+                    var card = document.createElement("div");
+                    card.className = "shot-card";
+                    card.innerHTML = '<h4><span>Shot #' + shot.shot_index + '</span><a href="' + shot.video_url + '" download class="btn-secondary" style="font-size: 11px; text-decoration: none; padding: 4px 8px;">💾 Download MP4</a></h4>' +
+                        '<p><strong>Prompt:</strong> ' + escapeHtml(stripControlString(shot.prompt)) + '</p>' +
+                        '<p style="color: #f472b6; font-size: 12px;"><strong>Orchestrator Criteria:</strong> ' + (shot.evaluation_criteria || 'Visual coherence & character lock') + '</p>' +
+                        '<video controls preload="metadata" src="' + shot.video_url + '?t=' + new Date().getTime() + '"></video>' +
+                        '<p style="margin-top: 10px; color: #38bdf8;"><strong>OpenCV Last Frame (I2V Chaining):</strong></p>' +
+                        '<img class="frame-img" src="' + shot.frame_url + '?t=' + new Date().getTime() + '" alt="Shot ' + shot.shot_index + ' Last Frame">';
+                    grid.appendChild(card);
+                });
+            }
+
+            // Store current active run for GCS showcase pinning
+            var promptInput = document.getElementById("promptInput");
+            var prompt = promptInput ? promptInput.value.trim() : "";
+            window.currentActiveRunData = {
+                run_id: "run_" + (sessionId || new Date().getTime()),
+                original_intent: prompt,
+                num_shots: details.shots ? details.shots.length : 3,
+                mode: window.selectedMode || "i2v_chaining",
+                aspect_ratio: "16:9",
+                resolution: "720p",
+                duration: 10,
+                voice_transcript: "",
+                stitched_video_path: details.stitched_video_url ? "output/" + details.stitched_video_url.split('/').pop().split('?')[0] : null,
+                shots: details.shots,
+                trajectory_logs: window.currentRunLogs || []
+            };
+
+            var pinStatusMsg = document.getElementById("pinStatusMsg");
+            if (pinStatusMsg) pinStatusMsg.innerText = "";
+            if (resultCard) resultCard.style.display = "block";
+        }
+
+        window.connectToSessionStream = async function(sessionId) {
+            var genBtn = document.getElementById("genBtn");
+            var spinner = document.getElementById("spinner");
 
             if (genBtn) genBtn.disabled = true;
             if (spinner) spinner.style.display = "block";
-            if (resultCard) resultCard.style.display = "none";
-            if (trajectoryFeed) trajectoryFeed.innerHTML = "";
-            setStep(1);
 
-            // Execute POST API call to stream endpoint with full parameters, control string configuration, and voice transcript
             try {
-                var res = await fetch("/api/stream", {
-                    method: "POST",
-                    headers: {"Content-Type": "application/json"},
-                    body: JSON.stringify({
-                        prompt: prompt,
-                        num_shots: shots,
-                        mode: window.selectedMode,
-                        aspect_ratio: aspect,
-                        resolution: resVal,
-                        duration: durationVal,
-                        max_attempts: maxAttemptsVal,
-                        voice_transcript: transcriptVal,
-                        reference_assets_b64: window.refImagesB64,
-                        reference_audio_b64: window.refAudioB64
-                    })
-                });
+                var res = await fetch("/api/pipeline/stream/" + sessionId);
+                if (!res.ok) throw new Error("Stream connection failed");
 
                 var reader = res.body.getReader();
                 var decoder = new TextDecoder();
@@ -896,66 +923,78 @@
                             }
 
                             if ((data.action === "PIPELINE_COMPLETE" || data.action === "COMPLETE_PIPELINE") && data.details) {
-                                if (genBtn) genBtn.disabled = false;
-                                if (spinner) spinner.style.display = "none";
-
-                                setStep(9);
-                                for (var k = 1; k <= 9; k++) {
-                                    var s = document.getElementById("step-" + k);
-                                    if (s) s.classList.add("complete");
-                                }
-
-                                var title = document.getElementById("stitchedTitle");
-                                if (title) title.innerText = "🎬 Stitched " + (data.details.shots.length * 10) + "s Output Video (" + data.details.mode + " mode)";
-                                
-                                var video = document.getElementById("stitchedVideo");
-                                if (video) {
-                                    var videoUrl = data.details.stitched_video_url + "?t=" + new Date().getTime();
-                                    video.src = videoUrl;
-                                    video.load();
-                                }
-
-                                var downloadBtn = document.getElementById("downloadBtn");
-                                if (downloadBtn) downloadBtn.href = data.details.stitched_video_url;
-
-                                var grid = document.getElementById("shotsGrid");
-                                if (grid) {
-                                    grid.innerHTML = "";
-                                    data.details.shots.forEach(function(shot) {
-                                        var card = document.createElement("div");
-                                        card.className = "shot-card";
-                                        card.innerHTML = '<h4><span>Shot #' + shot.shot_index + '</span><a href="' + shot.video_url + '" download class="btn-secondary" style="font-size: 11px; text-decoration: none; padding: 4px 8px;">💾 Download MP4</a></h4>' +
-                                            '<p><strong>Prompt:</strong> ' + escapeHtml(stripControlString(shot.prompt)) + '</p>' +
-                                            '<p style="color: #f472b6; font-size: 12px;"><strong>Orchestrator Criteria:</strong> ' + (shot.evaluation_criteria || 'Visual coherence & character lock') + '</p>' +
-                                            '<video controls preload="metadata" src="' + shot.video_url + '?t=' + new Date().getTime() + '"></video>' +
-                                            '<p style="margin-top: 10px; color: #38bdf8;"><strong>OpenCV Last Frame (I2V Chaining):</strong></p>' +
-                                            '<img class="frame-img" src="' + shot.frame_url + '?t=' + new Date().getTime() + '" alt="Shot ' + shot.shot_index + ' Last Frame">';
-                                        grid.appendChild(card);
-                                    });
-                                }
-
-                                // Store current active run for GCS showcase pinning
-                                window.currentActiveRunData = {
-                                    run_id: "run_" + new Date().getTime(),
-                                    original_intent: prompt,
-                                    num_shots: shots,
-                                    mode: window.selectedMode,
-                                    aspect_ratio: aspect,
-                                    resolution: resVal,
-                                    duration: durationVal,
-                                    voice_transcript: transcriptVal,
-                                    stitched_video_path: data.details.stitched_video_url ? "output/" + data.details.stitched_video_url.split('/').pop().split('?')[0] : null,
-                                    shots: data.details.shots,
-                                    trajectory_logs: window.currentRunLogs || []
-                                };
-
-                                var pinStatusMsg = document.getElementById("pinStatusMsg");
-                                if (pinStatusMsg) pinStatusMsg.innerText = "";
-                                if (resultCard) resultCard.style.display = "block";
+                                renderCompletedPipelineResult(data.details, sessionId);
                             }
                         }
                     }
                 }
+            } catch (err) {
+                console.error("Session stream error:", err);
+            } finally {
+                if (genBtn) genBtn.disabled = false;
+                if (spinner) spinner.style.display = "none";
+            }
+        };
+
+        window.runPipeline = async function() {
+            var promptInput = document.getElementById("promptInput");
+            var prompt = promptInput ? promptInput.value.trim() : "";
+            var shotsSelect = document.getElementById("shotsSelect");
+            var shots = shotsSelect ? parseInt(shotsSelect.value, 10) : 3;
+
+            var aspectSelect = document.getElementById("aspectSelect");
+            var aspect = aspectSelect ? aspectSelect.value : "16:9";
+            var resSelect = document.getElementById("resSelect");
+            var resVal = resSelect ? resSelect.value : "720p";
+            var durationSelect = document.getElementById("durationSelect");
+            var durationVal = durationSelect ? parseInt(durationSelect.value, 10) : 10;
+            var maxAttemptsSelect = document.getElementById("maxAttemptsSelect");
+            var maxAttemptsVal = maxAttemptsSelect ? parseInt(maxAttemptsSelect.value, 10) : 2;
+            var transcriptInput = document.getElementById("transcriptInput");
+            var transcriptVal = transcriptInput ? transcriptInput.value.trim() : "";
+
+            if (!prompt) return;
+
+            // Generate fresh unique ADK session ID
+            var sessionId = "sess_" + new Date().getTime() + "_" + Math.random().toString(36).substr(2, 6);
+            localStorage.setItem("vidgen_active_session_id", sessionId);
+
+            var genBtn = document.getElementById("genBtn");
+            var spinner = document.getElementById("spinner");
+            var resultCard = document.getElementById("resultCard");
+            var trajectoryFeed = document.getElementById("trajectoryFeed");
+
+            if (genBtn) genBtn.disabled = true;
+            if (spinner) spinner.style.display = "block";
+            if (resultCard) resultCard.style.display = "none";
+            if (trajectoryFeed) trajectoryFeed.innerHTML = "";
+            setStep(1);
+
+            try {
+                // 1. Post to /api/pipeline/start to initiate background ADK Session execution
+                var startRes = await fetch("/api/pipeline/start", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({
+                        session_id: sessionId,
+                        prompt: prompt,
+                        num_shots: shots,
+                        mode: window.selectedMode,
+                        aspect_ratio: aspect,
+                        resolution: resVal,
+                        duration: durationVal,
+                        max_attempts: maxAttemptsVal,
+                        voice_transcript: transcriptVal,
+                        reference_assets_b64: window.refImagesB64,
+                        reference_audio_b64: window.refAudioB64
+                    })
+                });
+
+                var startData = await startRes.json();
+                var activeSessionId = startData.session_id || sessionId;
+
+                // 2. Connect to live SSE stream for this active session
+                await window.connectToSessionStream(activeSessionId);
             } catch (err) {
                 alert("Execution error: " + err);
                 if (genBtn) genBtn.disabled = false;
@@ -1123,8 +1162,40 @@
             }
         };
 
-        window.addEventListener("DOMContentLoaded", function() {
+        window.addEventListener("DOMContentLoaded", async function() {
             window.loadShowcaseList();
+
+            // Re-hydrate active/recent ADK session if page was refreshed
+            var savedSessionId = localStorage.getItem("vidgen_active_session_id");
+            if (savedSessionId) {
+                try {
+                    var res = await fetch("/api/pipeline/session/" + savedSessionId);
+                    if (res.ok) {
+                        var sessionData = await res.json();
+                        if (sessionData.request_data && sessionData.request_data.prompt) {
+                            var promptInput = document.getElementById("promptInput");
+                            if (promptInput) promptInput.value = sessionData.request_data.prompt;
+                        }
+
+                        if (sessionData.trajectory_logs && sessionData.trajectory_logs.length > 0) {
+                            var feed = document.getElementById("trajectoryFeed");
+                            if (feed) feed.innerHTML = "";
+                            sessionData.trajectory_logs.forEach(function(item) {
+                                if (item.step) setStep(item.step);
+                                if (item.agent && item.action) appendLog(item.agent, item.action, item.details);
+                            });
+                        }
+
+                        if (sessionData.status === "running") {
+                            window.connectToSessionStream(savedSessionId);
+                        } else if (sessionData.status === "completed" && sessionData.result) {
+                            renderCompletedPipelineResult(sessionData.result, savedSessionId);
+                        }
+                    }
+                } catch (err) {
+                    console.warn("Could not restore active session:", err);
+                }
+            }
         });
     </script>
 </body>

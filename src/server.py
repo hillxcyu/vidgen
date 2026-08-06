@@ -38,6 +38,32 @@ class ChatRequest(BaseModel):
     mode: Optional[str] = "i2v_chaining"
     reference_assets_b64: Optional[List[str]] = None
 
+from google.adk.sessions import InMemorySessionService, Session
+
+# Global ADK SessionService and async event subscriber mapping
+adk_session_service = InMemorySessionService()
+session_subscribers: Dict[str, List[asyncio.Queue]] = {}
+active_tasks: Dict[str, asyncio.Task] = {}
+
+def get_session_subscribers(session_id: str) -> List[asyncio.Queue]:
+    if session_id not in session_subscribers:
+        session_subscribers[session_id] = []
+    return session_subscribers[session_id]
+
+def broadcast_log(session_id: str, event_data: Dict[str, Any], state_dict: Dict[str, Any]):
+    """Appends event log to ADK Session state and broadcasts to active SSE subscriber queues."""
+    logs = state_dict.setdefault("trajectory_logs", [])
+    logs.append(event_data)
+    if "step" in event_data:
+        state_dict["step"] = event_data["step"]
+
+    subscribers = session_subscribers.get(session_id, [])
+    for q in list(subscribers):
+        try:
+            q.put_nowait(event_data)
+        except Exception:
+            pass
+
 class GenerateRequest(BaseModel):
     prompt: str
     num_shots: Optional[int] = 3
@@ -49,22 +75,139 @@ class GenerateRequest(BaseModel):
     voice_transcript: Optional[str] = None
     reference_assets_b64: Optional[List[str]] = None
     reference_audio_b64: Optional[List[str]] = None
+    session_id: Optional[str] = None
+
+@app.post("/api/pipeline/start")
+async def start_pipeline_endpoint(req: GenerateRequest):
+    """Starts a decoupled background pipeline execution powered by Google ADK SessionService."""
+    user_id = "user_default"
+    session_id = req.session_id
+
+    existing_session = None
+    if session_id and session_id not in ["undefined", "null", ""]:
+        try:
+            existing_session = await adk_session_service.get_session(
+                app_name="vidgen",
+                user_id=user_id,
+                session_id=session_id
+            )
+        except Exception:
+            existing_session = None
+
+    if not existing_session:
+        initial_state = {
+            "original_intent": req.prompt,
+            "num_shots": req.num_shots or 3,
+            "mode": req.mode or "i2v_chaining",
+            "aspect_ratio": req.aspect_ratio or "16:9",
+            "resolution": req.resolution or "720p",
+            "duration": req.duration or 10,
+            "max_attempts": req.max_attempts or 2,
+            "voice_transcript": req.voice_transcript,
+            "reference_assets_b64": req.reference_assets_b64 or [],
+            "reference_audio_b64": req.reference_audio_b64 or [],
+            "status": "running",
+            "step": 0,
+            "trajectory_logs": [],
+            "result": None
+        }
+        adk_session = await adk_session_service.create_session(
+            app_name="vidgen",
+            user_id=user_id,
+            state=initial_state
+        )
+        session_id = adk_session.id
+    else:
+        adk_session = existing_session
+
+    if session_id not in active_tasks or active_tasks[session_id].done():
+        task = asyncio.create_task(run_adk_pipeline_background(adk_session))
+        active_tasks[session_id] = task
+
+    return {
+        "session_id": session_id,
+        "status": adk_session.state.get("status", "running"),
+        "step": adk_session.state.get("step", 0)
+    }
+
+@app.get("/api/pipeline/session/{session_id}")
+async def get_adk_session_status(session_id: str):
+    """Retrieves full ADK Session state for page re-hydration and status inspection."""
+    user_id = "user_default"
+    try:
+        session = await adk_session_service.get_session(
+            app_name="vidgen",
+            user_id=user_id,
+            session_id=session_id
+        )
+        if not session:
+            raise HTTPException(status_code=404, detail="ADK Session not found")
+        return {
+            "session_id": session.id,
+            "status": session.state.get("status", "unknown"),
+            "step": session.state.get("step", 0),
+            "trajectory_logs": session.state.get("trajectory_logs", []),
+            "result": session.state.get("result"),
+            "request_data": {
+                "prompt": session.state.get("original_intent"),
+                "num_shots": session.state.get("num_shots"),
+                "mode": session.state.get("mode"),
+                "aspect_ratio": session.state.get("aspect_ratio"),
+                "resolution": session.state.get("resolution"),
+                "duration": session.state.get("duration")
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=f"Session lookup error: {e}")
+
+@app.get("/api/pipeline/stream/{session_id}")
+async def stream_adk_pipeline(session_id: str):
+    """Live and re-attaching SSE trajectory stream bound to ADK Session."""
+    user_id = "user_default"
+    try:
+        session = await adk_session_service.get_session(
+            app_name="vidgen",
+            user_id=user_id,
+            session_id=session_id
+        )
+    except Exception:
+        session = None
+
+    if not session:
+        raise HTTPException(status_code=404, detail="ADK Session not found")
+
+    async def event_generator():
+        queue = asyncio.Queue()
+        subscribers = get_session_subscribers(session_id)
+        subscribers.append(queue)
+
+        try:
+            # Yield all historical trajectory logs saved in ADK Session state first
+            historical_logs = session.state.get("trajectory_logs", [])
+            for log_item in list(historical_logs):
+                yield f"data: {json.dumps(log_item)}\n\n"
+
+            # Stream live events while ADK session is running
+            while session.state.get("status") == "running":
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=1.0)
+                    yield f"data: {json.dumps(event)}\n\n"
+                    if event.get("action") in ["COMPLETE_PIPELINE", "PIPELINE_FAILED"]:
+                        break
+                except asyncio.TimeoutError:
+                    yield f": keepalive\n\n"
+
+        finally:
+            if queue in subscribers:
+                subscribers.remove(queue)
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 @app.post("/api/stream")
 async def stream_pipeline_post_endpoint(req: GenerateRequest):
-    """POST streaming endpoint supporting prompt, mode, shots, voice transcript, control strings, and asset uploads."""
-    return await stream_pipeline(
-        prompt=req.prompt,
-        shots=req.num_shots or 3,
-        mode=req.mode or "i2v_chaining",
-        aspect_ratio=req.aspect_ratio or "16:9",
-        resolution=req.resolution or "720p",
-        duration=req.duration or 10,
-        max_attempts=req.max_attempts or 2,
-        voice_transcript=req.voice_transcript,
-        reference_assets_b64=req.reference_assets_b64 or [],
-        reference_audio_b64=req.reference_audio_b64 or []
-    )
+    """POST streaming endpoint supporting backwards compatibility."""
+    start_res = await start_pipeline_endpoint(req)
+    return await stream_adk_pipeline(start_res["session_id"])
 
 @app.get("/api/stream")
 async def stream_pipeline_get_endpoint(
@@ -78,33 +221,35 @@ async def stream_pipeline_get_endpoint(
     voice_transcript: Optional[str] = None
 ):
     """GET SSE streaming endpoint for backwards compatibility."""
-    return await stream_pipeline(
+    req = GenerateRequest(
         prompt=prompt,
-        shots=shots or 3,
-        mode=mode or "i2v_chaining",
-        aspect_ratio=aspect_ratio or "16:9",
-        resolution=resolution or "720p",
-        duration=duration or 10,
-        max_attempts=max_attempts or 2,
-        voice_transcript=voice_transcript,
-        reference_assets_b64=[],
-        reference_audio_b64=[]
+        num_shots=shots,
+        mode=mode,
+        aspect_ratio=aspect_ratio,
+        resolution=resolution,
+        duration=duration,
+        max_attempts=max_attempts,
+        voice_transcript=voice_transcript
     )
+    start_res = await start_pipeline_endpoint(req)
+    return await stream_adk_pipeline(start_res["session_id"])
 
-async def stream_pipeline(
-    prompt: str,
-    shots: int,
-    mode: str,
-    aspect_ratio: str,
-    resolution: str,
-    duration: int,
-    max_attempts: int,
-    voice_transcript: Optional[str],
-    reference_assets_b64: List[str],
-    reference_audio_b64: List[str]
-):
-    """Core SSE generator executing all 7 agent stages with voice consistency & ADK shared session state support."""
-    async def event_generator():
+async def run_adk_pipeline_background(adk_session: Session):
+    """Decoupled background worker executing all 9 agent stages tied to ADK Session state."""
+    state_dict = adk_session.state
+    session_id = adk_session.id
+    prompt = state_dict.get("original_intent", "")
+    shots = state_dict.get("num_shots", 3)
+    mode = state_dict.get("mode", "i2v_chaining")
+    aspect_ratio = state_dict.get("aspect_ratio", "16:9")
+    resolution = state_dict.get("resolution", "720p")
+    duration = state_dict.get("duration", 10)
+    max_attempts = state_dict.get("max_attempts", 2)
+    voice_transcript = state_dict.get("voice_transcript")
+    reference_assets_b64 = state_dict.get("reference_assets_b64", [])
+    reference_audio_b64 = state_dict.get("reference_audio_b64", [])
+
+    try:
         client = get_genai_client()
         num_shots = max(1, min(10, shots or 3))
         state = PipelineState(
@@ -122,34 +267,32 @@ async def stream_pipeline(
         config = Config()
         agents = create_adk_agents(config)
 
-        # Initialize shared ADK SessionService and ADK Session with global state
-        from google.adk.sessions import InMemorySessionService
-        session_service = InMemorySessionService()
-        adk_session = await session_service.create_session(
-            app_name="vidgen-omni",
-            user_id="xcyu",
-            state={
-                "original_intent": prompt,
-                "num_shots": state.num_shots,
-                "mode": state.mode,
-                "aspect_ratio": state.aspect_ratio,
-                "resolution": state.resolution,
-                "duration": state.duration,
-                "voice_transcript": state.voice_transcript,
-                "reference_assets_count": len(state.reference_assets_b64),
-                "reference_audio_count": len(state.reference_audio_b64),
-                "reference_assets_b64": state.reference_assets_b64,
-                "reference_audio_b64": state.reference_audio_b64
-            }
-        )
-        session_id = adk_session.id
-
         # Step 1: OrchestratorAgent Initialization
-        yield f"data: {json.dumps({'step': 1, 'agent': 'OrchestratorAgent', 'action': 'INITIATE_PIPELINE', 'details': {'prompt': prompt, 'num_shots': state.num_shots, 'mode': state.mode, 'aspect_ratio': state.aspect_ratio, 'resolution': state.resolution, 'duration': state.duration, 'has_voice_transcript': bool(state.voice_transcript), 'reference_assets_count': len(state.reference_assets_b64), 'reference_audio_count': len(state.reference_audio_b64)}})}\n\n"
+        broadcast_log(session_id, {
+            'step': 1,
+            'agent': 'OrchestratorAgent',
+            'action': 'INITIATE_PIPELINE',
+            'details': {
+                'prompt': prompt,
+                'num_shots': state.num_shots,
+                'mode': state.mode,
+                'aspect_ratio': state.aspect_ratio,
+                'resolution': state.resolution,
+                'duration': state.duration,
+                'has_voice_transcript': bool(state.voice_transcript),
+                'reference_assets_count': len(state.reference_assets_b64),
+                'reference_audio_count': len(state.reference_audio_b64)
+            }
+        }, state_dict)
         await asyncio.sleep(0.3)
 
         # Step 2: ScreenwriterAgent via ADK Runner
-        yield f"data: {json.dumps({'step': 2, 'agent': 'ScreenwriterAgent', 'action': 'EXPAND_SCRIPT', 'details': {'status': 'in_progress', 'intent': prompt, 'target_shots': state.num_shots, 'voice_transcript': state.voice_transcript}})}\n\n"
+        broadcast_log(session_id, {
+            'step': 2,
+            'agent': 'ScreenwriterAgent',
+            'action': 'EXPAND_SCRIPT',
+            'details': {'status': 'in_progress', 'intent': prompt, 'target_shots': state.num_shots, 'voice_transcript': state.voice_transcript}
+        }, state_dict)
         screenwriter = agents["screenwriter"]
 
         try:
@@ -162,7 +305,7 @@ async def stream_pipeline(
                 f"Return ONLY a JSON list of {state.num_shots} items, where each item has keys: "
                 "'scene_number' (int 1 to N), 'description' (str), 'camera_angle' (str), 'spoken_dialogue' (str or null), 'evaluation_criteria' (str)."
             )
-            text = await run_adk_agent(screenwriter, screenplay_prompt, session_service=session_service, session_id=session_id)
+            text = await run_adk_agent(screenwriter, screenplay_prompt, session_service=adk_session_service, session_id=session_id)
             if text.startswith("```"):
                 text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
             if text.startswith("json"):
@@ -193,7 +336,12 @@ async def stream_pipeline(
             ]
 
         # Step 3: StoryboarderAgent
-        yield f"data: {json.dumps({'step': 3, 'agent': 'StoryboarderAgent', 'action': 'GENERATE_STORYBOARD', 'details': {'scenes_count': len(state.storyboard), 'scenes': [sb.model_dump() for sb in state.storyboard]}})}\n\n"
+        broadcast_log(session_id, {
+            'step': 3,
+            'agent': 'StoryboarderAgent',
+            'action': 'GENERATE_STORYBOARD',
+            'details': {'scenes_count': len(state.storyboard), 'scenes': [sb.model_dump() for sb in state.storyboard]}
+        }, state_dict)
         await asyncio.sleep(0.3)
 
         state.shots = [
@@ -219,15 +367,25 @@ async def stream_pipeline(
             for attempt in range(shot_max_attempts):
                 state.attempt_counter += 1
 
-                # Step 4: PromptOptimizerAgent via ADK Runner (Pass per-shot spoken dialogue)
+                # Step 4: PromptOptimizerAgent
                 shot_dialogue = shot.spoken_dialogue or (state.voice_transcript if idx == 0 else None)
-                optimized_shot_prompt = await optimize_prompt(shot.prompt, voice_transcript=shot_dialogue, feedback=feedback, session_service=session_service, session_id=session_id, client=client)
-                yield f"data: {json.dumps({'step': 4, 'agent': 'PromptOptimizerAgent', 'action': 'OPTIMIZE_PROMPT', 'details': {'shot_index': shot.shot_index, 'attempt': attempt + 1, 'raw_prompt': shot.prompt, 'optimized_prompt': optimized_shot_prompt, 'spoken_dialogue': shot_dialogue, 'feedback': feedback}})}\n\n"
+                optimized_shot_prompt = await optimize_prompt(shot.prompt, voice_transcript=shot_dialogue, feedback=feedback, session_service=adk_session_service, session_id=session_id, client=client)
+                broadcast_log(session_id, {
+                    'step': 4,
+                    'agent': 'PromptOptimizerAgent',
+                    'action': 'OPTIMIZE_PROMPT',
+                    'details': {'shot_index': shot.shot_index, 'attempt': attempt + 1, 'raw_prompt': shot.prompt, 'optimized_prompt': optimized_shot_prompt, 'spoken_dialogue': shot_dialogue, 'feedback': feedback}
+                }, state_dict)
                 await asyncio.sleep(0.3)
 
-                # Step 5: HealthCheckerAgent via ADK Runner
-                is_healthy = await audit_prompt_health(optimized_shot_prompt, session_service=session_service, session_id=session_id, client=client)
-                yield f"data: {json.dumps({'step': 5, 'agent': 'HealthCheckerAgent', 'action': 'AUDIT_PROMPT', 'details': {'shot_index': shot.shot_index, 'verdict': 'APPROVED' if is_healthy else 'REJECTED_REVERTED', 'safety_status': 'CLEAR', 'ethical_ai_score': '99/100'}})}\n\n"
+                # Step 5: HealthCheckerAgent
+                is_healthy = await audit_prompt_health(optimized_shot_prompt, session_service=adk_session_service, session_id=session_id, client=client)
+                broadcast_log(session_id, {
+                    'step': 5,
+                    'agent': 'HealthCheckerAgent',
+                    'action': 'AUDIT_PROMPT',
+                    'details': {'shot_index': shot.shot_index, 'verdict': 'APPROVED' if is_healthy else 'REJECTED_REVERTED', 'safety_status': 'CLEAR', 'ethical_ai_score': '99/100'}
+                }, state_dict)
                 await asyncio.sleep(0.3)
 
                 if not is_healthy:
@@ -246,7 +404,12 @@ async def stream_pipeline(
                 )
 
                 # Step 6: GeminiOmniFlash
-                yield f"data: {json.dumps({'step': 6, 'agent': 'GeminiOmniFlash', 'action': 'RENDER_CLIP', 'details': {'shot_index': shot.shot_index, 'mode': state.mode, 'control_string': control_str, 'has_input_image': prev_frame_b64 is not None or len(state.reference_assets_b64) > 0, 'has_audio_reference': len(active_audio_b64) > 0}})}\n\n"
+                broadcast_log(session_id, {
+                    'step': 6,
+                    'agent': 'GeminiOmniFlash',
+                    'action': 'RENDER_CLIP',
+                    'details': {'shot_index': shot.shot_index, 'mode': state.mode, 'control_string': control_str, 'has_input_image': prev_frame_b64 is not None or len(state.reference_assets_b64) > 0, 'has_audio_reference': len(active_audio_b64) > 0}
+                }, state_dict)
 
                 try:
                     video_bytes = await asyncio.to_thread(
@@ -264,7 +427,12 @@ async def stream_pipeline(
                 except Exception as render_err:
                     error_msg = str(render_err)
                     print(f"[RENDER ERROR]: {error_msg}")
-                    yield f"data: {json.dumps({'step': 6, 'agent': 'GeminiOmniFlash', 'action': 'RENDER_FAILED', 'details': {'shot_index': shot.shot_index, 'attempt': attempt + 1, 'error': error_msg, 'status': 'FAILED'}})}\n\n"
+                    broadcast_log(session_id, {
+                        'step': 6,
+                        'agent': 'GeminiOmniFlash',
+                        'action': 'RENDER_FAILED',
+                        'details': {'shot_index': shot.shot_index, 'attempt': attempt + 1, 'error': error_msg, 'status': 'FAILED'}
+                    }, state_dict)
                     await asyncio.sleep(0.3)
                     from src.tools.omni_client import _create_fallback_mp4_bytes
                     video_bytes = _create_fallback_mp4_bytes(control_str)
@@ -272,13 +440,13 @@ async def stream_pipeline(
                 with open(clip_filename, "wb") as f:
                     f.write(video_bytes)
 
-                # Step 7: QualityRaterAgent via ADK Runner
+                # Step 7: QualityRaterAgent
                 eval_result = await evaluate_clip_quality(
                     shot.shot_index,
                     optimized_shot_prompt,
                     video_path=clip_filename,
                     evaluation_criteria=shot.evaluation_criteria,
-                    session_service=session_service,
+                    session_service=adk_session_service,
                     session_id=session_id,
                     client=client
                 )
@@ -287,7 +455,12 @@ async def stream_pipeline(
                 drift_breakdown = eval_result.get("drift_breakdown", {})
                 state.quality_rating = score
 
-                yield f"data: {json.dumps({'step': 7, 'agent': 'QualityRaterAgent', 'action': 'EVALUATE_QUALITY', 'details': {'shot_index': shot.shot_index, 'video_path': clip_filename, 'criteria_evaluated': shot.evaluation_criteria, 'attempt': attempt + 1, 'score': score, 'drift_detected': drift_detected, 'drift_breakdown': drift_breakdown, 'feedback': eval_result.get('feedback', 'Good visual quality'), 'verdict': 'PASSED' if score >= 0.8 and not drift_detected else 'REATTEMPT_REQUIRED'}})}\n\n"
+                broadcast_log(session_id, {
+                    'step': 7,
+                    'agent': 'QualityRaterAgent',
+                    'action': 'EVALUATE_QUALITY',
+                    'details': {'shot_index': shot.shot_index, 'video_path': clip_filename, 'criteria_evaluated': shot.evaluation_criteria, 'attempt': attempt + 1, 'score': score, 'drift_detected': drift_detected, 'drift_breakdown': drift_breakdown, 'feedback': eval_result.get('feedback', 'Good visual quality'), 'verdict': 'PASSED' if score >= 0.8 and not drift_detected else 'REATTEMPT_REQUIRED'}
+                }, state_dict)
                 await asyncio.sleep(0.3)
 
                 if (score >= 0.8 and not drift_detected) or attempt == shot_max_attempts - 1:
@@ -304,8 +477,12 @@ async def stream_pipeline(
                 try:
                     prev_frame_b64 = await asyncio.to_thread(extract_last_frame, clip_filename, output_image_path=frame_filename)
                     shot.extracted_last_frame_b64 = prev_frame_b64
-                    # Step 8: OpenCVParser
-                    yield f"data: {json.dumps({'step': 8, 'agent': 'OpenCVVideoParser', 'action': 'EXTRACT_TERMINAL_FRAME', 'details': {'shot_index': shot.shot_index, 'frame_file': f'shot_{shot.shot_index}_last_frame.png', 'passed_to_next_shot': True}})}\n\n"
+                    broadcast_log(session_id, {
+                        'step': 8,
+                        'agent': 'OpenCVVideoParser',
+                        'action': 'EXTRACT_TERMINAL_FRAME',
+                        'details': {'shot_index': shot.shot_index, 'frame_file': f'shot_{shot.shot_index}_last_frame.png', 'passed_to_next_shot': True}
+                    }, state_dict)
                     await asyncio.sleep(0.3)
                 except Exception:
                     prev_frame_b64 = None
@@ -315,10 +492,14 @@ async def stream_pipeline(
         state.stitched_video_path = await asyncio.to_thread(stitch_videos, generated_clip_paths, stitched_path)
         video_filename = os.path.basename(state.stitched_video_path)
 
-        yield f"data: {json.dumps({'step': 9, 'agent': 'FFMPEGStitcherTool', 'action': 'CONCATENATE_CLIPS', 'details': {'clips_count': len(generated_clip_paths), 'output_path': state.stitched_video_path, 'final_duration': f'{len(generated_clip_paths)*10}s'}})}\n\n"
+        broadcast_log(session_id, {
+            'step': 9,
+            'agent': 'FFMPEGStitcherTool',
+            'action': 'CONCATENATE_CLIPS',
+            'details': {'clips_count': len(generated_clip_paths), 'output_path': state.stitched_video_path, 'final_duration': f'{len(generated_clip_paths)*10}s'}
+        }, state_dict)
         await asyncio.sleep(0.3)
 
-        # Final Event payload with full media output URLs and shot metadata
         final_payload = {
             "status": "completed",
             "message": "Multi-agent generative video pipeline completed successfully.",
@@ -335,9 +516,25 @@ async def stream_pipeline(
             ]
         }
 
-        yield f"data: {json.dumps({'step': 10, 'agent': 'OrchestratorAgent', 'action': 'COMPLETE_PIPELINE', 'details': final_payload})}\n\n"
+        state_dict["status"] = "completed"
+        state_dict["result"] = final_payload
+        broadcast_log(session_id, {
+            'step': 10,
+            'agent': 'OrchestratorAgent',
+            'action': 'COMPLETE_PIPELINE',
+            'details': final_payload
+        }, state_dict)
 
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+    except Exception as err:
+        import traceback
+        traceback.print_exc()
+        state_dict["status"] = "failed"
+        broadcast_log(session_id, {
+            'step': 0,
+            'agent': 'OrchestratorAgent',
+            'action': 'PIPELINE_FAILED',
+            'details': {'error': str(err), 'status': 'failed'}
+        }, state_dict)
 
 @app.get("/")
 async def serve_index():
