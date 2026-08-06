@@ -1020,11 +1020,11 @@
         };
 
         function formatMediaUrl(url, path, defaultFileName) {
-            if (url && url.length > 0) return url;
             if (path && path.length > 0) {
                 var cleanPath = path.replace(/^\/+/, "");
                 return "/" + cleanPath;
             }
+            if (url && url.length > 0) return url;
             if (defaultFileName) {
                 return "/output/" + defaultFileName;
             }

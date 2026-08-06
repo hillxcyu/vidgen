@@ -41,13 +41,27 @@ def get_storage_client() -> Optional[Any]:
         return None
 
 def ensure_gcs_bucket(client: Any, bucket_name: str) -> Optional[Any]:
-    """Retrieves or attempts to create the GCS showcase bucket."""
+    """Retrieves or attempts to create the GCS showcase bucket and ensures public read permissions."""
     try:
         bucket = client.bucket(bucket_name)
         if not bucket.exists():
             config = Config()
             location = config.LOCATION if config.LOCATION and config.LOCATION.upper() != "GLOBAL" else "us-central1"
             bucket = client.create_bucket(bucket_name, location=location)
+
+        # Grant roles/storage.objectViewer to allUsers for Uniform Bucket-Level Access (UBLA) buckets
+        try:
+            policy = bucket.get_iam_policy(requested_policy_version=3)
+            has_all_users = any(
+                b.get("role") == "roles/storage.objectViewer" and "allUsers" in b.get("members", [])
+                for b in policy.bindings
+            )
+            if not has_all_users:
+                policy.bindings.append({"role": "roles/storage.objectViewer", "members": {"allUsers"}})
+                bucket.set_iam_policy(policy)
+        except Exception as iam_err:
+            print(f"[NOTICE] GCS IAM policy update notice: {iam_err}")
+
         return bucket
     except Exception as e:
         print(f"[NOTICE] GCS bucket '{bucket_name}' access notice: {e}")
