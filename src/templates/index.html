@@ -769,6 +769,9 @@
         }
 
         function appendLog(agent, action, details) {
+            if (!window.currentRunLogs) window.currentRunLogs = [];
+            window.currentRunLogs.push({ agent: agent, action: action, details: details });
+
             var feed = document.getElementById("trajectoryFeed");
             if (!feed) return;
             var div = document.createElement("div");
@@ -969,6 +972,7 @@
             if (genBtn) genBtn.disabled = true;
             if (spinner) spinner.style.display = "block";
             if (resultCard) resultCard.style.display = "none";
+            window.currentRunLogs = [];
             if (trajectoryFeed) trajectoryFeed.innerHTML = "";
             setStep(1);
 
