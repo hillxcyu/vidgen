@@ -184,25 +184,76 @@ def save_run(
     return run_entry
 
 def get_saved_runs(output_dir: str = "output") -> List[Dict[str, Any]]:
-    """Returns list of pinned showcase runs from local manifest."""
+    """Returns list of pinned showcase runs, merging local manifest with GCS showcase manifests."""
+    runs_by_id: Dict[str, Dict[str, Any]] = {}
+
+    # 1. Read local manifest
     manifest_path = os.path.join(output_dir, "saved_runs.json")
-    if not os.path.exists(manifest_path):
-        return []
+    if os.path.exists(manifest_path):
+        try:
+            with open(manifest_path, "r", encoding="utf-8") as f:
+                local_runs = json.load(f)
+                for r in local_runs:
+                    if r.get("run_id"):
+                        runs_by_id[r["run_id"]] = r
+        except Exception as e:
+            print(f"[NOTICE] Error reading local saved_runs.json: {e}")
+
+    # 2. Sync and fetch all showcase run manifests from GCS bucket
     try:
-        with open(manifest_path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception as e:
-        print(f"[NOTICE] Error reading saved_runs.json: {e}")
-        return []
+        client = get_storage_client()
+        bucket_name = get_default_bucket_name()
+        if client:
+            bucket = client.bucket(bucket_name)
+            if bucket.exists():
+                blobs = client.list_blobs(bucket, prefix="showcase/")
+                for blob in blobs:
+                    if blob.name.endswith("run_manifest.json"):
+                        try:
+                            content = blob.download_as_text()
+                            entry = json.loads(content)
+                            run_id = entry.get("run_id")
+                            if run_id and run_id not in runs_by_id:
+                                runs_by_id[run_id] = entry
+                        except Exception as manifest_err:
+                            print(f"[NOTICE] Error reading GCS manifest {blob.name}: {manifest_err}")
+    except Exception as gcs_err:
+        print(f"[NOTICE] Error fetching GCS showcase runs: {gcs_err}")
+
+    # Sort runs by pinned_at or run_id descending
+    all_runs = list(runs_by_id.values())
+    all_runs.sort(key=lambda r: r.get("pinned_at", r.get("run_id", "")), reverse=True)
+
+    # Cache back to local manifest file
+    if all_runs:
+        try:
+            os.makedirs(output_dir, exist_ok=True)
+            with open(manifest_path, "w", encoding="utf-8") as f:
+                json.dump(all_runs, f, indent=2)
+        except Exception:
+            pass
+
+    return all_runs
 
 def delete_saved_run(run_id: str, output_dir: str = "output") -> bool:
-    """Removes a run from the pinned showcase manifest."""
+    """Removes a run from the pinned showcase manifest locally and on GCS."""
     manifest_path = os.path.join(output_dir, "saved_runs.json")
     saved_runs = get_saved_runs(output_dir)
     updated_runs = [r for r in saved_runs if r.get("run_id") != run_id]
-    if len(updated_runs) == len(saved_runs):
-        return False
 
     with open(manifest_path, "w", encoding="utf-8") as f:
         json.dump(updated_runs, f, indent=2)
+
+    try:
+        client = get_storage_client()
+        bucket_name = get_default_bucket_name()
+        if client:
+            bucket = client.bucket(bucket_name)
+            if bucket.exists():
+                blob = bucket.blob(f"showcase/{run_id}/run_manifest.json")
+                if blob.exists():
+                    blob.delete()
+    except Exception as e:
+        print(f"[NOTICE] Error deleting GCS manifest for {run_id}: {e}")
+
     return True

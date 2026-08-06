@@ -39,7 +39,7 @@ This document maintains a comprehensive list of all implemented features in **vi
 ## 📊 Storage, Cloud & Frontend UI
 
 9. **Showcase Run Pinning & GCS Cloud Storage Sync**
-   - **Technical Implementation:** Pinned runs persist stitched MP4s, shot clips, frame PNGs, and JSON manifests to GCS (`gs://...`), granting `allUsers` `roles/storage.objectViewer` bucket IAM permissions and preferring local `/output/` static paths when available.
+   - **Technical Implementation:** Pinned runs persist stitched MP4s, shot clips, frame PNGs, and JSON manifests to GCS (`gs://...`), querying `showcase/*/run_manifest.json` on GCS to restore saved runs across Cloud Run deployments.
 
 10. **Real-Time Audit Trajectory Visualizer with Folded Communication Cards & Hidden Control Strings**
     - **Technical Implementation:** SSE endpoint streams live agent interactions, running `stripControlString()` on `GeminiOmniFlash` headers and isolating red failure tags (`🔴 FAILED`) strictly to failing agents rather than downstream prompt optimizers receiving feedback.
