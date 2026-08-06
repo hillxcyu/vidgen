@@ -7,7 +7,7 @@ This document maintains a comprehensive list of all implemented features in **vi
 ## 🚀 Core Architecture & Agents
 
 1. **Google ADK 2.0 Multi-Agent Workflow**
-   - **Technical Implementation:** Coordinates 7 specialized agents (`Orchestrator`, `Screenwriter`, `Storyboarder`, `PromptOptimizer`, `HealthChecker`, `QualityRater`, `OmniFlash`) built natively using Google ADK `LlmAgent`, `Runner`, and DAG workflow primitives.
+   - **Technical Implementation:** Coordinates 7 specialized agents built natively using Google ADK (`LlmAgent`, `Runner`, DAG primitives) with explicit 2-stage pre-production hand-off: `ScreenwriterAgent` expands narrative screenplays before delegating to `StoryboarderAgent` to compile structured JSON scenes.
 
 2. **Google ADK Session Management & Decoupled Background Execution**
    - **Technical Implementation:** Detaches execution into an `asyncio.Task` bound to ADK `InMemorySessionService`, persisting state snapshots to disk (`output/sessions/*.json`) & GCS for cross-instance Cloud Run recovery on page refresh.

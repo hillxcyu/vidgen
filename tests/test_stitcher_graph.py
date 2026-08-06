@@ -23,8 +23,10 @@ def create_mock_mp4_bytes():
     os.remove(path)
     return data
 
-async def mock_run_adk_agent(agent, prompt, media_parts=None, session_service=None):
+async def mock_run_adk_agent(agent, prompt, media_parts=None, session_service=None, session_id=None):
     if agent.name == "ScreenwriterAgent":
+        return "Scene 1: Red panda walking. Scene 2: Red panda skiing. Scene 3: Red panda celebrating."
+    elif agent.name == "StoryboarderAgent":
         return '''[
             {"scene_number": 1, "description": "Red panda walking", "camera_angle": "wide"},
             {"scene_number": 2, "description": "Red panda skiing", "camera_angle": "medium"},
@@ -35,7 +37,7 @@ async def mock_run_adk_agent(agent, prompt, media_parts=None, session_service=No
     elif agent.name == "HealthCheckerAgent":
         return "APPROVED"
     elif agent.name == "QualityRaterAgent":
-        return '{"score": 0.9, "drift_detected": false, "drift_breakdown": {"face_identity_drift": false, "product_drift": false, "clothing_drift": false, "accessories_drift": false, "background_drift": false}, "feedback": "Good quality"}'
+        return '{"score": 0.9, "reason": [{"criterion_name": "Identity Lock", "score": 0.9, "comments": "Good"}], "verdict": "PASSED", "feedback": "Good quality"}'
     return "OK"
 
 @patch("src.agents.stitcher_graph.run_adk_agent", side_effect=mock_run_adk_agent)

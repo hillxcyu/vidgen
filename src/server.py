@@ -295,26 +295,40 @@ async def run_adk_pipeline_background(adk_session: Session):
         }, state_dict)
         await asyncio.sleep(0.3)
 
-        # Step 2: ScreenwriterAgent via ADK Runner
+        # Step 2: ScreenwriterAgent expands user prompt into screenplay
+        screenwriter = agents["screenwriter"]
+        storyboarder = agents["storyboarder"]
+        transcript_ctx = f"\nVoice Transcript Spoken Lines: '{state.voice_transcript}'" if state.voice_transcript else ""
+
+        screenplay_prompt = (
+            f"User request: '{state.original_intent}'. Mode: {state.mode}.{transcript_ctx}\n"
+            f"Write a concise {state.num_shots}-scene screenplay breakdown describing visual motifs, camera directions, character actions, and dialogue distribution."
+        )
+        try:
+            screenplay_text = await run_adk_agent(screenwriter, screenplay_prompt, session_service=adk_session_service, session_id=session_id)
+        except Exception as sw_err:
+            print(f"[SCREENWRITER ERROR]: {sw_err}")
+            screenplay_text = f"Scene 1 to {state.num_shots}: {state.original_intent}"
+
         broadcast_log(session_id, {
             'step': 2,
             'agent': 'ScreenwriterAgent',
             'action': 'EXPAND_SCRIPT',
-            'details': {'status': 'in_progress', 'intent': prompt, 'target_shots': state.num_shots, 'voice_transcript': state.voice_transcript}
+            'details': {'status': 'COMPLETED', 'intent': state.original_intent, 'screenplay': screenplay_text}
         }, state_dict)
-        screenwriter = agents["screenwriter"]
+        await asyncio.sleep(0.3)
 
+        # Step 3: StoryboarderAgent compiles Screenwriter screenplay into structured JSON storyboard
         try:
-            transcript_ctx = f"\nVoice Transcript Spoken Lines: '{state.voice_transcript}'" if state.voice_transcript else ""
-            screenplay_prompt = (
-                f"User request: '{state.original_intent}'. Mode: {state.mode}.{transcript_ctx}\n"
-                f"Generate a {state.num_shots}-scene video storyboard with custom quality evaluation criteria for each scene. "
+            storyboard_prompt = (
+                f"You are the StoryboarderAgent. Convert the following screenplay into a structured {state.num_shots}-scene video storyboard with custom quality evaluation criteria for each scene.\n\n"
+                f"SCREENPLAY:\n{screenplay_text}\n\n"
                 "CRITICAL TRANSCRIPT SEGMENTATION RULE: If a Voice Transcript is provided above, you MUST segment and chronologically split the transcript across the scenes. "
                 "Each scene MUST receive its exact corresponding line of dialogue in 'spoken_dialogue'. Only Scene 1 may contain the opening greeting if present in the transcript.\n"
                 f"Return ONLY a JSON list of {state.num_shots} items, where each item has keys: "
                 "'scene_number' (int 1 to N), 'description' (str), 'camera_angle' (str), 'spoken_dialogue' (str or null), 'evaluation_criteria' (str)."
             )
-            text = await run_adk_agent(screenwriter, screenplay_prompt, session_service=adk_session_service, session_id=session_id)
+            text = await run_adk_agent(storyboarder, storyboard_prompt, session_service=adk_session_service, session_id=session_id)
             if text.startswith("```"):
                 text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
             if text.startswith("json"):
@@ -344,12 +358,11 @@ async def run_adk_pipeline_background(adk_session: Session):
                 for i in range(state.num_shots)
             ]
 
-        # Step 3: StoryboarderAgent
         broadcast_log(session_id, {
             'step': 3,
             'agent': 'StoryboarderAgent',
             'action': 'GENERATE_STORYBOARD',
-            'details': {'scenes_count': len(state.storyboard), 'scenes': [sb.model_dump() for sb in state.storyboard]}
+            'details': {'status': 'COMPLETED', 'scenes_count': len(state.storyboard), 'scenes': [sb.model_dump() for sb in state.storyboard]}
         }, state_dict)
         await asyncio.sleep(0.3)
 

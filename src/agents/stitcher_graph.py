@@ -419,22 +419,35 @@ def run_pre_production(state: PipelineState, client: Optional[genai.Client] = No
         details={"original_intent": state.original_intent, "num_shots": state.num_shots, "mode": state.mode}
     )
 
-    state.log_event(
-        agent="ScreenwriterAgent",
-        action="EXPAND_SCRIPT",
-        details={"status": "in_progress", "intent": state.original_intent, "target_shots": state.num_shots}
-    )
+    storyboarder = agents["storyboarder"]
 
     if not state.storyboard:
-        prompt = (
-            f"User request: '{state.original_intent}'. "
-            f"Generate a {state.num_shots}-scene video storyboard with custom quality evaluation criteria for each scene. "
-            "Ensure criteria audit character identity lock, smooth motion, and object persistence (confirming visual assets, props, and garments do not vanish or re-emerge).\n"
-            f"Return ONLY a JSON list of {state.num_shots} items, where each item has keys: "
-            "'scene_number' (int 1 to N), 'description' (str), 'camera_angle' (str), 'evaluation_criteria' (str)."
+        # Step 1: ScreenwriterAgent expands user prompt into screenplay
+        screenplay_prompt = (
+            f"User request: '{state.original_intent}'. Mode: {state.mode}.\n"
+            f"Write a concise {state.num_shots}-scene screenplay breakdown describing visual motifs, camera directions, character actions, and dialogue distribution."
         )
         try:
-            text = asyncio.run(run_adk_agent(screenwriter, prompt))
+            screenplay_text = asyncio.run(run_adk_agent(screenwriter, screenplay_prompt))
+        except Exception as sw_err:
+            print(f"[SCREENWRITER ERROR]: {sw_err}")
+            screenplay_text = f"Scene 1 to {state.num_shots}: {state.original_intent}"
+
+        state.log_event(
+            agent="ScreenwriterAgent",
+            action="EXPAND_SCRIPT",
+            details={"status": "COMPLETED", "intent": state.original_intent, "screenplay": screenplay_text}
+        )
+
+        # Step 2: StoryboarderAgent compiles Screenwriter screenplay into structured JSON storyboard
+        try:
+            storyboard_prompt = (
+                f"You are the StoryboarderAgent. Convert the following screenplay into a structured {state.num_shots}-scene video storyboard with custom quality evaluation criteria for each scene.\n\n"
+                f"SCREENPLAY:\n{screenplay_text}\n\n"
+                f"Return ONLY a JSON list of {state.num_shots} items, where each item has keys: "
+                "'scene_number' (int 1 to N), 'description' (str), 'camera_angle' (str), 'evaluation_criteria' (str)."
+            )
+            text = asyncio.run(run_adk_agent(storyboarder, storyboard_prompt))
             if text.startswith("```"):
                 text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
             if text.startswith("json"):
@@ -465,7 +478,7 @@ def run_pre_production(state: PipelineState, client: Optional[genai.Client] = No
     state.log_event(
         agent="StoryboarderAgent",
         action="GENERATE_STORYBOARD",
-        details={"scenes_count": len(state.storyboard), "scenes": [sb.model_dump() for sb in state.storyboard]}
+        details={"status": "COMPLETED", "scenes_count": len(state.storyboard), "scenes": [sb.model_dump() for sb in state.storyboard]}
     )
 
     state.shots = [
