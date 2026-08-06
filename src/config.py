@@ -4,6 +4,9 @@ from google import genai
 
 load_dotenv()
 
+# Force Google GenAI SDK and ADK Runner to use Vertex AI ADC mode
+os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "true"
+
 class Config:
     PROJECT_ID: str = os.getenv("GOOGLE_CLOUD_PROJECT", "universal-trail-492014-n5")
     LOCATION: str = os.getenv("GOOGLE_CLOUD_LOCATION", "global")
