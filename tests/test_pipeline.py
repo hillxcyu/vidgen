@@ -126,3 +126,28 @@ def test_evaluate_clip_quality_missing_or_empty_video():
     finally:
         if os.path.exists(empty_path):
             os.remove(empty_path)
+
+def test_stop_pipeline_endpoint():
+    import asyncio
+    from src.server import adk_session_service, stop_pipeline_endpoint
+
+    async def run_test():
+        session = await adk_session_service.create_session(
+            app_name="vidgen",
+            user_id="xcyu",
+            session_id="test_sess_stop_001",
+            state={"status": "running", "trajectory_logs": []}
+        )
+
+        res = await stop_pipeline_endpoint("test_sess_stop_001")
+        assert res["status"] == "stopped"
+        assert res["session_id"] == "test_sess_stop_001"
+
+        updated_session = await adk_session_service.get_session(
+            app_name="vidgen",
+            user_id="xcyu",
+            session_id="test_sess_stop_001"
+        )
+        assert updated_session.state["status"] == "stopped"
+
+    asyncio.run(run_test())

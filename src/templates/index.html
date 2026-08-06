@@ -570,7 +570,10 @@
                     </select>
                 </div>
 
-                <button id="genBtn" onclick="window.runPipeline()" style="width: 100%;">🚀 Execute Multi-Agent Graph</button>
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <button id="genBtn" onclick="window.runPipeline()" style="flex: 1;">🚀 Execute Multi-Agent Graph</button>
+                    <button id="stopBtn" type="button" onclick="window.stopPipeline()" style="display: none; background: #ef4444; color: #fff; font-weight: 600; padding: 12px 20px; border-radius: 8px; border: none; cursor: pointer; align-items: center; gap: 6px; font-size: 14px; transition: opacity 0.2s;">⏹ Stop Workflow</button>
+                </div>
                 <div class="spinner" id="spinner">⚙️ Real-Time Multi-Agent SSE Stream Active...</div>
             </div>
 
@@ -904,11 +907,19 @@
             if (resultCard) resultCard.style.display = "block";
         }
 
+        window.activeStreamReader = null;
+
         window.connectToSessionStream = async function(sessionId) {
             var genBtn = document.getElementById("genBtn");
+            var stopBtn = document.getElementById("stopBtn");
             var spinner = document.getElementById("spinner");
 
             if (genBtn) genBtn.disabled = true;
+            if (stopBtn) {
+                stopBtn.style.display = "inline-flex";
+                stopBtn.disabled = false;
+                stopBtn.innerText = "⏹ Stop Workflow";
+            }
             if (spinner) spinner.style.display = "block";
 
             try {
@@ -916,6 +927,7 @@
                 if (!res.ok) throw new Error("Stream connection failed");
 
                 var reader = res.body.getReader();
+                window.activeStreamReader = reader;
                 var decoder = new TextDecoder();
                 var buffer = "";
                 var delim = "\n\n";
@@ -950,8 +962,42 @@
             } catch (err) {
                 console.error("Session stream error:", err);
             } finally {
+                window.activeStreamReader = null;
+                if (genBtn) genBtn.disabled = false;
+                if (stopBtn) stopBtn.style.display = "none";
+                if (spinner) spinner.style.display = "none";
+            }
+        };
+
+        window.stopPipeline = async function() {
+            var sessionId = localStorage.getItem("vidgen_active_session_id");
+            var stopBtn = document.getElementById("stopBtn");
+            if (stopBtn) {
+                stopBtn.disabled = true;
+                stopBtn.innerText = "⏳ Stopping...";
+            }
+
+            try {
+                if (sessionId) {
+                    await fetch("/api/pipeline/stop/" + sessionId, { method: "POST" });
+                }
+                if (window.activeStreamReader) {
+                    try { await window.activeStreamReader.cancel(); } catch(e) {}
+                    window.activeStreamReader = null;
+                }
+            } catch (err) {
+                console.error("Error stopping pipeline:", err);
+            } finally {
+                var genBtn = document.getElementById("genBtn");
+                var spinner = document.getElementById("spinner");
                 if (genBtn) genBtn.disabled = false;
                 if (spinner) spinner.style.display = "none";
+                if (stopBtn) {
+                    stopBtn.style.display = "none";
+                    stopBtn.disabled = false;
+                    stopBtn.innerText = "⏹ Stop Workflow";
+                }
+                localStorage.removeItem("vidgen_active_session_id");
             }
         };
 
@@ -979,11 +1025,17 @@
             localStorage.setItem("vidgen_active_session_id", sessionId);
 
             var genBtn = document.getElementById("genBtn");
+            var stopBtn = document.getElementById("stopBtn");
             var spinner = document.getElementById("spinner");
             var resultCard = document.getElementById("resultCard");
             var trajectoryFeed = document.getElementById("trajectoryFeed");
 
             if (genBtn) genBtn.disabled = true;
+            if (stopBtn) {
+                stopBtn.style.display = "inline-flex";
+                stopBtn.disabled = false;
+                stopBtn.innerText = "⏹ Stop Workflow";
+            }
             if (spinner) spinner.style.display = "block";
             if (resultCard) resultCard.style.display = "none";
             window.currentRunLogs = [];
@@ -1018,6 +1070,7 @@
             } catch (err) {
                 alert("Execution error: " + err);
                 if (genBtn) genBtn.disabled = false;
+                if (stopBtn) stopBtn.style.display = "none";
                 if (spinner) spinner.style.display = "none";
             }
         };

@@ -116,6 +116,11 @@ To maintain absolute character, asset, and motion consistency across shots, your
   *   Create the standardized directory configuration to package the ADK high-code pipeline for publication.
   *   *File path:* `agent.yaml`, `Dockerfile`
 
+- [x] **[T011] Implement Manual Workflow Cancellation & Stop Button**
+  *   Expose `POST /api/pipeline/stop/{session_id}` endpoint to cancel background `asyncio.Task` and persist stopped state.
+  *   Add "⏹ Stop Workflow" button in Web Studio UI to gracefully terminate in-flight executions and close EventSource SSE streams.
+  *   *File path:* `src/server.py`, `src/templates/index.html`
+
 ---
 
 ## 🧪 Verification & Commands

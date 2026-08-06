@@ -75,6 +75,11 @@ def broadcast_log(session_id: str, event_data: Dict[str, Any], state_dict: Dict[
 async def get_or_restore_adk_session(session_id: str) -> Optional[Session]:
     """Retrieves session from in-memory ADK SessionService or recovers snapshot from disk/GCS."""
     user_id = "xcyu"
+    if hasattr(adk_session_service, "sessions"):
+        direct_sess = adk_session_service.sessions.get("vidgen", {}).get(user_id, {}).get(session_id)
+        if direct_sess:
+            return direct_sess
+
     session = None
     try:
         session = await adk_session_service.get_session(
@@ -156,6 +161,34 @@ async def start_pipeline_endpoint(req: GenerateRequest):
         "step": adk_session.state.get("step", 0)
     }
 
+@app.post("/api/pipeline/stop/{session_id}")
+async def stop_pipeline_endpoint(session_id: str):
+    """Manually terminates an in-flight pipeline session and cancels background worker task."""
+    session = await get_or_restore_adk_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="ADK Session not found")
+
+    # Cancel active background asyncio task if running
+    task = active_tasks.get(session_id)
+    if task and not task.done():
+        task.cancel()
+
+    session.state["status"] = "stopped"
+    broadcast_log(session_id, {
+        'step': 0,
+        'agent': 'OrchestratorAgent',
+        'action': 'PIPELINE_STOPPED',
+        'details': {'status': 'stopped', 'message': 'Pipeline execution manually terminated by user.'}
+    }, session.state)
+
+    await asyncio.to_thread(persist_session_state, session_id, session.state)
+
+    return {
+        "session_id": session_id,
+        "status": "stopped",
+        "message": "Pipeline execution terminated successfully."
+    }
+
 @app.get("/api/pipeline/session/{session_id}")
 async def get_adk_session_status(session_id: str):
     """Retrieves full ADK Session state for page re-hydration and status inspection."""
@@ -201,7 +234,7 @@ async def stream_adk_pipeline(session_id: str):
                 try:
                     event = await asyncio.wait_for(queue.get(), timeout=1.0)
                     yield f"data: {json.dumps(event)}\n\n"
-                    if event.get("action") in ["COMPLETE_PIPELINE", "PIPELINE_FAILED"]:
+                    if event.get("action") in ["COMPLETE_PIPELINE", "PIPELINE_FAILED", "PIPELINE_STOPPED"]:
                         break
                 except asyncio.TimeoutError:
                     yield f": keepalive\n\n"
@@ -584,6 +617,15 @@ async def run_adk_pipeline_background(adk_session: Session):
             'details': final_payload
         }, state_dict)
 
+    except asyncio.CancelledError:
+        print(f"[PIPELINE STOPPED]: Session {session_id} background task was cancelled by user.")
+        state_dict["status"] = "stopped"
+        broadcast_log(session_id, {
+            'step': 0,
+            'agent': 'OrchestratorAgent',
+            'action': 'PIPELINE_STOPPED',
+            'details': {'status': 'stopped', 'message': 'Pipeline execution manually terminated.'}
+        }, state_dict)
     except Exception as err:
         import traceback
         traceback.print_exc()

@@ -47,6 +47,9 @@ This document maintains a comprehensive list of all implemented features in **vi
 11. **Asynchronous Non-Blocking Uvicorn Threadpool Offloading**
     - **Technical Implementation:** Synchronous Vertex AI calls, OpenCV frame extractions, FFMPEG concatenations, and GCS storage tasks are offloaded via `await asyncio.to_thread(...)` to prevent blocking FastAPI's async event loop.
 
+12. **Manual Workflow Cancellation & Stop Button**
+    - **Technical Implementation:** Exposes `POST /api/pipeline/stop/{session_id}` endpoint that cancels the active background `asyncio.Task`, cleanly catches `asyncio.CancelledError`, logs `OrchestratorAgent: PIPELINE_STOPPED`, terminates the SSE stream reader, and provides an immediate red "⏹ Stop Workflow" button in Web Studio.
+
 ---
 
 *Note: Update this document whenever new features or technical components are added to the codebase.*
