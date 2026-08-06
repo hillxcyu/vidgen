@@ -523,6 +523,9 @@ def run_production_loop(state: PipelineState, output_dir: str = "/tmp/vidgen_out
                 duration=state.duration
             )
 
+            # Log final raw prompt with control string in server logs
+            print(f"[GEMINI_OMNI_FLASH_LOG] Shot #{shot.shot_index} Final Raw Control String:\n{control_str}\n")
+
             # 3. Gemini Omni Flash Video Generation
             state.log_event(
                 agent="GeminiOmniFlash",
@@ -530,9 +533,7 @@ def run_production_loop(state: PipelineState, output_dir: str = "/tmp/vidgen_out
                 details={
                     "shot_index": shot.shot_index,
                     "mode": state.mode,
-                    "raw_prompt": shot.prompt,
-                    "prompt": shot.prompt,
-                    "optimized_prompt": optimized_shot_prompt,
+                    "prompt": optimized_shot_prompt,
                     "has_input_image": prev_frame_b64 is not None
                 }
             )

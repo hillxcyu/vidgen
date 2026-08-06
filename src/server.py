@@ -412,12 +412,15 @@ async def run_adk_pipeline_background(adk_session: Session):
                     duration=state.duration
                 )
 
-                # Step 6: GeminiOmniFlash
+                # Log final raw prompt with control string in server logs
+                print(f"[GEMINI_OMNI_FLASH_LOG] Shot #{shot.shot_index} Final Raw Control String:\n{control_str}\n")
+
+                # Step 6: GeminiOmniFlash (Broadcast optimized prompt to frontend message window, omitting control string)
                 broadcast_log(session_id, {
                     'step': 6,
                     'agent': 'GeminiOmniFlash',
                     'action': 'RENDER_CLIP',
-                    'details': {'shot_index': shot.shot_index, 'mode': state.mode, 'raw_prompt': shot.prompt, 'prompt': shot.prompt, 'optimized_prompt': optimized_shot_prompt, 'has_input_image': prev_frame_b64 is not None or len(state.reference_assets_b64) > 0, 'has_audio_reference': len(active_audio_b64) > 0}
+                    'details': {'shot_index': shot.shot_index, 'mode': state.mode, 'prompt': optimized_shot_prompt, 'has_input_image': prev_frame_b64 is not None or len(state.reference_assets_b64) > 0, 'has_audio_reference': len(active_audio_b64) > 0}
                 }, state_dict)
 
                 try:
