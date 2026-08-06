@@ -468,7 +468,18 @@ async def run_adk_pipeline_background(adk_session: Session):
                     'step': 7,
                     'agent': 'QualityRaterAgent',
                     'action': 'EVALUATE_QUALITY',
-                    'details': {'shot_index': shot.shot_index, 'video_path': clip_filename, 'criteria_evaluated': shot.evaluation_criteria, 'attempt': attempt + 1, 'score': score, 'drift_detected': drift_detected, 'drift_breakdown': drift_breakdown, 'feedback': eval_result.get('feedback', 'Good visual quality'), 'verdict': 'PASSED' if score >= 0.8 and not drift_detected else 'REATTEMPT_REQUIRED'}
+                    'details': {
+                        'shot_index': shot.shot_index,
+                        'video_path': clip_filename,
+                        'criteria_evaluated': shot.evaluation_criteria,
+                        'consolidated_rubric': eval_result.get('consolidated_rubric', []),
+                        'attempt': attempt + 1,
+                        'score': score,
+                        'drift_detected': drift_detected,
+                        'drift_breakdown': drift_breakdown,
+                        'feedback': eval_result.get('feedback', 'Good visual quality'),
+                        'verdict': eval_result.get('verdict', 'PASSED' if score >= 0.8 and not drift_detected else 'REATTEMPT_REQUIRED')
+                    }
                 }, state_dict)
                 await asyncio.sleep(0.3)
 

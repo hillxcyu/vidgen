@@ -23,7 +23,7 @@ This document maintains a comprehensive list of all implemented features in **vi
 ## 🎨 Generation & Quality Control
 
 5. **5-Category Major Subject Drift Detection & Quality Rater Feedback Loop**
-   - **Technical Implementation:** `QualityRaterAgent` audits Face Identity, Product, Clothing, Props, and Environment ($0.0 - 1.0$ score); scores `< 0.8` trigger feedback re-attempt loops back to `PromptOptimizerAgent`.
+   - **Technical Implementation:** `QualityRaterAgent` consolidates Orchestrator scene goals with 5-Category Subject Drift parameters into unified rubrics, executing controlled output parsing via Pydantic `QualityEvaluationResult`.
 
 6. **Single-Shot Continuous Take Enforcement**
    - **Technical Implementation:** System prompt instructions force `PromptOptimizerAgent` to generate continuous single camera tracking shots while forbidding internal jump cuts or scene switches.
