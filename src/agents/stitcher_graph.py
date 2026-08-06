@@ -397,7 +397,12 @@ async def evaluate_clip_quality(
             last_error = adk_err
             print(f"[QUALITY RATER ADK ATTEMPT {retry_attempt+1} NOTICE]: {adk_err}")
 
-    if not eval_res:
+    if eval_res:
+        # Deterministic verification: Force drift_detected = True if overall score < 0.8 or any criterion score < 0.8
+        if eval_res.score < 0.8 or any(item.score < 0.8 for item in eval_res.reason):
+            eval_res.drift_detected = True
+            eval_res.verdict = "REATTEMPT_REQUIRED"
+    else:
         eval_res = QualityEvaluationResult(
             score=0.5,
             reason=[CriterionEvaluation(criterion_name="Visual Audit Execution", score=0.5, comments=f"Audit parsing notice: {last_error}")],
