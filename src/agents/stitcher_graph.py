@@ -588,6 +588,7 @@ def run_production_loop(state: PipelineState, output_dir: str = "/tmp/vidgen_out
                 feedback = eval_result.get("feedback", "Refine visual continuity and prevent object disappearance")
 
         shot.video_path = clip_filename
+        shot.prompt = optimized_shot_prompt
         shot.status = "completed"
         generated_clip_paths.append(clip_filename)
 

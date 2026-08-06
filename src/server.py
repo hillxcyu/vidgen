@@ -489,6 +489,7 @@ async def run_adk_pipeline_background(adk_session: Session):
                     feedback = eval_result.get("feedback", "Refine visual continuity and prevent subject drift")
 
             shot.video_path = clip_filename
+            shot.prompt = optimized_shot_prompt
             shot.status = "completed"
             generated_clip_paths.append(clip_filename)
 
