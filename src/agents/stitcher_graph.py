@@ -104,14 +104,14 @@ async def run_adk_agent(
 
     if session_id is None:
         session = await session_service.create_session(
-            app_name="vidgen-omni",
+            app_name="vidgen",
             user_id="xcyu",
             state=initial_state or {}
         )
         session_id = session.id
 
     target_agent = root_agent or agent
-    runner = Runner(agent=target_agent, app_name="vidgen-omni", session_service=session_service)
+    runner = Runner(agent=target_agent, app_name="vidgen", session_service=session_service)
 
     parts = [types.Part.from_text(text=user_prompt)]
     if media_parts:

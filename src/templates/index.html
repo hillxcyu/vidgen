@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GenMedia-Omni: Multi-Agent Video Pipeline Studio</title>
+    <title>vidgen: Multi-Agent Generative Video Studio</title>
     <style>
         :root {
             --bg-color: #0b0f19;
@@ -448,7 +448,7 @@
     <div class="container">
         <header style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
             <div style="text-align: left;">
-                <h1 style="margin: 0;">🎬 GenMedia-Omni Pipeline Studio</h1>
+                <h1 style="margin: 0;">🎬 vidgen</h1>
                 <p class="subtitle" style="margin-top: 4px;">Google ADK Multi-Agent Execution & Real-Time Audit Trajectory Visualizer</p>
             </div>
             <div>
@@ -747,6 +747,28 @@
             }
         }
 
+        function escapeHtml(str) {
+            if (!str) return '';
+            return String(str)
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        function stripControlString(str) {
+            if (!str || typeof str !== 'string') return str || "";
+            // Remove [# Sources ...] and [# References ...] blocks
+            var clean = str.replace(/\[#\s*(Sources|References)[^\]]*\]/gi, "");
+            // Remove [aspect_ratio=...], [resolution=...], [duration=...] tags
+            clean = clean.replace(/\[(aspect_ratio|resolution|duration)=[^\]]*\]/gi, "");
+            // Remove any remaining MMC image tags like <FIRST_FRAME>image_0.png or <IMAGE_REF_0>[Character A]image_1.png
+            clean = clean.replace(/<FIRST_FRAME>[^\s]+/gi, "");
+            clean = clean.replace(/<IMAGE_REF_\d+>(\[[^\]]+\])?[^\s]+/gi, "");
+            return clean.replace(/\s+/g, " ").trim();
+        }
+
         function appendLog(agent, action, details) {
             var feed = document.getElementById("trajectoryFeed");
             if (!feed) return;
@@ -770,15 +792,30 @@
                 div.classList.add("failed-log");
             }
 
-            var headerDiv = document.createElement("div");
-            headerDiv.className = "log-header";
+            var summaryText = "";
+            if (details) {
+                if (details.optimized_prompt) {
+                    summaryText = " — " + stripControlString(details.optimized_prompt);
+                } else if (details.raw_prompt) {
+                    summaryText = " — " + stripControlString(details.raw_prompt);
+                } else if (details.prompt) {
+                    summaryText = " — " + stripControlString(details.prompt);
+                } else if (details.shot_index) {
+                    summaryText = " — Shot #" + details.shot_index;
+                }
+            }
+
             var statusBadge = isFailed ? ' <span style="color: #ef4444; font-weight: bold; margin-left: 8px;">🔴 FAILED / REATTEMPT</span>' : '';
-            headerDiv.innerHTML = '<span class="log-agent">🤖 ' + agent + '</span><span class="log-action">' + action + statusBadge + '</span>';
-            var detailsDiv = document.createElement("div");
-            detailsDiv.className = "log-details";
-            detailsDiv.innerText = JSON.stringify(details, null, 2);
-            div.appendChild(headerDiv);
-            div.appendChild(detailsDiv);
+            var detailsJson = JSON.stringify(details, null, 2);
+
+            div.innerHTML = '<details style="cursor: pointer;">' +
+                '<summary style="outline: none; font-weight: 600; font-size: 13px; color: var(--accent); padding: 4px 0;">' +
+                '🤖 <span class="log-agent" style="color: #fff;">' + escapeHtml(agent) + '</span>: <span class="log-action">' + escapeHtml(action) + '</span>' + statusBadge +
+                '<span style="color: var(--muted-text); font-size: 11px; font-weight: normal; margin-left: 8px;">' + escapeHtml(summaryText) + '</span>' +
+                '</summary>' +
+                '<div class="log-details" style="margin-top: 8px; max-height: 250px; overflow-y: auto;">' + escapeHtml(detailsJson) + '</div>' +
+                '</details>';
+
             feed.appendChild(div);
             feed.scrollTop = feed.scrollHeight;
         }
@@ -888,7 +925,7 @@
                                         var card = document.createElement("div");
                                         card.className = "shot-card";
                                         card.innerHTML = '<h4><span>Shot #' + shot.shot_index + '</span><a href="' + shot.video_url + '" download class="btn-secondary" style="font-size: 11px; text-decoration: none; padding: 4px 8px;">💾 Download MP4</a></h4>' +
-                                            '<p><strong>Prompt:</strong> ' + shot.prompt + '</p>' +
+                                            '<p><strong>Prompt:</strong> ' + escapeHtml(stripControlString(shot.prompt)) + '</p>' +
                                             '<p style="color: #f472b6; font-size: 12px;"><strong>Orchestrator Criteria:</strong> ' + (shot.evaluation_criteria || 'Visual coherence & character lock') + '</p>' +
                                             '<video controls preload="metadata" src="' + shot.video_url + '?t=' + new Date().getTime() + '"></video>' +
                                             '<p style="margin-top: 10px; color: #38bdf8;"><strong>OpenCV Last Frame (I2V Chaining):</strong></p>' +
@@ -1060,7 +1097,7 @@
                         var frameUrl = formatMediaUrl(shot.gcs_frame_url, shot.frame_url, "shot_" + shot.shot_index + "_last_frame.png");
 
                         card.innerHTML = '<h4><span>Shot #' + shot.shot_index + '</span><a href="' + clipUrl + '" download class="btn-secondary" style="font-size: 11px; text-decoration: none; padding: 4px 8px;">💾 Download MP4</a></h4>' +
-                            '<p><strong>Prompt:</strong> ' + shot.prompt + '</p>' +
+                            '<p><strong>Prompt:</strong> ' + escapeHtml(stripControlString(shot.prompt)) + '</p>' +
                             '<p style="color: #f472b6; font-size: 12px;"><strong>Orchestrator Criteria:</strong> ' + (shot.evaluation_criteria || 'Visual coherence & character lock') + '</p>' +
                             '<video controls preload="metadata" src="' + clipUrl + '"></video>' +
                             '<p style="margin-top: 10px; color: #38bdf8;"><strong>OpenCV Last Frame:</strong></p>' +

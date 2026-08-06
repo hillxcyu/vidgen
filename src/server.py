@@ -22,7 +22,7 @@ from src.agents.stitcher_graph import (
     evaluate_clip_quality
 )
 
-app = FastAPI(title="GenMedia-Omni Multi-Agent Video Pipeline UI")
+app = FastAPI(title="vidgen")
 
 OUTPUT_DIR = os.path.abspath("./output")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
