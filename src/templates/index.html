@@ -797,7 +797,15 @@
 
             var summaryText = "";
             if (details) {
-                if (agent.includes("GeminiOmniFlash")) {
+                if (agent.includes("Orchestrator")) {
+                    if (details.original_intent || details.intent) {
+                        summaryText = " — Intent: " + (details.original_intent || details.intent) + " (" + (details.num_shots || details.target_shots || 3) + " shots, " + (details.mode || "i2v_chaining") + ")";
+                    } else if (details.message) {
+                        summaryText = " — " + details.message;
+                    } else if (details.status) {
+                        summaryText = " — Status: " + details.status;
+                    }
+                } else if (agent.includes("GeminiOmniFlash")) {
                     var pStr = details.optimized_prompt || details.prompt || details.raw_prompt || "";
                     summaryText = " — Shot #" + (details.shot_index || 1) + ": " + stripControlString(pStr);
                 } else if (details.raw_prompt) {

@@ -276,13 +276,13 @@ async def run_adk_pipeline_background(adk_session: Session):
         config = Config()
         agents = create_adk_agents(config)
 
-        # Step 1: OrchestratorAgent Initialization
+        # Step 1: OrchestratorAgent Initialization & Delegation
         broadcast_log(session_id, {
             'step': 1,
             'agent': 'OrchestratorAgent',
             'action': 'INITIATE_PIPELINE',
             'details': {
-                'prompt': prompt,
+                'original_intent': state.original_intent,
                 'num_shots': state.num_shots,
                 'mode': state.mode,
                 'aspect_ratio': state.aspect_ratio,
@@ -292,6 +292,14 @@ async def run_adk_pipeline_background(adk_session: Session):
                 'reference_assets_count': len(state.reference_assets_b64),
                 'reference_audio_count': len(state.reference_audio_b64)
             }
+        }, state_dict)
+        await asyncio.sleep(0.3)
+
+        broadcast_log(session_id, {
+            'step': 1,
+            'agent': 'OrchestratorAgent',
+            'action': 'DELEGATE_TASK',
+            'details': {'target_agent': 'ScreenwriterAgent', 'message': 'Delegating script expansion to ScreenwriterAgent'}
         }, state_dict)
         await asyncio.sleep(0.3)
 
@@ -315,6 +323,14 @@ async def run_adk_pipeline_background(adk_session: Session):
             'agent': 'ScreenwriterAgent',
             'action': 'EXPAND_SCRIPT',
             'details': {'status': 'COMPLETED', 'intent': state.original_intent, 'screenplay': screenplay_text}
+        }, state_dict)
+        await asyncio.sleep(0.3)
+
+        broadcast_log(session_id, {
+            'step': 2,
+            'agent': 'OrchestratorAgent',
+            'action': 'DELEGATE_TASK',
+            'details': {'target_agent': 'StoryboarderAgent', 'message': 'Delegating screenplay compilation to StoryboarderAgent'}
         }, state_dict)
         await asyncio.sleep(0.3)
 
@@ -363,6 +379,14 @@ async def run_adk_pipeline_background(adk_session: Session):
             'agent': 'StoryboarderAgent',
             'action': 'GENERATE_STORYBOARD',
             'details': {'status': 'COMPLETED', 'scenes_count': len(state.storyboard), 'scenes': [sb.model_dump() for sb in state.storyboard]}
+        }, state_dict)
+        await asyncio.sleep(0.3)
+
+        broadcast_log(session_id, {
+            'step': 3,
+            'agent': 'OrchestratorAgent',
+            'action': 'DELEGATE_TASK',
+            'details': {'target_agent': 'ProductionLoop', 'message': f'Initiating generation loop for {len(state.storyboard)} shots'}
         }, state_dict)
         await asyncio.sleep(0.3)
 
