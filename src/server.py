@@ -74,7 +74,7 @@ def broadcast_log(session_id: str, event_data: Dict[str, Any], state_dict: Dict[
 
 async def get_or_restore_adk_session(session_id: str) -> Optional[Session]:
     """Retrieves session from in-memory ADK SessionService or recovers snapshot from disk/GCS."""
-    user_id = "user_default"
+    user_id = "xcyu"
     session = None
     try:
         session = await adk_session_service.get_session(
@@ -138,7 +138,7 @@ async def start_pipeline_endpoint(req: GenerateRequest):
         }
         adk_session = await adk_session_service.create_session(
             app_name="vidgen",
-            user_id="user_default",
+            user_id="xcyu",
             session_id=session_id if session_id and session_id not in ["undefined", "null", ""] else None,
             state=initial_state
         )
