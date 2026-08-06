@@ -347,53 +347,68 @@ async def evaluate_clip_quality(
         res_dict["consolidated_rubric"] = consolidated_rubric
         return res_dict
 
-    # Step 2: Evaluation using drafted prompt and controlled schema
+    # Step 2: Evaluation using drafted prompt and native GenAI SDK response_schema JSON enforcement
     rubric_str = "\n".join(f"- {r}" for r in consolidated_rubric)
     eval_instructions = (
+        f"You are the QualityRaterAgent performing a strict visual quality audit on shot #{shot_index}.\n"
         f"{drafted_eval_prompt}\n\n"
         f"CONSOLIDATED EVALUATION RUBRIC:\n{rubric_str}\n\n"
-        "Visually inspect the MP4 clip keyframes against this rubric.\n"
-        "Return ONLY a JSON object conforming strictly to this Pydantic schema structure:\n"
-        "{\n"
-        '  "score": float (0.0 to 1.0),\n'
-        '  "reason": [\n'
-        '    {\n'
-        '      "criterion_name": "Criterion Name",\n'
-        '      "score": float (0.0 to 1.0),\n'
-        '      "comments": "Detailed findings for this criterion"\n'
-        '    }\n'
-        '  ],\n'
-        '  "drift_detected": bool,\n'
-        '  "verdict": "PASSED" | "REATTEMPT_REQUIRED",\n'
-        '  "feedback": "Actionable feedback summary"\n'
-        "}"
+        "Visually inspect the MP4 clip keyframes against this consolidated rubric.\n"
+        "Assess each criterion in the rubric, assign a score (0.0 to 1.0) and specific comments for each.\n"
+        "Calculate the overall score (0.0 to 1.0). If score < 0.8 or any subject drift occurred, set drift_detected=true and verdict='REATTEMPT_REQUIRED'."
     )
 
-    try:
-        import re
-        text = await run_adk_agent(rater, eval_instructions, media_parts=media_parts, session_service=session_service, session_id=session_id)
-        json_match = re.search(r"\{.*\}", text, re.DOTALL)
-        clean_text = json_match.group(0) if json_match else text
-        eval_res = QualityEvaluationResult.model_validate_json(clean_text)
-        res_dict = eval_res.model_dump()
-        res_dict["consolidated_rubric"] = consolidated_rubric
-        return res_dict
-    except Exception as e:
-        print(f"[QUALITY RATER EVALUATION PARSING WARNING]: {e}. Using controlled fallback.")
-        fallback_reason = [
-            CriterionEvaluation(criterion_name=r.split(":")[0], score=0.9, comments="Passes visual audit")
-            for r in consolidated_rubric
-        ]
-        fallback_res = QualityEvaluationResult(
-            score=0.85,
-            reason=fallback_reason,
-            drift_detected=False,
-            verdict="PASSED",
-            feedback="Visual clip passed quality audit (controlled fallback)."
+    eval_res = None
+    last_error = None
+    for retry_attempt in range(2):
+        # 1. Native GenAI SDK call with strict response_schema JSON decoding
+        if client:
+            try:
+                genai_contents = [
+                    eval_instructions,
+                    types.Part.from_bytes(data=video_bytes, mime_type="video/mp4")
+                ]
+                resp = await asyncio.to_thread(
+                    client.models.generate_content,
+                    model=config.ORCHESTRATOR_MODEL,
+                    contents=genai_contents,
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json",
+                        response_schema=QualityEvaluationResult,
+                        temperature=0.2
+                    )
+                )
+                if resp and resp.text:
+                    eval_res = QualityEvaluationResult.model_validate_json(resp.text)
+                    break
+            except Exception as sdk_err:
+                last_error = sdk_err
+                print(f"[QUALITY RATER SDK ATTEMPT {retry_attempt+1} NOTICE]: {sdk_err}")
+
+        # 2. ADK Runner fallback if SDK is unavailable
+        try:
+            text = await run_adk_agent(rater, eval_instructions, media_parts=media_parts, session_service=session_service, session_id=session_id)
+            import re
+            json_match = re.search(r"\{.*\}", text, re.DOTALL)
+            clean_text = json_match.group(0) if json_match else text
+            eval_res = QualityEvaluationResult.model_validate_json(clean_text)
+            break
+        except Exception as adk_err:
+            last_error = adk_err
+            print(f"[QUALITY RATER ADK ATTEMPT {retry_attempt+1} NOTICE]: {adk_err}")
+
+    if not eval_res:
+        eval_res = QualityEvaluationResult(
+            score=0.5,
+            reason=[CriterionEvaluation(criterion_name="Visual Audit Execution", score=0.5, comments=f"Audit parsing notice: {last_error}")],
+            drift_detected=True,
+            verdict="REATTEMPT_REQUIRED",
+            feedback=f"REATTEMPT REQUIRED: Quality audit encountered parsing error ({last_error}). Requesting prompt refinement."
         )
-        res_dict = fallback_res.model_dump()
-        res_dict["consolidated_rubric"] = consolidated_rubric
-        return res_dict
+
+    res_dict = eval_res.model_dump()
+    res_dict["consolidated_rubric"] = consolidated_rubric
+    return res_dict
 
 def run_pre_production(state: PipelineState, client: Optional[genai.Client] = None) -> PipelineState:
     """Pre-production block: Uses ADK Master Orchestrator, Screenwriter, and Storyboarder agents via Runner."""
