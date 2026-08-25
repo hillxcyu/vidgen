@@ -2,25 +2,23 @@
 
 ## 📋 Metadata
 *   **Stage:** 2 - Problem Decomposition (DEFINE)
-*   **Timestamp:** 2026-08-25T10:28:00Z
-*   **Target Task:** Update Docs, Commit, Archive Main, Merge, and Deploy Frontend via Cloud Build in `asia-east1`
-*   **Status:** Awaiting Confirmation for Stage 3 (ACT)
+*   **Timestamp:** 2026-08-25T11:31:00Z
+*   **Target Task:** Dual UI Routing, Orchestrator Sub-Agent Delegation, and Deploy to `asia-east1`
+*   **Status:** IN_PROGRESS (Stage 3: ACT)
 
 ---
 
 ## 📝 Detailed TODO Breakdown
 
-### Phase 1: Documentation & Local Commit [docs] [git]
-- [ ] `[T001]` **[docs]** Update `README.md` with ADK 2.0 architecture, `agents-cli` workflow, Agent Runtime deployment (`asia-east1`), and A2A Agent Card specifications.
-- [ ] `[T002]` **[git]** Stage all changes (`git add -A`) and commit on branch `adk` with comprehensive commit message.
+### Phase 1: Dual UI Routing in FastAPI [frontend] [backend]
+- [ ] `[T001]` **[backend]** Update `app/fast_api_app.py` to route `/` and `/index.html` to our custom Web Studio UI, and mount ADK's Angular Debug & Chat UI at `/adk` and `/dev-ui`.
 
-### Phase 2: Git Branch Archiving & Merging [git]
-- [ ] `[T003]` **[git]** Check out `main` branch.
-- [ ] `[T004]` **[git]** Create `archive` branch from `main` and push to remote (`git checkout -b archive && git push -u origin archive`).
-- [ ] `[T005]` **[git]** Check out `main` and merge `adk` into `main` (`git checkout main && git merge adk`).
+### Phase 2: Orchestrator Sub-Agent Delegation [agent] [tools]
+- [ ] `[T002]` **[tools]** Add modular single-shot generation tool `generate_video_shot_clip` in `app/agent.py` to support step-by-step clip generation.
+- [ ] `[T003]` **[agent]** Update `root_agent` and subagents (`ScreenwriterAgent`, `StoryboarderAgent`, `PromptOptimizerAgent`, `HealthCheckerAgent`, `QualityRaterAgent`) instructions in `app/agent.py` to support interactive step-by-step delegation.
 
-### Phase 3: Cloud Build Configuration & Push [cicd] [deploy]
-- [ ] `[T006]` **[cicd]** Update `cloudbuild.yaml` with `asia-east1` Artifact Registry (`asia-east1-docker.pkg.dev/$PROJECT_ID/vidgen-repo/vidgen-app:$COMMIT_SHA`) and Cloud Run deploy flags (`--region=asia-east1`, `--port=8080`, environment variables).
-- [ ] `[T007]` **[git]** Commit `cloudbuild.yaml` updates to `main`.
-- [ ] `[T008]` **[deploy]** Push `main` to `origin/main` (`git push origin main`) to trigger Cloud Build.
-- [ ] `[T009]` **[test]** Monitor Cloud Build progress and verify live Cloud Run service endpoint in `asia-east1`.
+### Phase 3: Testing & CI/CD Deployment [test] [deploy]
+- [ ] `[T004]` **[test]** Run `uv run pytest tests/unit tests/integration` to verify all tests pass.
+- [ ] `[T005]` **[git]** Commit changes to `main` with detailed commit message and push to GitHub.
+- [ ] `[T006]` **[deploy]** Monitor Cloud Build build in `asia-east1` and verify live Cloud Run frontend at `/` (Studio) and `/adk` (ADK UI).
+- [ ] `[T007]` **[deploy]** Deploy / update Vertex AI Agent Runtime in `asia-east1` with updated sub-agent delegation.

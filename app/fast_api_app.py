@@ -185,8 +185,25 @@ app.description = "API for interacting with the vidgen-omni multi-agent video ge
 app.mount("/output", StaticFiles(directory=OUTPUT_DIR), name="output")
 attach_reasoning_engine_routes(app)
 
+# Remove default ADK root routes so our Studio UI handles the root URL
+for r in list(app.routes):
+    if getattr(r, "path", None) in ["/", "/index.html"]:
+        try:
+            app.routes.remove(r)
+        except ValueError:
+            pass
+
+# Mount ADK Debug & Chat UI at /adk
+import google.adk.cli.fast_api as adk_fast_api
+from pathlib import Path
+adk_browser_dist = Path(adk_fast_api.__file__).parent.resolve() / "browser"
+if adk_browser_dist.exists():
+    app.mount("/adk", StaticFiles(directory=str(adk_browser_dist), html=True), name="adk")
+
 
 @app.get("/", response_class=HTMLResponse)
+@app.get("/index.html", response_class=HTMLResponse)
+@app.get("/studio", response_class=HTMLResponse)
 async def read_root():
     if os.path.exists(TEMPLATE_PATH):
         with open(TEMPLATE_PATH, "r", encoding="utf-8") as f:
