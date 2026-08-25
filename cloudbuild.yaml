@@ -1,45 +1,45 @@
 steps:
-  # 1. Build the container image using Artifact Registry repository
+  # 1. Build the container image using Artifact Registry repository in asia-east1
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'build'
       - '-t'
-      - 'us-central1-docker.pkg.dev/$PROJECT_ID/vidgen-repo/vidgen-app:$COMMIT_SHA'
+      - 'asia-east1-docker.pkg.dev/$PROJECT_ID/vidgen-repo/vidgen-app:$COMMIT_SHA'
       - '-t'
-      - 'us-central1-docker.pkg.dev/$PROJECT_ID/vidgen-repo/vidgen-app:latest'
+      - 'asia-east1-docker.pkg.dev/$PROJECT_ID/vidgen-repo/vidgen-app:latest'
       - '.'
 
   # 2. Push the container image to Artifact Registry
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'push'
-      - 'us-central1-docker.pkg.dev/$PROJECT_ID/vidgen-repo/vidgen-app:$COMMIT_SHA'
+      - 'asia-east1-docker.pkg.dev/$PROJECT_ID/vidgen-repo/vidgen-app:$COMMIT_SHA'
 
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'push'
-      - 'us-central1-docker.pkg.dev/$PROJECT_ID/vidgen-repo/vidgen-app:latest'
+      - 'asia-east1-docker.pkg.dev/$PROJECT_ID/vidgen-repo/vidgen-app:latest'
 
-  # 3. Deploy container image to Google Cloud Run
+  # 3. Deploy container image to Google Cloud Run in asia-east1
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud
     args:
       - 'run'
       - 'deploy'
       - 'vidgen-app'
-      - '--image=us-central1-docker.pkg.dev/$PROJECT_ID/vidgen-repo/vidgen-app:$COMMIT_SHA'
-      - '--region=us-central1'
+      - '--image=asia-east1-docker.pkg.dev/$PROJECT_ID/vidgen-repo/vidgen-app:$COMMIT_SHA'
+      - '--region=asia-east1'
       - '--platform=managed'
       - '--allow-unauthenticated'
-      - '--set-env-vars=GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=global,GOOGLE_GENAI_USE_VERTEXAI=true'
-      - '--port=3000'
-      - '--memory=2Gi'
+      - '--set-env-vars=GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=global,GOOGLE_GENAI_USE_VERTEXAI=true,GCS_SHOWCASE_BUCKET=$PROJECT_ID-vidgen-showcase'
+      - '--port=8080'
+      - '--memory=4Gi'
       - '--cpu=2'
       - '--timeout=600'
 
 images:
-  - 'us-central1-docker.pkg.dev/$PROJECT_ID/vidgen-repo/vidgen-app:$COMMIT_SHA'
-  - 'us-central1-docker.pkg.dev/$PROJECT_ID/vidgen-repo/vidgen-app:latest'
+  - 'asia-east1-docker.pkg.dev/$PROJECT_ID/vidgen-repo/vidgen-app:$COMMIT_SHA'
+  - 'asia-east1-docker.pkg.dev/$PROJECT_ID/vidgen-repo/vidgen-app:latest'
 
 options:
   logging: CLOUD_LOGGING_ONLY
