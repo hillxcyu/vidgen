@@ -16,6 +16,6 @@ COPY . .
 # Install python packages
 RUN pip install --no-cache-dir hatchling && pip install --no-cache-dir -e .
 
-ENV PORT=3000
+ENV PORT=8080
 
-CMD ["sh", "-c", "uvicorn src.server:app --host 0.0.0.0 --port ${PORT}"]
+CMD ["sh", "-c", "uvicorn app.fast_api_app:app --host 0.0.0.0 --port ${PORT}"]

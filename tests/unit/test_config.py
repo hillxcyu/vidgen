@@ -1,4 +1,5 @@
-from src.config import Config, get_genai_client
+from app.config import Config, get_genai_client
+
 
 def test_config_defaults():
     config = Config()
@@ -6,6 +7,7 @@ def test_config_defaults():
     assert config.LOCATION == "global"
     assert config.ORCHESTRATOR_MODEL == "gemini-3.7-flash"
     assert config.VIDEO_GEN_MODEL == "gemini-omni-flash-preview"
+
 
 def test_genai_client_init():
     client = get_genai_client()

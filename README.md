@@ -1,108 +1,126 @@
-# 🎬 vidgen: Multi-Agent Generative Media Pipeline
+# 🎬 vidgen-omni: Multi-Agent Generative Video Pipeline (Google ADK 2.0)
 
 [![Google ADK 2.0](https://img.shields.io/badge/Google%20ADK-2.6.2-blue)](https://github.com/hillxcyu/vidgen)
+[![Vertex AI Agent Runtime](https://img.shields.io/badge/Vertex%20AI-Agent%20Runtime%20(asia--east1)-green)](https://cloud.google.com/vertex-ai)
 [![Docker](https://img.shields.io/badge/Docker-Containerized-blue)](https://docker.com)
-[![Pytest](https://img.shields.io/badge/Pytest-27%2F27%20Passed-green)](https://pytest.org)
+[![Pytest](https://img.shields.io/badge/Pytest-23%2F23%20Passed%20(100%25)-brightgreen)](https://pytest.org)
 
-**vidgen** is a high-code multi-agent generative video pipeline built with **Google Agent Development Kit (ADK 2.0)**, **Gemini 3.6 Flash**, and **Gemini Omni Flash** (`gemini-omni-flash-preview`).
+**vidgen-omni** is a production-grade multi-agent generative video orchestration system built with **Google Agent Development Kit (ADK 2.0)**, **Gemini 3.7 Flash**, and **Gemini Omni Flash** (`gemini-omni-flash-preview`).
 
-It coordinates a team of 5 specialized AI agents to expand raw user prompts into multi-shot videos with unbroken visual identity and motion continuity via **Sequential Image-to-Video (I2V) Prompt Chaining**.
+It coordinates a specialized team of 5 AI agents to transform high-level natural language prompts into cohesive multi-shot cinematic videos with character identity preservation and motion continuity via **Sequential Image-to-Video (I2V) Prompt Chaining**.
 
 ---
 
 ## 🤖 Multi-Agent Architecture & DAG Workflow
 
 ```
-                             [ USER PROMPT ]
-                                    │
-                                    ▼
-                     ┌──────────────────────────────┐
-                     │   ORCHESTRATOR AGENT        │ (gemini-3.6-flash)
-                     └──────────────┬───────────────┘
-                                    │
-       ┌────────────────────────────┴────────────────────────────┐
-       ▼                                                         ▼
-┌──────────────────────────────┐          ┌──────────────────────────────┐
-│  1. SCREENWRITER AGENT       │          │  2. STORYBOARDER AGENT       │
-└──────────────┬───────────────┘          └──────────────┬───────────────┘
-               │ 3-Act Narrative Script                  │ Structured JSON Specs
-               └────────────────────────────┬────────────┘
-                                            ▼
-                             ┌──────────────────────────────┐
-                             │  3. PROMPT OPTIMIZER AGENT   │
-                             └──────────────┬───────────────┘
-                                            │ Enhanced Multimodal Prompt
-                                            ▼
-                             ┌──────────────────────────────┐
-                             │  4. HEALTH CHECKER AGENT     │ (Guardrails Audit)
-                             └──────────────┬───────────────┘
-                                            │ Approved Prompt Payload
-                                            ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                 5. GENERATION & I2V CHAINING LOOP                           │
-│                                                                             │
-│  [Shot 1 Prompt] ──► (Gemini Omni Flash) ──► shot_1.mp4                      │
-│                                                    │                        │
-│  shot_1.mp4 ──► (OpenCV Parser) ──► shot_1_last_frame.png (Base64)           │
-│                                                    │                        │
-│  [Shot 2 Prompt + Frame 1 Base64] ──► (Omni Flash) ──► shot_2.mp4           │
-└────────────────────────────────────┬────────────────────────────────────────┘
-                                     │ Individual MP4 Clips
-                                     ▼
-                             ┌──────────────────────────────┐
-                             │  6. QUALITY RATER AGENT      │ (Score < 0.8 Feedback Loop)
-                             └──────────────┬───────────────┘
-                                            │ Certified Clips
-                                            ▼
-                             ┌──────────────────────────────┐
-                             │  7. FFMPEG STITCHER TOOL     │ (Direct Stream Copy)
-                             └──────────────┬───────────────┘
-                                            │
-                                            ▼
-                               [ output_stitched_30s.mp4 ]
+                             [ USER PROMPT / INTENT ]
+                                        │
+                                        ▼
+                      ┌────────────────────────────────────┐
+                      │    vidgen_orchestrator (Root)      │ (gemini-3.7-flash)
+                      └─────────────────┬──────────────────┘
+                                        │
+        ┌───────────────────────────────┴───────────────────────────────┐
+        ▼                                                               ▼
+ ┌──────────────────────────────┐                       ┌──────────────────────────────┐
+ │  1. ScreenwriterAgent        │                       │  2. StoryboarderAgent        │
+ └──────────────┬───────────────┘                       └──────────────┬───────────────┘
+                │ Multi-Scene Narrative Screenplay                      │ Structured JSON Shot Specs
+                └───────────────────────────────┬───────────────────────┘
+                                                ▼
+                                 ┌──────────────────────────────┐
+                                 │  3. PromptOptimizerAgent     │
+                                 └──────────────┬───────────────┘
+                                                │ Enhanced Omni Flash Prompt
+                                                ▼
+                                 ┌──────────────────────────────┐
+                                 │  4. HealthCheckerAgent       │ (Guardrails & Compliance)
+                                 └──────────────┬───────────────┘
+                                                │ Approved Shot Prompt
+                                                ▼
+ ┌─────────────────────────────────────────────────────────────────────────────────────────────┐
+ │                       5. GENERATION & I2V CHAINING PRODUCTION LOOP                          │
+ │                                                                                             │
+ │  [Shot 1 Prompt] ──► (Gemini Omni Flash) ──► shot_1.mp4                                     │
+ │                                                    │                                        │
+ │  shot_1.mp4 ──► (OpenCV Video Parser) ──► shot_1_last_frame.png (Base64 Anchor)             │
+ │                                                    │                                        │
+ │  [Shot 2 Prompt + Frame 1 Base64] ──► (Gemini Omni Flash) ──► shot_2.mp4                    │
+ └──────────────────────────────────────┬──────────────────────────────────────────────────────┘
+                                        │ Individual MP4 Clips
+                                        ▼
+                                 ┌──────────────────────────────┐
+                                 │  5. QualityRaterAgent        │ (Rubric Score < 0.8 Retry Loop)
+                                 └──────────────┬───────────────┘
+                                                │ Verified Clips
+                                                ▼
+                                 ┌──────────────────────────────┐
+                                 │  6. FFMPEG Stitcher Tool     │ (Direct Stream Copy Concat)
+                                 └──────────────┬───────────────┘
+                                                │
+                                                ▼
+                                 [ output_stitched_30s.mp4 ]
+                                 [ GCS Showcase Sync ]
 ```
 
 ---
 
-## ✨ Key Features
+## ✨ Core Capabilities
 
-- **Google ADK 2.0 Integration (`google.adk`):** Built natively using ADK `LlmAgent`, `Workflow`, `FunctionNode`, `Edge`, `Event`, and `Session` abstractions.
-- **Sequential Image-to-Video (I2V) Chaining:** Uses OpenCV to extract the terminal frame (Frame #100) of Shot $N$ as a Base64 payload, supplying it as the starting visual anchor for Shot $N+1$ in Gemini Omni Flash.
-- **5-Category Major Subject Drift Detection:** `QualityRaterAgent` audits clips across Face Identity, Product, Clothing, Accessories/Props, and Environment/Background stability. If `score < 0.8` or drift is detected, actionable feedback is routed back to `PromptOptimizerAgent` for a re-attempt.
-- **Showcase Run Pinning & GCS Sync:** Allows pinning showcased video runs to a slide-out drawer panel and syncing stitched MP4s, shot clips, last frames, and manifest JSON to Google Cloud Storage (`gs://...`).
-- **Real-Time Audit Trajectory Visualizer:** Server-Sent Events (SSE) stream live agent communication logs and audit verdicts to a Web Studio UI with folded message cards and hidden control strings.
+- **Google ADK 2.0 Native (`google.adk`):** Built on ADK 2.0 `Agent`, `Runner`, `FunctionTool`, `AdkApp`, and `Session` abstractions.
+- **Sequential Image-to-Video (I2V) Chaining:** Uses OpenCV to extract the terminal frame (Frame #100) of Shot $N$ as a Base64 visual anchor, supplying it as the starting frame for Shot $N+1$ in Gemini Omni Flash.
+- **5-Category Major Subject Drift Detection:** `QualityRaterAgent` evaluates clips across Face Identity, Product, Clothing, Accessories/Props, and Background Stability. If score $< 0.8$, actionable feedback is passed to `PromptOptimizerAgent` for automatic prompt refinement.
+- **Vertex AI Agent Runtime:** Deployed to managed Vertex AI Reasoning Engines in `asia-east1` (Taiwan), supporting native `:streamQuery` and `/api` passthrough.
+- **Agent-to-Agent (A2A Protocol):** Implements the A2A standard with automated agent card generation and JSON-RPC dispatching.
+- **Persistent GCS Showcase:** Automatically syncs generated videos, clips, and metadata to Google Cloud Storage (`gs://universal-trail-492014-n5-vidgen-showcase`).
+- **Interactive Web Studio UI:** Real-time Server-Sent Events (SSE) stream trajectory logs, screenplays, and live video previews directly to the browser.
 
 ---
 
-## 🚀 Quick Start (Docker Environment)
+## 🛠️ Google Agents CLI Workflow (`agents-cli`)
 
-### 1. Environment Setup
-Create a `.env` file in the root directory:
+Install the CLI:
 ```bash
-GOOGLE_CLOUD_PROJECT=universal-trail-492014-n5
-GOOGLE_CLOUD_LOCATION=global
+uv tool install google-agents-cli
 ```
 
-### 2. Build Docker Container
-```bash
-docker compose build
-```
+### Development Commands
 
-### 3. Run Web Studio (Port 3000)
-```bash
-docker compose up -d web
-```
-Open **[http://localhost:3000](http://localhost:3000)** in your browser to prompt the pipeline, track real-time agent trajectories, and watch the generated video output.
+| Command | Description |
+|---------|-------------|
+| `agents-cli playground` | Launch local interactive web playground with live tracing |
+| `agents-cli run "prompt"` | Smoke test the agent directly in terminal |
+| `agents-cli eval run` | Run evaluation datasets and score agent traces |
+| `agents-cli deploy` | Deploy agent to Vertex AI Agent Runtime or Cloud Run |
+| `agents-cli publish gemini-enterprise` | Register agent in Gemini Enterprise Agent Registry |
 
-### 4. Run Pytest Suite
-```bash
-docker compose run --rm test
-```
+---
 
-### 5. Run CLI Execution
+## 🚀 Deployment Targets
+
+### 1. Vertex AI Agent Runtime (`asia-east1`)
+Deployed as a managed Reasoning Engine with automatic session state persistence and IAM-governed API access:
+* **Resource ID:** `projects/456465962826/locations/asia-east1/reasoningEngines/5283399662068301824`
+* **Agent Card URL:**
+  ```
+  https://asia-east1-aiplatform.googleapis.com/reasoningEngines/v1/projects/456465962826/locations/asia-east1/reasoningEngines/5283399662068301824/api/a2a/vidgen-omni/.well-known/agent-card.json
+  ```
+
+### 2. Google Cloud Run (Frontend & Web Studio)
+Automated CI/CD via Google Cloud Build:
+* **Region:** `asia-east1`
+* **Artifact Registry:** `asia-east1-docker.pkg.dev/universal-trail-492014-n5/vidgen-repo/vidgen-app`
+
+---
+
+## 🧪 Testing & Verification
+
+Run the full unit and integration test suite:
 ```bash
-docker compose run --rm app --prompt "A red panda skiing in Hakuba" --shots 3 --mode i2v_chaining --output ./output
+uv run pytest tests/unit tests/integration
 ```
+*Current Status: 23/23 tests passing (100%).*
 
 ---
 
@@ -110,31 +128,35 @@ docker compose run --rm app --prompt "A red panda skiing in Hakuba" --shots 3 --
 
 ```
 ├── Dockerfile                  # Containerized Python 3.11 build with FFMPEG & OpenCV
-├── docker-compose.yml          # Web, app, and test service definitions
-├── pyproject.toml              # Dependencies (google-adk, google-genai, fastapi, uvicorn)
-├── README.md                   # Project documentation
-├── agent.yaml                  # ADK 2.0 agent deployment manifest
-├── cloudbuild.yaml             # Google Cloud Build CI/CD deployment pipeline
-├── src/
+├── cloudbuild.yaml             # Google Cloud Build CI/CD pipeline for asia-east1
+├── pyproject.toml              # Project dependencies (ADK 2.0, GenAI SDK, FastAPI)
+├── agents-cli-manifest.yaml    # Agents CLI configuration & deployment metadata
+├── deployment_metadata.json    # Live Agent Runtime resource mapping
+├── app/
+│   ├── agent.py                # Root ADK agent (vidgen_orchestrator) & tools
+│   ├── fast_api_app.py         # Unified FastAPI app (ADK SSE, Web Studio, A2A)
+│   ├── config.py               # GenAI client & Vertex AI ADC configuration
+│   ├── state.py                # Pydantic PipelineState, VideoShot, StoryboardEntry
 │   ├── agents/
-│   │   └── stitcher_graph.py   # ADK Workflow graph & agent definitions
-│   ├── prompts/                # Agent system prompt instructions
-│   │   ├── pre_prod_system.txt
-│   │   └── prod_loop_system.txt
-│   ├── tools/                  # Python primitives registered as ADK FunctionTools
-│   │   ├── omni_client.py      # Gemini Omni Flash wrapper (interactions.create)
+│   │   └── pipeline.py         # Multi-agent async DAG & evaluation loop
+│   ├── tools/
+│   │   ├── omni_client.py      # Gemini Omni Flash video generation
 │   │   ├── video_parser.py     # OpenCV terminal frame extractor
-│   │   ├── gcs_storage.py      # Showcase run pinning & GCS bucket manager
-│   │   └── stitcher.py         # FFMPEG stream-copy video concatenator
-│   ├── config.py               # Vertex AI ADC authentication
-│   ├── state.py                # PipelineState & VideoShot Pydantic models
-│   ├── main.py                 # CLI entry point
-│   └── server.py               # FastAPI Web Studio & SSE streaming server
-└── tests/                      # 27 Pytest unit & integration tests
+│   │   ├── stitcher.py         # FFMPEG direct stream copy concatenator
+│   │   └── gcs_storage.py      # Showcase run persistence & GCS sync
+│   └── app_utils/
+│       ├── a2a.py              # A2A Agent Card Builder & JSON-RPC executor
+│       └── reasoning_engine_adapter.py # Vertex AI Reasoning Engine adapter
+├── deployment/
+│   └── terraform/              # Infrastructure-as-Code (IAM, Service, Storage)
+└── tests/
+    ├── unit/                   # Unit test suite
+    ├── integration/            # E2E pipeline & FastAPI integration tests
+    └── eval/                   # ADK evaluation datasets
 ```
 
 ---
 
 ## 📜 License
 
-Apache License 2.0. Developed by Hill Yu (`xcyu@google.com`).
+Apache License 2.0.

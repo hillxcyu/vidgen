@@ -1,9 +1,10 @@
 services:
   web:
     build: .
-    entrypoint: ["uvicorn", "src.server:app", "--host", "0.0.0.0", "--port", "8000"]
+    entrypoint: ["uvicorn", "app.fast_api_app:app", "--host", "0.0.0.0", "--port", "8080"]
     ports:
-      - "3000:8000"
+      - "8080:8080"
+      - "3000:8080"
     volumes:
       - .:/app
       - ~/.config/gcloud:/root/.config/gcloud:ro
@@ -11,6 +12,8 @@ services:
       - .env
     environment:
       - GOOGLE_APPLICATION_CREDENTIALS=/root/.config/gcloud/application_default_credentials.json
+      - GOOGLE_CLOUD_LOCATION=global
+      - GOOGLE_GENAI_USE_VERTEXAI=true
 
   app:
     build: .
@@ -21,6 +24,8 @@ services:
       - .env
     environment:
       - GOOGLE_APPLICATION_CREDENTIALS=/root/.config/gcloud/application_default_credentials.json
+      - GOOGLE_CLOUD_LOCATION=global
+      - GOOGLE_GENAI_USE_VERTEXAI=true
 
   test:
     build: .
@@ -32,3 +37,5 @@ services:
       - .env
     environment:
       - GOOGLE_APPLICATION_CREDENTIALS=/root/.config/gcloud/application_default_credentials.json
+      - GOOGLE_CLOUD_LOCATION=global
+      - GOOGLE_GENAI_USE_VERTEXAI=true

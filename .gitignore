@@ -1,7 +1,9 @@
+.venv/
+venv/
+.env
 __pycache__/
 *.pyc
 .pytest_cache/
-.env
 output/
 *.mp4
 *.png

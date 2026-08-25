@@ -1,0 +1,12 @@
+[
+  {
+    "name": "red_panda_skiing",
+    "prompt": "Create a 3-shot continuous video of a cute red panda wearing yellow ski goggles skiing down Hakuba mountain.",
+    "reference": "A multi-scene video sequence with smooth camera tracking and continuous red panda character identity."
+  },
+  {
+    "name": "cyberpunk_drone_chase",
+    "prompt": "Create a 2-shot cinematic sequence of a futuristic drone navigating neon-lit skyscrapers in Neo-Tokyo.",
+    "reference": "A high-speed continuous tracking shot through futuristic architecture with vibrant neon lighting."
+  }
+]

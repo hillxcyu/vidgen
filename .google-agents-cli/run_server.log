@@ -1,0 +1,460 @@
+=== Starting server at 2026-08-25T08:23:52.649535+00:00 ===
+Command: uv run uvicorn app.fast_api_app:app --host 127.0.0.1 --port 18080
+CWD: /usr/local/google/home/xcyu/projects/reusable/vidgen
+=== Started server process 2867770 ===
+INFO:     Started server process [2867773]
+INFO:     Waiting for application startup.
+App "vidgen-omni" can transfer between agents but has no context_cache_config. Every transfer swaps the system instruction and the tool set, so the request prefix changes and the whole prompt is re-sent uncached after each transfer. Set context_cache_config on the app to give each agent its own cache.
+/usr/local/google/home/xcyu/projects/reusable/vidgen/app/app_utils/a2a.py:115: UserWarning: [EXPERIMENTAL] AgentCardBuilder: ADK Implementation for A2A support (A2aAgentExecutor, RemoteA2aAgent and corresponding supporting components etc.) is in experimental mode and is subject to breaking changes. A2A protocol and SDK are themselves not experimental. Once it's stable enough the experimental mode will be removed. Your feedback is welcome.
+  agent_card = await AgentCardBuilder(
+/usr/local/google/home/xcyu/projects/reusable/vidgen/app/app_utils/a2a.py:123: UserWarning: [EXPERIMENTAL] A2aAgentExecutor: ADK Implementation for A2A support (A2aAgentExecutor, RemoteA2aAgent and corresponding supporting components etc.) is in experimental mode and is subject to breaking changes. A2A protocol and SDK are themselves not experimental. Once it's stable enough the experimental mode will be removed. Your feedback is welcome.
+  agent_executor=A2aAgentExecutor(runner=runner),
+/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/a2a/executor/a2a_agent_executor.py:76: UserWarning: [EXPERIMENTAL] A2aAgentExecutorConfig: ADK Implementation for A2A support (A2aAgentExecutor, RemoteA2aAgent and corresponding supporting components etc.) is in experimental mode and is subject to breaking changes. A2A protocol and SDK are themselves not experimental. Once it's stable enough the experimental mode will be removed. Your feedback is welcome.
+  self._config = config or A2aAgentExecutorConfig()
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:18080 (Press CTRL+C to quit)
+INFO:     127.0.0.1:34512 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34528 - "POST /apps/app/users/cli-user/sessions HTTP/1.1" 404 Not Found
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [2867773]
+=== Starting server at 2026-08-25T08:24:58.781000+00:00 ===
+Command: uv run uvicorn app.fast_api_app:app --host 127.0.0.1 --port 18081
+CWD: /usr/local/google/home/xcyu/projects/reusable/vidgen
+=== Started server process 2868162 ===
+INFO:     Started server process [2868166]
+INFO:     Waiting for application startup.
+App "vidgen-omni" can transfer between agents but has no context_cache_config. Every transfer swaps the system instruction and the tool set, so the request prefix changes and the whole prompt is re-sent uncached after each transfer. Set context_cache_config on the app to give each agent its own cache.
+/usr/local/google/home/xcyu/projects/reusable/vidgen/app/app_utils/a2a.py:115: UserWarning: [EXPERIMENTAL] AgentCardBuilder: ADK Implementation for A2A support (A2aAgentExecutor, RemoteA2aAgent and corresponding supporting components etc.) is in experimental mode and is subject to breaking changes. A2A protocol and SDK are themselves not experimental. Once it's stable enough the experimental mode will be removed. Your feedback is welcome.
+  agent_card = await AgentCardBuilder(
+/usr/local/google/home/xcyu/projects/reusable/vidgen/app/app_utils/a2a.py:123: UserWarning: [EXPERIMENTAL] A2aAgentExecutor: ADK Implementation for A2A support (A2aAgentExecutor, RemoteA2aAgent and corresponding supporting components etc.) is in experimental mode and is subject to breaking changes. A2A protocol and SDK are themselves not experimental. Once it's stable enough the experimental mode will be removed. Your feedback is welcome.
+  agent_executor=A2aAgentExecutor(runner=runner),
+/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/a2a/executor/a2a_agent_executor.py:76: UserWarning: [EXPERIMENTAL] A2aAgentExecutorConfig: ADK Implementation for A2A support (A2aAgentExecutor, RemoteA2aAgent and corresponding supporting components etc.) is in experimental mode and is subject to breaking changes. A2A protocol and SDK are themselves not experimental. Once it's stable enough the experimental mode will be removed. Your feedback is welcome.
+  self._config = config or A2aAgentExecutorConfig()
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:18081 (Press CTRL+C to quit)
+INFO:     127.0.0.1:43736 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43742 - "POST /apps/app/users/cli-user/sessions HTTP/1.1" 404 Not Found
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [2868166]
+=== Starting server at 2026-08-25T08:25:51.688340+00:00 ===
+Command: uv run uvicorn app.fast_api_app:app --host 127.0.0.1 --port 18080
+CWD: /usr/local/google/home/xcyu/projects/reusable/vidgen
+=== Started server process 2868499 ===
+/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/cli/fast_api.py:263: UserWarning: [EXPERIMENTAL] InMemoryCredentialService: This feature is experimental and may change or be removed in future versions without notice. It may introduce breaking changes at any time.
+  credential_service = InMemoryCredentialService()
+/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/auth/credential_service/in_memory_credential_service.py:33: UserWarning: [EXPERIMENTAL] BaseCredentialService: This feature is experimental and may change or be removed in future versions without notice. It may introduce breaking changes at any time.
+  super().__init__()
+INFO:     Started server process [2868502]
+INFO:     Waiting for application startup.
+App "vidgen-omni" can transfer between agents but has no context_cache_config. Every transfer swaps the system instruction and the tool set, so the request prefix changes and the whole prompt is re-sent uncached after each transfer. Set context_cache_config on the app to give each agent its own cache.
+/usr/local/google/home/xcyu/projects/reusable/vidgen/app/app_utils/a2a.py:115: UserWarning: [EXPERIMENTAL] AgentCardBuilder: ADK Implementation for A2A support (A2aAgentExecutor, RemoteA2aAgent and corresponding supporting components etc.) is in experimental mode and is subject to breaking changes. A2A protocol and SDK are themselves not experimental. Once it's stable enough the experimental mode will be removed. Your feedback is welcome.
+  agent_card = await AgentCardBuilder(
+/usr/local/google/home/xcyu/projects/reusable/vidgen/app/app_utils/a2a.py:123: UserWarning: [EXPERIMENTAL] A2aAgentExecutor: ADK Implementation for A2A support (A2aAgentExecutor, RemoteA2aAgent and corresponding supporting components etc.) is in experimental mode and is subject to breaking changes. A2A protocol and SDK are themselves not experimental. Once it's stable enough the experimental mode will be removed. Your feedback is welcome.
+  agent_executor=A2aAgentExecutor(runner=runner),
+/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/a2a/executor/a2a_agent_executor.py:76: UserWarning: [EXPERIMENTAL] A2aAgentExecutorConfig: ADK Implementation for A2A support (A2aAgentExecutor, RemoteA2aAgent and corresponding supporting components etc.) is in experimental mode and is subject to breaking changes. A2A protocol and SDK are themselves not experimental. Once it's stable enough the experimental mode will be removed. Your feedback is welcome.
+  self._config = config or A2aAgentExecutorConfig()
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:18080 (Press CTRL+C to quit)
+INFO:     127.0.0.1:60338 - "GET / HTTP/1.1" 307 Temporary Redirect
+INFO:     127.0.0.1:60346 - "GET /dev-ui/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60362 - "POST /apps/app/users/cli-user/sessions HTTP/1.1" 200 OK
+App "app" can transfer between agents but has no context_cache_config. Every transfer swaps the system instruction and the tool set, so the request prefix changes and the whole prompt is re-sent uncached after each transfer. Set context_cache_config on the app to give each agent its own cache.
+INFO:     127.0.0.1:60376 - "POST /run_sse HTTP/1.1" 200 OK
+/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/tools/transfer_to_agent_tool.py:72: UserWarning: [EXPERIMENTAL] feature FeatureName.JSON_SCHEMA_FOR_FUNC_DECL is enabled.
+  function_decl = super()._get_declaration()
+Node execution failed with exception
+Traceback (most recent call last):
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/workflow/_node_runner.py", line 136, in run
+    await self._execute_node(ctx, node_input)
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/workflow/_node_runner.py", line 274, in _execute_node
+    await self._run_node_loop(ctx, node_input)
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/workflow/_node_runner.py", line 288, in _run_node_loop
+    async for event in agen:
+      self._track_event_in_context(event, ctx)
+      await self._enqueue_event(event, ctx)
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/workflow/_base_node.py", line 166, in run
+    async for item in agen:
+    ...<12 lines>...
+        yield Event(output=validated)
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/agents/llm_agent.py", line 614, in _run_impl
+    async for event in agen:
+    ...<4 lines>...
+      yield event
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/workflow/_llm_agent_wrapper.py", line 468, in run_llm_agent_as_node
+    async for event in run_iter:
+    ...<33 lines>...
+        break
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/agents/base_agent.py", line 307, in run_async
+    async for event in agen:
+      yield event
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/agents/llm_agent.py", line 563, in _run_async_impl
+    async for event in agen:
+    ...<8 lines>...
+        should_pause = True
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/flows/llm_flows/base_llm_flow.py", line 1032, in run_async
+    async for event in agen:
+      last_event = event
+      yield event
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/flows/llm_flows/base_llm_flow.py", line 1112, in _run_one_step_async
+    async for llm_response in agen:
+    ...<15 lines>...
+          yield event
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/flows/llm_flows/base_llm_flow.py", line 1570, in _call_llm_async
+    async for event in agen:
+      yield event
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/flows/llm_flows/base_llm_flow.py", line 1548, in _call_llm_with_tracing
+    async for llm_response in agen:
+    ...<18 lines>...
+      yield llm_response
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/flows/llm_flows/base_llm_flow.py", line 1631, in _run_and_handle_error
+    async for response in agen:
+      yield response
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/flows/llm_flows/base_llm_flow.py", line 449, in _run_and_handle_error
+    raise model_error
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/flows/llm_flows/base_llm_flow.py", line 426, in _run_and_handle_error
+    async for llm_response in agen:
+      tel_ctx.record_llm_response(invocation_context, llm_response)
+      yield llm_response
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/models/google_llm.py", line 310, in generate_content_async
+    raise ce
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/models/google_llm.py", line 288, in generate_content_async
+    response = await self.api_client.aio.models.generate_content(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/genai/models.py", line 8700, in generate_content
+    return await self._generate_content(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        model=model, contents=contents, config=final_parsed_config
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/genai/models.py", line 7185, in _generate_content
+    response = await self._api_client.async_request(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        'post', path, request_dict, http_options
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/genai/_api_client.py", line 1793, in async_request
+    result = await self._async_request(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+        http_request=http_request, http_options=http_options, stream=False
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/genai/_api_client.py", line 1726, in _async_request
+    return await self._async_retry(  # type: ignore[no-any-return]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        self._async_request_once, http_request, stream
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/tenacity/asyncio/__init__.py", line 112, in __call__
+    do = await self.iter(retry_state=retry_state)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/tenacity/asyncio/__init__.py", line 157, in iter
+    result = await action(retry_state)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/tenacity/_utils.py", line 111, in inner
+    return call(*args, **kwargs)
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/tenacity/__init__.py", line 393, in <lambda>
+    self._add_action_func(lambda rs: rs.outcome.result())
+                                     ~~~~~~~~~~~~~~~~~^^
+  File "/usr/lib/python3.13/concurrent/futures/_base.py", line 453, in result
+    return self.__get_result()
+           ~~~~~~~~~~~~~~~~~^^
+  File "/usr/lib/python3.13/concurrent/futures/_base.py", line 402, in __get_result
+    raise self._exception
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/tenacity/asyncio/__init__.py", line 116, in __call__
+    result = await fn(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/genai/_api_client.py", line 1654, in _async_request_once
+    await errors.APIError.raise_for_async_response(response)
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/genai/errors.py", line 265, in raise_for_async_response
+    await cls.raise_error_async(status_code, response_json, response)
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/genai/errors.py", line 287, in raise_error_async
+    raise ClientError(status_code, response_json, response)
+google.genai.errors.ClientError: 403 PERMISSION_DENIED. {'error': {'code': 403, 'message': "Permission 'aiplatform.endpoints.predict' denied on resource '//aiplatform.googleapis.com/projects/vital-octagon-19612/locations/global/publishers/google/models/gemini-3.7-flash' (or it may not exist). Remediate access with this Troubleshooter URL or share it with your administrator - https://console.cloud.google.com/iam-admin/troubleshooter/summary;errorId=CiQwMWEwMzgwNi1jMjgwLTc0NjItOTU5Ny1iMTI0YTlhNDA3MGYSV3Byb2plY3RzL3ZpdGFsLW9jdGFnb24tMTk2MTIvbG9jYXRpb25zL2dsb2JhbC9wdWJsaXNoZXJzL2dvb2dsZS9tb2RlbHMvZ2VtaW5pLTMuNy1mbGFzaA%3D%3D .", 'status': 'PERMISSION_DENIED', 'details': [{'@type': 'type.googleapis.com/google.rpc.ErrorInfo', 'reason': 'IAM_PERMISSION_DENIED', 'domain': 'aiplatform.googleapis.com', 'metadata': {'error_info_id': 'CiQwMWEwMzgwNi1jMjgwLTc0NjItOTU5Ny1iMTI0YTlhNDA3MGYSV3Byb2plY3RzL3ZpdGFsLW9jdGFnb24tMTk2MTIvbG9jYXRpb25zL2dsb2JhbC9wdWJsaXNoZXJzL2dvb2dsZS9tb2RlbHMvZ2VtaW5pLTMuNy1mbGFzaA==', 'resource': 'projects/vital-octagon-19612/locations/global/publishers/google/models/gemini-3.7-flash', 'permission': 'aiplatform.endpoints.predict', 'troubleshooter_url': 'https://console.cloud.google.com/iam-admin/troubleshooter/summary;errorId=CiQwMWEwMzgwNi1jMjgwLTc0NjItOTU5Ny1iMTI0YTlhNDA3MGYSV3Byb2plY3RzL3ZpdGFsLW9jdGFnb24tMTk2MTIvbG9jYXRpb25zL2dsb2JhbC9wdWJsaXNoZXJzL2dvb2dsZS9tb2RlbHMvZ2VtaW5pLTMuNy1mbGFzaA%3D%3D'}}]}}
+Root node vidgen_orchestrator failed.
+Traceback (most recent call last):
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/runners.py", line 676, in _drive_root_node
+    await root_ctx._run_node_internal(
+    ...<3 lines>...
+    )
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/agents/context.py", line 608, in _run_node_internal
+    raise DynamicNodeFailError(
+    ...<3 lines>...
+    )
+google.adk.workflow._errors.DynamicNodeFailError: Dynamic node vidgen_orchestrator failed
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/runners.py", line 975, in _cleanup_root_task
+    await task
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/runners.py", line 685, in _drive_root_node
+    raise e.error
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/workflow/_node_runner.py", line 136, in run
+    await self._execute_node(ctx, node_input)
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/workflow/_node_runner.py", line 274, in _execute_node
+    await self._run_node_loop(ctx, node_input)
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/workflow/_node_runner.py", line 288, in _run_node_loop
+    async for event in agen:
+      self._track_event_in_context(event, ctx)
+      await self._enqueue_event(event, ctx)
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/workflow/_base_node.py", line 166, in run
+    async for item in agen:
+    ...<12 lines>...
+        yield Event(output=validated)
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/agents/llm_agent.py", line 614, in _run_impl
+    async for event in agen:
+    ...<4 lines>...
+      yield event
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/workflow/_llm_agent_wrapper.py", line 468, in run_llm_agent_as_node
+    async for event in run_iter:
+    ...<33 lines>...
+        break
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/agents/base_agent.py", line 307, in run_async
+    async for event in agen:
+      yield event
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/agents/llm_agent.py", line 563, in _run_async_impl
+    async for event in agen:
+    ...<8 lines>...
+        should_pause = True
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/flows/llm_flows/base_llm_flow.py", line 1032, in run_async
+    async for event in agen:
+      last_event = event
+      yield event
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/flows/llm_flows/base_llm_flow.py", line 1112, in _run_one_step_async
+    async for llm_response in agen:
+    ...<15 lines>...
+          yield event
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/flows/llm_flows/base_llm_flow.py", line 1570, in _call_llm_async
+    async for event in agen:
+      yield event
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/flows/llm_flows/base_llm_flow.py", line 1548, in _call_llm_with_tracing
+    async for llm_response in agen:
+    ...<18 lines>...
+      yield llm_response
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/flows/llm_flows/base_llm_flow.py", line 1631, in _run_and_handle_error
+    async for response in agen:
+      yield response
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/flows/llm_flows/base_llm_flow.py", line 449, in _run_and_handle_error
+    raise model_error
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/flows/llm_flows/base_llm_flow.py", line 426, in _run_and_handle_error
+    async for llm_response in agen:
+      tel_ctx.record_llm_response(invocation_context, llm_response)
+      yield llm_response
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/models/google_llm.py", line 310, in generate_content_async
+    raise ce
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/models/google_llm.py", line 288, in generate_content_async
+    response = await self.api_client.aio.models.generate_content(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/genai/models.py", line 8700, in generate_content
+    return await self._generate_content(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        model=model, contents=contents, config=final_parsed_config
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/genai/models.py", line 7185, in _generate_content
+    response = await self._api_client.async_request(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        'post', path, request_dict, http_options
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/genai/_api_client.py", line 1793, in async_request
+    result = await self._async_request(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+        http_request=http_request, http_options=http_options, stream=False
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/genai/_api_client.py", line 1726, in _async_request
+    return await self._async_retry(  # type: ignore[no-any-return]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        self._async_request_once, http_request, stream
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/tenacity/asyncio/__init__.py", line 112, in __call__
+    do = await self.iter(retry_state=retry_state)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/tenacity/asyncio/__init__.py", line 157, in iter
+    result = await action(retry_state)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/tenacity/_utils.py", line 111, in inner
+    return call(*args, **kwargs)
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/tenacity/__init__.py", line 393, in <lambda>
+    self._add_action_func(lambda rs: rs.outcome.result())
+                                     ~~~~~~~~~~~~~~~~~^^
+  File "/usr/lib/python3.13/concurrent/futures/_base.py", line 453, in result
+    return self.__get_result()
+           ~~~~~~~~~~~~~~~~~^^
+  File "/usr/lib/python3.13/concurrent/futures/_base.py", line 402, in __get_result
+    raise self._exception
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/tenacity/asyncio/__init__.py", line 116, in __call__
+    result = await fn(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/genai/_api_client.py", line 1654, in _async_request_once
+    await errors.APIError.raise_for_async_response(response)
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/genai/errors.py", line 265, in raise_for_async_response
+    await cls.raise_error_async(status_code, response_json, response)
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/genai/errors.py", line 287, in raise_error_async
+    raise ClientError(status_code, response_json, response)
+google.genai.errors.ClientError: 403 PERMISSION_DENIED. {'error': {'code': 403, 'message': "Permission 'aiplatform.endpoints.predict' denied on resource '//aiplatform.googleapis.com/projects/vital-octagon-19612/locations/global/publishers/google/models/gemini-3.7-flash' (or it may not exist). Remediate access with this Troubleshooter URL or share it with your administrator - https://console.cloud.google.com/iam-admin/troubleshooter/summary;errorId=CiQwMWEwMzgwNi1jMjgwLTc0NjItOTU5Ny1iMTI0YTlhNDA3MGYSV3Byb2plY3RzL3ZpdGFsLW9jdGFnb24tMTk2MTIvbG9jYXRpb25zL2dsb2JhbC9wdWJsaXNoZXJzL2dvb2dsZS9tb2RlbHMvZ2VtaW5pLTMuNy1mbGFzaA%3D%3D .", 'status': 'PERMISSION_DENIED', 'details': [{'@type': 'type.googleapis.com/google.rpc.ErrorInfo', 'reason': 'IAM_PERMISSION_DENIED', 'domain': 'aiplatform.googleapis.com', 'metadata': {'error_info_id': 'CiQwMWEwMzgwNi1jMjgwLTc0NjItOTU5Ny1iMTI0YTlhNDA3MGYSV3Byb2plY3RzL3ZpdGFsLW9jdGFnb24tMTk2MTIvbG9jYXRpb25zL2dsb2JhbC9wdWJsaXNoZXJzL2dvb2dsZS9tb2RlbHMvZ2VtaW5pLTMuNy1mbGFzaA==', 'resource': 'projects/vital-octagon-19612/locations/global/publishers/google/models/gemini-3.7-flash', 'permission': 'aiplatform.endpoints.predict', 'troubleshooter_url': 'https://console.cloud.google.com/iam-admin/troubleshooter/summary;errorId=CiQwMWEwMzgwNi1jMjgwLTc0NjItOTU5Ny1iMTI0YTlhNDA3MGYSV3Byb2plY3RzL3ZpdGFsLW9jdGFnb24tMTk2MTIvbG9jYXRpb25zL2dsb2JhbC9wdWJsaXNoZXJzL2dvb2dsZS9tb2RlbHMvZ2VtaW5pLTMuNy1mbGFzaA%3D%3D'}}]}}
+Error in event_generator: 403 PERMISSION_DENIED. {'error': {'code': 403, 'message': "Permission 'aiplatform.endpoints.predict' denied on resource '//aiplatform.googleapis.com/projects/vital-octagon-19612/locations/global/publishers/google/models/gemini-3.7-flash' (or it may not exist). Remediate access with this Troubleshooter URL or share it with your administrator - https://console.cloud.google.com/iam-admin/troubleshooter/summary;errorId=CiQwMWEwMzgwNi1jMjgwLTc0NjItOTU5Ny1iMTI0YTlhNDA3MGYSV3Byb2plY3RzL3ZpdGFsLW9jdGFnb24tMTk2MTIvbG9jYXRpb25zL2dsb2JhbC9wdWJsaXNoZXJzL2dvb2dsZS9tb2RlbHMvZ2VtaW5pLTMuNy1mbGFzaA%3D%3D .", 'status': 'PERMISSION_DENIED', 'details': [{'@type': 'type.googleapis.com/google.rpc.ErrorInfo', 'reason': 'IAM_PERMISSION_DENIED', 'domain': 'aiplatform.googleapis.com', 'metadata': {'error_info_id': 'CiQwMWEwMzgwNi1jMjgwLTc0NjItOTU5Ny1iMTI0YTlhNDA3MGYSV3Byb2plY3RzL3ZpdGFsLW9jdGFnb24tMTk2MTIvbG9jYXRpb25zL2dsb2JhbC9wdWJsaXNoZXJzL2dvb2dsZS9tb2RlbHMvZ2VtaW5pLTMuNy1mbGFzaA==', 'resource': 'projects/vital-octagon-19612/locations/global/publishers/google/models/gemini-3.7-flash', 'permission': 'aiplatform.endpoints.predict', 'troubleshooter_url': 'https://console.cloud.google.com/iam-admin/troubleshooter/summary;errorId=CiQwMWEwMzgwNi1jMjgwLTc0NjItOTU5Ny1iMTI0YTlhNDA3MGYSV3Byb2plY3RzL3ZpdGFsLW9jdGFnb24tMTk2MTIvbG9jYXRpb25zL2dsb2JhbC9wdWJsaXNoZXJzL2dvb2dsZS9tb2RlbHMvZ2VtaW5pLTMuNy1mbGFzaA%3D%3D'}}]}}
+Traceback (most recent call last):
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/runners.py", line 676, in _drive_root_node
+    await root_ctx._run_node_internal(
+    ...<3 lines>...
+    )
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/agents/context.py", line 608, in _run_node_internal
+    raise DynamicNodeFailError(
+    ...<3 lines>...
+    )
+google.adk.workflow._errors.DynamicNodeFailError: Dynamic node vidgen_orchestrator failed
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/cli/api_server.py", line 1912, in event_generator
+    async for event in agen:
+    ...<25 lines>...
+        yield f"data: {sse_event}\n\n"
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/runners.py", line 1235, in run_async
+    async for event in agen:
+      yield event
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/runners.py", line 703, in _run_node_async
+    await self._cleanup_root_task(task, self.agent.name)
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/runners.py", line 975, in _cleanup_root_task
+    await task
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/runners.py", line 685, in _drive_root_node
+    raise e.error
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/workflow/_node_runner.py", line 136, in run
+    await self._execute_node(ctx, node_input)
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/workflow/_node_runner.py", line 274, in _execute_node
+    await self._run_node_loop(ctx, node_input)
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/workflow/_node_runner.py", line 288, in _run_node_loop
+    async for event in agen:
+      self._track_event_in_context(event, ctx)
+      await self._enqueue_event(event, ctx)
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/workflow/_base_node.py", line 166, in run
+    async for item in agen:
+    ...<12 lines>...
+        yield Event(output=validated)
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/agents/llm_agent.py", line 614, in _run_impl
+    async for event in agen:
+    ...<4 lines>...
+      yield event
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/workflow/_llm_agent_wrapper.py", line 468, in run_llm_agent_as_node
+    async for event in run_iter:
+    ...<33 lines>...
+        break
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/agents/base_agent.py", line 307, in run_async
+    async for event in agen:
+      yield event
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/agents/llm_agent.py", line 563, in _run_async_impl
+    async for event in agen:
+    ...<8 lines>...
+        should_pause = True
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/flows/llm_flows/base_llm_flow.py", line 1032, in run_async
+    async for event in agen:
+      last_event = event
+      yield event
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/flows/llm_flows/base_llm_flow.py", line 1112, in _run_one_step_async
+    async for llm_response in agen:
+    ...<15 lines>...
+          yield event
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/flows/llm_flows/base_llm_flow.py", line 1570, in _call_llm_async
+    async for event in agen:
+      yield event
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/flows/llm_flows/base_llm_flow.py", line 1548, in _call_llm_with_tracing
+    async for llm_response in agen:
+    ...<18 lines>...
+      yield llm_response
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/flows/llm_flows/base_llm_flow.py", line 1631, in _run_and_handle_error
+    async for response in agen:
+      yield response
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/flows/llm_flows/base_llm_flow.py", line 449, in _run_and_handle_error
+    raise model_error
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/flows/llm_flows/base_llm_flow.py", line 426, in _run_and_handle_error
+    async for llm_response in agen:
+      tel_ctx.record_llm_response(invocation_context, llm_response)
+      yield llm_response
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/models/google_llm.py", line 310, in generate_content_async
+    raise ce
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/adk/models/google_llm.py", line 288, in generate_content_async
+    response = await self.api_client.aio.models.generate_content(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/genai/models.py", line 8700, in generate_content
+    return await self._generate_content(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        model=model, contents=contents, config=final_parsed_config
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/genai/models.py", line 7185, in _generate_content
+    response = await self._api_client.async_request(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        'post', path, request_dict, http_options
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/genai/_api_client.py", line 1793, in async_request
+    result = await self._async_request(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+        http_request=http_request, http_options=http_options, stream=False
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/genai/_api_client.py", line 1726, in _async_request
+    return await self._async_retry(  # type: ignore[no-any-return]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        self._async_request_once, http_request, stream
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/tenacity/asyncio/__init__.py", line 112, in __call__
+    do = await self.iter(retry_state=retry_state)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/tenacity/asyncio/__init__.py", line 157, in iter
+    result = await action(retry_state)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/tenacity/_utils.py", line 111, in inner
+    return call(*args, **kwargs)
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/tenacity/__init__.py", line 393, in <lambda>
+    self._add_action_func(lambda rs: rs.outcome.result())
+                                     ~~~~~~~~~~~~~~~~~^^
+  File "/usr/lib/python3.13/concurrent/futures/_base.py", line 453, in result
+    return self.__get_result()
+           ~~~~~~~~~~~~~~~~~^^
+  File "/usr/lib/python3.13/concurrent/futures/_base.py", line 402, in __get_result
+    raise self._exception
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/tenacity/asyncio/__init__.py", line 116, in __call__
+    result = await fn(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/genai/_api_client.py", line 1654, in _async_request_once
+    await errors.APIError.raise_for_async_response(response)
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/genai/errors.py", line 265, in raise_for_async_response
+    await cls.raise_error_async(status_code, response_json, response)
+  File "/usr/local/google/home/xcyu/projects/reusable/vidgen/.venv/lib/python3.13/site-packages/google/genai/errors.py", line 287, in raise_error_async
+    raise ClientError(status_code, response_json, response)
+google.genai.errors.ClientError: 403 PERMISSION_DENIED. {'error': {'code': 403, 'message': "Permission 'aiplatform.endpoints.predict' denied on resource '//aiplatform.googleapis.com/projects/vital-octagon-19612/locations/global/publishers/google/models/gemini-3.7-flash' (or it may not exist). Remediate access with this Troubleshooter URL or share it with your administrator - https://console.cloud.google.com/iam-admin/troubleshooter/summary;errorId=CiQwMWEwMzgwNi1jMjgwLTc0NjItOTU5Ny1iMTI0YTlhNDA3MGYSV3Byb2plY3RzL3ZpdGFsLW9jdGFnb24tMTk2MTIvbG9jYXRpb25zL2dsb2JhbC9wdWJsaXNoZXJzL2dvb2dsZS9tb2RlbHMvZ2VtaW5pLTMuNy1mbGFzaA%3D%3D .", 'status': 'PERMISSION_DENIED', 'details': [{'@type': 'type.googleapis.com/google.rpc.ErrorInfo', 'reason': 'IAM_PERMISSION_DENIED', 'domain': 'aiplatform.googleapis.com', 'metadata': {'error_info_id': 'CiQwMWEwMzgwNi1jMjgwLTc0NjItOTU5Ny1iMTI0YTlhNDA3MGYSV3Byb2plY3RzL3ZpdGFsLW9jdGFnb24tMTk2MTIvbG9jYXRpb25zL2dsb2JhbC9wdWJsaXNoZXJzL2dvb2dsZS9tb2RlbHMvZ2VtaW5pLTMuNy1mbGFzaA==', 'resource': 'projects/vital-octagon-19612/locations/global/publishers/google/models/gemini-3.7-flash', 'permission': 'aiplatform.endpoints.predict', 'troubleshooter_url': 'https://console.cloud.google.com/iam-admin/troubleshooter/summary;errorId=CiQwMWEwMzgwNi1jMjgwLTc0NjItOTU5Ny1iMTI0YTlhNDA3MGYSV3Byb2plY3RzL3ZpdGFsLW9jdGFnb24tMTk2MTIvbG9jYXRpb25zL2dsb2JhbC9wdWJsaXNoZXJzL2dvb2dsZS9tb2RlbHMvZ2VtaW5pLTMuNy1mbGFzaA%3D%3D'}}]}}
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [2868502]

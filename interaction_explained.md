@@ -13,17 +13,17 @@ In our system (`src/agents/stitcher_graph.py`), agents communicate through **Sha
                                   │
                                   ▼
                    ┌──────────────────────────────┐
-                   │   1. SCREENWRITER AGENT      │ (gemini-3.6-flash)
+                   │   1. SCREENWRITER AGENT      │ (gemini-3.7-flash)
                    └──────────────┬───────────────┘
                                   │ 3-Act Narrative Script
                                   ▼
                    ┌──────────────────────────────┐
-                   │   2. STORYBOARDER AGENT      │ (gemini-3.6-flash)
+                   │   2. STORYBOARDER AGENT      │ (gemini-3.7-flash)
                    └──────────────┬───────────────┘
                                   │ Structured Shot Specs (JSON)
                                   ▼
                    ┌──────────────────────────────┐
-                   │   3. PROMPT OPTIMIZER AGENT  │ (gemini-3.6-flash)
+                   │   3. PROMPT OPTIMIZER AGENT  │ (gemini-3.7-flash)
                    └──────────────┬───────────────┘
                                   │ Enhanced Multimodal Prompt
                                   ▼

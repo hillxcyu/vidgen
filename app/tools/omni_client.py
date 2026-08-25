@@ -5,7 +5,8 @@ from typing import List, Optional
 import cv2
 import numpy as np
 from google import genai
-from src.config import get_genai_client, Config
+from app.config import get_genai_client, Config
+
 
 def build_omni_control_string(
     prompt: str,
@@ -27,10 +28,6 @@ def build_omni_control_string(
     
     Format:
     [MMC_MODE_STRING] [aspect_ratio=VALUE] [resolution=VALUE] [duration=VALUEs] <user prompt>
-    
-    Examples:
-    - I2V: "[# Sources <FIRST_FRAME>image_0.png] [aspect_ratio=16:9] [resolution=720p] [duration=10s] A red panda skiing"
-    - R2V with Voice: "[# References <IMAGE_REF_0>[Character A]image_0.png <AUDIO_REF_0>[Character A]audio_0.wav] [aspect_ratio=16:9] [resolution=720p] [duration=10s] Character A speaks dialogue: 'Welcome to Hakuba!'"
     """
     ref_imgs = reference_images_b64 if reference_images_b64 is not None else reference_assets_b64
     ref_auds = reference_audio_b64 or []
@@ -47,7 +44,6 @@ def build_omni_control_string(
     if ref_imgs and len(ref_imgs) > 0:
         for i in range(min(10, len(ref_imgs))):
             img_idx = i + image_offset
-            # Tag the primary reference (index 0) as character entity, subsequent references as object/prop [no_character]
             entity_tag = "[Character A]" if i == 0 else "[no_character]"
             ref_tags.append(f"<IMAGE_REF_{i}>{entity_tag}image_{img_idx}.png")
 
@@ -72,6 +68,7 @@ def build_omni_control_string(
     full_control_string = f"{mmc_mode_str}{fc_args_str} {prompt_content}".strip()
     return full_control_string
 
+
 def _create_fallback_mp4_bytes(prompt: str) -> bytes:
     """Generates a synthetic 10-second MP4 clip for local fallback/demonstration."""
     with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp:
@@ -80,7 +77,6 @@ def _create_fallback_mp4_bytes(prompt: str) -> bytes:
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
     out = cv2.VideoWriter(path, fourcc, 10.0, (256, 256))
     for i in range(100):  # 10s at 10fps
-        # Synthetic animated frame
         frame = np.zeros((256, 256, 3), dtype=np.uint8)
         cv2.putText(frame, "GenMedia-Omni", (20, 100), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
         cv2.putText(frame, prompt[:35], (20, 140), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 255, 255), 1)
@@ -95,6 +91,7 @@ def _create_fallback_mp4_bytes(prompt: str) -> bytes:
         os.remove(path)
 
     return data
+
 
 def generate_omni_clip(
     prompt: str,
@@ -152,7 +149,6 @@ def generate_omni_clip(
         duration=duration
     )
 
-    # Append control string formatted prompt as text object for interactions.create
     payload.append({
         "type": "text",
         "text": formatted_prompt
@@ -165,18 +161,25 @@ def generate_omni_clip(
             timeout=600.0
         )
 
-        if hasattr(interaction, "output_video") and hasattr(interaction.output_video, "data"):
-            return base64.b64decode(interaction.output_video.data)
-        elif hasattr(interaction, "candidates") and len(interaction.candidates) > 0:
+        if hasattr(interaction, "output") and isinstance(interaction.output, bytes):
+            return interaction.output
+        if hasattr(interaction, "output_video") and not callable(getattr(interaction, "output_video", None)):
+            data_val = getattr(interaction.output_video, "data", None)
+            if isinstance(data_val, str):
+                return base64.b64decode(data_val)
+            elif isinstance(data_val, bytes):
+                return data_val
+        if hasattr(interaction, "candidates") and len(interaction.candidates) > 0:
             cand = interaction.candidates[0]
             if hasattr(cand, "content") and hasattr(cand.content, "parts"):
                 for part in cand.content.parts:
                     if hasattr(part, "inline_data") and part.inline_data:
-                        return part.inline_data.data
-        if hasattr(interaction, "output") and isinstance(interaction.output, bytes):
-            return interaction.output
+                        val = part.inline_data.data
+                        if isinstance(val, bytes):
+                            return val
+                        elif isinstance(val, str):
+                            return base64.b64decode(val)
         
-        # If output object format is non-standard
         return _create_fallback_mp4_bytes(formatted_prompt)
     except Exception as e:
         import traceback

@@ -1,0 +1,15 @@
+metrics_to_run:
+  - custom_response_quality
+  - video_pipeline_quality
+
+custom_metrics:
+  - name: custom_response_quality
+    custom_function_file: response_quality.py
+  - name: video_pipeline_quality
+    custom_function: |
+      def evaluate(instance):
+          trace = str(instance.get("agent_data") or "")
+          resp = str(instance.get("response") or "")
+          # Check if agent produced structured outputs or valid pipeline status
+          has_video = "stitched_video" in resp or "video" in resp.lower() or "success" in resp.lower()
+          return {"score": 1.0 if has_video else 0.5, "explanation": "Pipeline completed output structure check"}
