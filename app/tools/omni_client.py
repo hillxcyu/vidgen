@@ -11,6 +11,7 @@ from app.config import get_genai_client, Config
 def build_omni_control_string(
     prompt: str,
     input_image_b64: Optional[str] = None,
+    end_image_b64: Optional[str] = None,
     reference_images_b64: Optional[List[str]] = None,
     reference_assets_b64: Optional[List[str]] = None,
     reference_audio_b64: Optional[List[str]] = None,
@@ -22,6 +23,7 @@ def build_omni_control_string(
     """Builds Gemini Omni Control String according to Google Omni / Video Station specification.
     
     Supports:
+    - Dual-Anchor Chaining: <FIRST_FRAME>image_0.png and <LAST_FRAME>image_1.png
     - Image Reference tags: <IMAGE_REF_i>[Character A]image_i.png
     - Audio Reference tags: <AUDIO_REF_i>[Character A]audio_i.wav
     - Spoken dialogue / transcript matching across shots for voice consistency
@@ -32,13 +34,20 @@ def build_omni_control_string(
     ref_imgs = reference_images_b64 if reference_images_b64 is not None else reference_assets_b64
     ref_auds = reference_audio_b64 or []
     mmc_parts = []
+    source_tags = []
     ref_tags = []
 
-    # Image-to-Video Chaining Source Tag (<FIRST_FRAME>image_0.png)
+    # Image-to-Video Chaining Source Tags (<FIRST_FRAME> and <LAST_FRAME>)
     image_offset = 0
     if input_image_b64:
-        mmc_parts.append("# Sources <FIRST_FRAME>image_0.png")
-        image_offset = 1
+        source_tags.append(f"<FIRST_FRAME>image_{image_offset}.png")
+        image_offset += 1
+    if end_image_b64:
+        source_tags.append(f"<LAST_FRAME>image_{image_offset}.png")
+        image_offset += 1
+    
+    if source_tags:
+        mmc_parts.append(f"# Sources {' '.join(source_tags)}")
     
     # Image Character & Object Reference Tags (<IMAGE_REF_i>[Character A] / <IMAGE_REF_i>[no_character])
     if ref_imgs and len(ref_imgs) > 0:
@@ -96,6 +105,7 @@ def _create_fallback_mp4_bytes(prompt: str) -> bytes:
 def generate_omni_clip(
     prompt: str,
     input_image_b64: Optional[str] = None,
+    end_image_b64: Optional[str] = None,
     reference_images_b64: Optional[List[str]] = None,
     reference_assets_b64: Optional[List[str]] = None,
     reference_audio_b64: Optional[List[str]] = None,
@@ -110,7 +120,7 @@ def generate_omni_clip(
     Supports:
     - MMC Control Strings formatting (MMC mode tags, audio reference tags & FC argument tokens)
     - Mode A (Reference Mode): Image references + voice audio references + text prompt.
-    - Mode B (Sequential I2V Mode): Terminal frame base64 input + text motion prompt.
+    - Mode B (Sequential I2V Mode): Terminal frame base64 input + optional end frame base64 + text motion prompt.
     """
     if client is None:
         client = get_genai_client()
@@ -120,11 +130,17 @@ def generate_omni_clip(
     config = Config()
     payload = []
 
-    # Mode B: Image-to-Video Chaining
+    # Mode B: Image-to-Video Chaining & Dual-Anchor (First & Last Frame)
     if input_image_b64:
         payload.append({
             "type": "image",
             "data": input_image_b64,
+            "mime_type": "image/png"
+        })
+    if end_image_b64:
+        payload.append({
+            "type": "image",
+            "data": end_image_b64,
             "mime_type": "image/png"
         })
 
@@ -141,6 +157,7 @@ def generate_omni_clip(
     formatted_prompt = build_omni_control_string(
         prompt=prompt,
         input_image_b64=input_image_b64,
+        end_image_b64=end_image_b64,
         reference_images_b64=ref_imgs,
         reference_audio_b64=ref_auds,
         voice_transcript=voice_transcript,

@@ -17,6 +17,20 @@ def test_build_omni_control_string_i2v():
     assert "A red panda jumps onto a snowbank" in ctrl
 
 
+def test_build_omni_control_string_dual_anchor():
+    ctrl = build_omni_control_string(
+        prompt="A red panda adjusts goggles between shots",
+        input_image_b64="fake_first_frame",
+        end_image_b64="fake_last_frame",
+        aspect_ratio="16:9",
+        resolution="720p",
+        duration=10
+    )
+    assert "# Sources <FIRST_FRAME>image_0.png <LAST_FRAME>image_1.png" in ctrl
+    assert "[aspect_ratio=16:9]" in ctrl
+    assert "A red panda adjusts goggles between shots" in ctrl
+
+
 def test_build_omni_control_string_reference():
     ctrl = build_omni_control_string(
         prompt="skis down the mountain",

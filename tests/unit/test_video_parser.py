@@ -3,7 +3,7 @@ import tempfile
 import cv2
 import numpy as np
 import pytest
-from app.tools.video_parser import extract_last_frame, extract_keyframes
+from app.tools.video_parser import extract_first_frame, extract_last_frame, extract_keyframes
 
 
 @pytest.fixture
@@ -22,6 +22,20 @@ def dummy_video_file():
 
     if os.path.exists(path):
         os.remove(path)
+
+
+def test_extract_first_frame(dummy_video_file):
+    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+        out_png = tmp.name
+
+    b64_str = extract_first_frame(dummy_video_file, output_image_path=out_png)
+    assert b64_str is not None
+    assert len(b64_str) > 0
+    assert os.path.exists(out_png)
+    assert os.path.getsize(out_png) > 0
+
+    if os.path.exists(out_png):
+        os.remove(out_png)
 
 
 def test_extract_last_frame(dummy_video_file):

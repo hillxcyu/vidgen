@@ -26,6 +26,7 @@ def test_agent_definitions():
 def test_agent_tools():
     tool_names = [getattr(t, "__name__", str(t)) for t in root_agent.tools]
     assert "generate_video_shot_clip" in tool_names
+    assert "parse_initial_frame" in tool_names
     assert "parse_terminal_frame" in tool_names
     assert "concatenate_video_clips" in tool_names
     

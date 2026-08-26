@@ -23,7 +23,7 @@ from google.adk.tools import ToolContext, AgentTool
 from google.genai import types
 
 from app.config import Config, get_genai_client
-from app.tools.video_parser import extract_last_frame, extract_keyframes
+from app.tools.video_parser import extract_first_frame, extract_last_frame, extract_keyframes
 from app.tools.omni_client import generate_omni_clip, build_omni_control_string
 from app.tools.stitcher import stitch_videos
 from app.state import PipelineState, VideoShot, StoryboardEntry
@@ -38,6 +38,7 @@ async def generate_video_shot_clip(
     prompt: str,
     shot_index: int = 1,
     input_image_path: Optional[str] = None,
+    end_image_path: Optional[str] = None,
     aspect_ratio: str = "16:9",
     resolution: str = "720p",
     duration: int = 10,
@@ -48,7 +49,8 @@ async def generate_video_shot_clip(
     Args:
         prompt: Optimized visual prompt for the shot.
         shot_index: Index number of the shot (e.g. 1, 2, 3).
-        input_image_path: Optional path to initial/anchor frame image.
+        input_image_path: Optional path to starting/anchor frame image (e.g. last frame of shot k-1).
+        end_image_path: Optional path to ending/anchor frame image (e.g. first frame of shot k+1).
         aspect_ratio: Video aspect ratio ('16:9' or '9:16').
         resolution: Video resolution ('720p' or '1080p').
         duration: Clip duration in seconds (default 10).
@@ -64,9 +66,15 @@ async def generate_video_shot_clip(
         with open(input_image_path, "rb") as img_f:
             input_image_b64 = base64.b64encode(img_f.read()).decode("utf-8")
 
+    end_image_b64 = None
+    if end_image_path and os.path.exists(end_image_path):
+        with open(end_image_path, "rb") as end_f:
+            end_image_b64 = base64.b64encode(end_f.read()).decode("utf-8")
+
     clip_bytes = generate_omni_clip(
         prompt=prompt,
         input_image_b64=input_image_b64,
+        end_image_b64=end_image_b64,
         aspect_ratio=aspect_ratio,
         resolution=resolution,
         duration=duration,
@@ -112,6 +120,18 @@ async def generate_video_shot_clip(
         "artifact_exposed": artifact_saved,
         "duration": duration,
         "status": "completed"
+    }
+
+
+def parse_initial_frame(video_path: str) -> Dict[str, Any]:
+    """Extracts the initial (first) frame of a video clip for dual-anchor visual continuity."""
+    shot_name = os.path.splitext(os.path.basename(video_path))[0]
+    out_frame_path = os.path.join(OUTPUT_DIR, f"{shot_name}_first_frame.png")
+    frame_b64 = extract_first_frame(video_path, output_image_path=out_frame_path)
+    return {
+        "video_path": video_path,
+        "frame_image_path": out_frame_path,
+        "has_frame": bool(frame_b64)
     }
 
 
@@ -266,13 +286,14 @@ UNIFIED_BASE_SYSTEM_INSTRUCTION = (
     "System Architecture & Pipeline Roles:\n"
     "- ScreenwriterAgent: Expands narrative ideas into structured multi-scene screenplays with clear scene headings.\n"
     "- StoryboarderAgent: Converts screenplays into shot breakdown tables with camera angles, visual descriptions, character actions, and rubrics.\n"
-    "- PromptOptimizerAgent: Enhances visual prompts for Gemini Omni Flash (`gemini-omni-flash-preview`), enforcing single-shot continuous motion without cuts and preserving dialogue.\n"
+    "- PromptOptimizerAgent: Enhances visual prompts for Gemini Omni Flash (`gemini-omni-flash-preview`), enforcing single-shot continuous motion without cuts, incorporating previous QualityRater feedback on retries/modifications, and preserving dialogue.\n"
     "- HealthCheckerAgent: Audits candidate prompts for content safety, policy compliance, and visual feasibility.\n"
-    "- generate_video_shot_clip (Tool): Renders the actual video clip from prompt / initial frame.\n"
-    "- QualityRaterAgent: Evaluates generated video clips by inspecting actual MP4 video files via multimodal vision (`evaluate_video_clip_quality` tool).\n"
-    "- parse_terminal_frame (Tool): Extracts terminal frames for shot-to-shot visual chaining.\n"
+    "- generate_video_shot_clip (Tool): Renders a video clip from prompt with optional start and end frame anchors (`input_image_path`, `end_image_path`).\n"
+    "- parse_initial_frame (Tool): Extracts the initial (first) frame of a video clip for dual-anchor visual continuity.\n"
+    "- parse_terminal_frame (Tool): Extracts the terminal (last) frame of a video clip for Image-to-Video chaining.\n"
     "- concatenate_video_clips (Tool): Stitches individual video clips into the final video file.\n"
-    "- vidgen_orchestrator: Master pipeline coordinator that manages sub-agents and delivers video links and player to the user.\n\n"
+    "- QualityRaterAgent: Audits individual video clips and the complete final stitched video using multimodal vision (`evaluate_video_clip_quality` tool).\n"
+    "- vidgen_orchestrator: Master pipeline coordinator that manages sub-agents, orchestrates dual-anchor shot modifications, and delivers video links and player to the user.\n\n"
     "CRITICAL VISIBILITY REQUIREMENT: Every agent in this system MUST output its complete, formatted markdown report directly in the chat stream so the user sees all progress in real-time."
 )
 
@@ -324,13 +345,15 @@ prompt_optimizer_agent = Agent(
     instruction=(
         f"{UNIFIED_BASE_SYSTEM_INSTRUCTION}\n\n"
         "YOUR ACTIVE ROLE: PromptOptimizerAgent\n"
-        "TASK: Given a shot description (and optional previous feedback from QualityRaterAgent if retrying), enhance it with vivid lighting, motion descriptors, camera direction, and style cues for Gemini Omni Flash.\n"
+        "TASK: Given a shot description (and optional previous feedback/critique from QualityRaterAgent or user modification instructions), enhance it with vivid lighting, motion descriptors, camera direction, and style cues for Gemini Omni Flash.\n"
+        "FEEDBACK-DRIVEN OPTIMIZATION: When previous QualityRater feedback or user modification notes are provided, you MUST directly address and fix the identified flaws (e.g. lighting stability, character movement speed, object consistency).\n"
         "STRICT SINGLE-SHOT RULE: Enforce a single continuous take without cuts, transitions, or edits.\n"
         "STRICT DIALOGUE RULE: If spoken dialogue is provided, ensure exact spoken words are preserved without filler.\n"
         "CRITICAL VISIBILITY RULE: You MUST output your prompt optimization report in your response text for the user, highlighting:\n"
         "- **Shot #**: index\n"
         "- **Optimized Visual Prompt**: the enhanced cinematic prompt\n"
         "- **Cinematic Enhancements**: camera motion, volumetric lighting, texture/style descriptors\n"
+        "- **Feedback Addressed**: how previous critique/user instructions were incorporated\n"
         "After presenting the optimization details to the user, transfer control back to `vidgen_orchestrator` using `transfer_to_agent(agent_name='vidgen_orchestrator')`."
     ),
     description="Optimizes visual shot descriptions for Gemini Omni Flash video generation.",
@@ -480,16 +503,17 @@ quality_rater_agent = Agent(
     instruction=(
         f"{UNIFIED_BASE_SYSTEM_INSTRUCTION}\n\n"
         "YOUR ACTIVE ROLE: QualityRaterAgent\n"
-        "TASK: Evaluate the quality of a generated video clip at the given `video_path` across Subject Identity Consistency, Motion Smoothness, Prompt Adherence, and Temporal Asset Persistence.\n"
-        "CRITICAL TOOL INSTRUCTION: Whenever you are asked to evaluate a video clip, you MUST invoke the `evaluate_video_clip_quality(video_path=..., prompt=..., evaluation_criteria=...)` tool to inspect and audit the actual MP4 video file using multimodal vision.\n"
+        "TASK: Evaluate the quality of a generated video clip or the complete final stitched video at `video_path` across Subject Identity Consistency, Motion Smoothness, Prompt Adherence, and Temporal Asset Persistence.\n"
+        "CRITICAL TOOL INSTRUCTION: Whenever you are asked to evaluate a video clip or stitched video, you MUST invoke the `evaluate_video_clip_quality(video_path=..., prompt=..., evaluation_criteria=...)` tool to inspect and audit the actual MP4 video file using multimodal vision.\n"
+        "FOR FINAL STITCHED VIDEO: When auditing the full stitched video, evaluate overall narrative pacing, cross-shot visual continuity, color grading stability, and audio flow.\n"
         "CRITICAL VISIBILITY RULE: You MUST output your full quality evaluation report in your response text for the user, including:\n"
         "- **Quality Score**: X.XX / 1.0\n"
         "- **Verdict**: `PASSED` (if score >= 0.8) or `RETRY`\n"
         "- **Rubric Breakdown**: Subject Consistency, Motion Smoothness, Prompt Adherence, Temporal Persistence\n"
-        "- **Feedback / Critique**: specific observations and visual critique returned from the tool\n"
+        "- **Feedback / Critique & Suggestions**: specific visual observations and actionable suggestions for prompt refinement\n"
         "After presenting your quality rating report to the user, transfer control back to `vidgen_orchestrator` using `transfer_to_agent(agent_name='vidgen_orchestrator')`."
     ),
-    description="Evaluates video clip quality by inspecting actual video files using multimodal vision.",
+    description="Evaluates video clip and final stitched video quality by inspecting actual video files using multimodal vision.",
     tools=[evaluate_video_clip_quality],
     disallow_transfer_to_peers=True,
     disallow_transfer_to_parent=False,
@@ -505,11 +529,12 @@ root_agent = Agent(
         f"{UNIFIED_BASE_SYSTEM_INSTRUCTION}\n\n"
         "YOUR ACTIVE ROLE: vidgen_orchestrator (Master Pipeline Coordinator)\n"
         "You coordinate a specialized team of AI sub-agents to produce high-fidelity multi-shot generative videos.\n\n"
-        "When the user requests to create or generate a video, you MUST execute the following exact multi-agent pipeline step-by-step:\n\n"
-        "=== PHASE 1: PRE-PRODUCTION ===\n"
+        "=== WORKFLOW A: INITIAL MULTI-SHOT GENERATION ===\n"
+        "When the user requests to create or generate a new video, execute the following exact pipeline step-by-step:\n\n"
+        "--- PHASE 1: PRE-PRODUCTION ---\n"
         "1. Delegate to `ScreenwriterAgent` to expand the narrative concept into a structured screenplay.\n"
         "2. Delegate to `StoryboarderAgent` to convert the screenplay into structured shot specifications (scenes 1 to N).\n\n"
-        "=== PHASE 2: PRODUCTION LOOP (Execute for Shot 1 to N in sequence) ===\n"
+        "--- PHASE 2: PRODUCTION LOOP (Execute for Shot 1 to N in sequence) ---\n"
         "For each shot index `k` from 1 to N (allow up to 2 attempts per shot):\n"
         "   Step 2.1 - OPTIMIZE: Delegate to `PromptOptimizerAgent` to optimize the visual prompt for Gemini Omni Flash (pass QualityRater feedback if retrying).\n"
         "   Step 2.2 - AUDIT: Delegate to `HealthCheckerAgent` to verify safety and policy compliance.\n"
@@ -518,16 +543,32 @@ root_agent = Agent(
         "   Step 2.4 - RATE: Delegate to `QualityRaterAgent` passing the generated `video_path` to assess clip quality.\n"
         "   Step 2.5 - RETRY CHECK: If QualityRaterAgent verdict is RETRY / score < 0.8 and attempt < 2, repeat Steps 2.1-2.4 for shot `k` applying the rater's feedback.\n"
         "   Step 2.6 - CHAINING: If mode is 'i2v_chaining' and k < N, invoke tool `parse_terminal_frame(video_path=...)` to extract the anchor frame for shot k+1.\n\n"
-        "=== PHASE 3: POST-PRODUCTION & DELIVERY ===\n"
+        "--- PHASE 3: POST-PRODUCTION & FINAL EVALUATION ---\n"
         "1. STITCH: Invoke tool `concatenate_video_clips(video_paths=[...])` with the final valid clip paths from all shots.\n"
-        "2. DELIVER: Present the final summary to the user with full media accessibility:\n"
+        "2. FINAL QUALITY EVALUATION (CRITICAL STEP): Delegate to `QualityRaterAgent` passing `video_path=stitched_video_path` to evaluate the complete final video across narrative pacing, cross-shot visual continuity, and color grading.\n"
+        "3. DELIVER: Present the final summary to the user with full media accessibility:\n"
         "   - ALWAYS provide a prominent clickable markdown link to the final video using the actual video_url returned by the tool: [▶️ Click here to watch / download the final video](https://...)\n"
         "   - ALWAYS embed an HTML5 video player tag so users can watch directly inside chat: <video controls width=\"100%\" src=\"https://...\"></video> (using the actual HTTPS video_url)\n"
         "   - Mention that the video file is also exposed as an attached ADK session artifact file.\n"
-        "   - List each generated shot with its prompt, duration, individual clip link, and quality score."
+        "   - List each generated shot with its prompt, duration, individual clip link, and quality score.\n"
+        "   - Display the overall final video quality score and verdict.\n\n"
+        "=== WORKFLOW B: SHOT MODIFICATION & REGENERATION (DUAL-ANCHOR I2V) ===\n"
+        "When the user requests to modify, revise, or re-generate a specific shot `k` (where 1 <= k <= N):\n"
+        "1. OPTIMIZE WITH FEEDBACK: Delegate to `PromptOptimizerAgent` passing the user's modification instructions AND the suggestions/critique from previous `QualityRaterAgent` runs.\n"
+        "2. AUDIT: Delegate to `HealthCheckerAgent` to verify safety and policy compliance.\n"
+        "3. DUAL-ANCHOR FRAME EXTRACTION:\n"
+        "   - First Frame Anchor (Starting Frame): If preceding shot `k-1` exists, invoke tool `parse_terminal_frame(video_path='...shot_{k-1}.mp4')` to extract its last frame as `input_image_path`.\n"
+        "   - Last Frame Anchor (Ending Frame): If succeeding shot `k+1` exists, invoke tool `parse_initial_frame(video_path='...shot_{k+1}.mp4')` to extract its first frame as `end_image_path`.\n"
+        "   (This dual-anchor constraint guarantees that newly generated shot `k` seamlessly connects to both shot `k-1` and shot `k+1` without breaking narrative and visual flow).\n"
+        "4. DUAL-ANCHOR RENDER: Invoke tool `generate_video_shot_clip(prompt=..., shot_index=k, input_image_path=..., end_image_path=...)`.\n"
+        "5. RATE: Delegate to `QualityRaterAgent` passing the newly generated `video_path` to audit shot `k`.\n"
+        "6. RE-STITCH: Invoke tool `concatenate_video_clips(video_paths=[...])` with the updated list of shot video paths.\n"
+        "7. FINAL EVALUATION: Delegate to `QualityRaterAgent` to audit the newly stitched final video.\n"
+        "8. DELIVER: Present the updated final video with clickable link, embedded HTML5 player, updated shot metrics, and final quality rating."
     ),
     tools=[
         generate_video_shot_clip,
+        parse_initial_frame,
         parse_terminal_frame,
         concatenate_video_clips,
     ],
