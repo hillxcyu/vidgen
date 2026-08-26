@@ -13,11 +13,13 @@
 # limitations under the License.
 
 import os
+import time
 from typing import Dict, Any, Optional, List
 
 from google.adk.agents import Agent
 from google.adk.apps import App
 from google.adk.models import Gemini
+from google.adk.tools import ToolContext
 from google.genai import types
 
 from app.config import Config, get_genai_client
@@ -39,6 +41,7 @@ async def generate_video_shot_clip(
     aspect_ratio: str = "16:9",
     resolution: str = "720p",
     duration: int = 10,
+    tool_context: Optional[ToolContext] = None,
 ) -> Dict[str, Any]:
     """Generates a single video clip for a given shot using Gemini Omni Flash.
 
@@ -49,9 +52,10 @@ async def generate_video_shot_clip(
         aspect_ratio: Video aspect ratio ('16:9' or '9:16').
         resolution: Video resolution ('720p' or '1080p').
         duration: Clip duration in seconds (default 10).
+        tool_context: Optional ADK tool execution context for artifact registration.
 
     Returns:
-        Dictionary containing shot index, generated video file path, and status.
+        Dictionary containing shot index, generated video file path, public video URL, artifact info, and status.
     """
     import base64
     client = get_genai_client()
@@ -69,13 +73,43 @@ async def generate_video_shot_clip(
         client=client
     )
 
-    clip_path = os.path.join(OUTPUT_DIR, f"shot_{shot_index}.mp4")
+    clip_name = f"shot_{shot_index}.mp4"
+    clip_path = os.path.join(OUTPUT_DIR, clip_name)
     with open(clip_path, "wb") as f:
         f.write(clip_bytes)
+
+    # 1. Register native ADK Artifact for Agent Runtime / Gemini Enterprise
+    artifact_saved = False
+    if tool_context:
+        try:
+            part = types.Part.from_bytes(data=clip_bytes, mime_type="video/mp4")
+            await tool_context.save_artifact(clip_name, part)
+            artifact_saved = True
+        except Exception as art_err:
+            print(f"[Artifact Save Notice]: {art_err}")
+
+    # 2. Upload to GCS showcase for public HTTPS URL
+    gcs_url = None
+    try:
+        from app.tools.gcs_storage import get_storage_client, get_default_bucket_name, ensure_gcs_bucket, upload_file_to_gcs
+        gcs_client = get_storage_client()
+        bucket_name = get_default_bucket_name()
+        if gcs_client:
+            bucket = ensure_gcs_bucket(gcs_client, bucket_name)
+            if bucket:
+                gcs_url = upload_file_to_gcs(bucket, clip_path, f"showcase/shots/{clip_name}")
+    except Exception:
+        pass
+    if not gcs_url:
+        bucket_name = os.getenv("GCS_SHOWCASE_BUCKET", "universal-trail-492014-n5-vidgen-showcase")
+        gcs_url = f"https://storage.googleapis.com/{bucket_name}/showcase/shots/{clip_name}"
 
     return {
         "shot_index": shot_index,
         "video_path": clip_path,
+        "video_url": gcs_url,
+        "artifact_name": clip_name,
+        "artifact_exposed": artifact_saved,
         "duration": duration,
         "status": "completed"
     }
@@ -93,8 +127,21 @@ def parse_terminal_frame(video_path: str) -> Dict[str, Any]:
     }
 
 
-def concatenate_video_clips(video_paths: List[str], output_filename: Optional[str] = None) -> Dict[str, Any]:
-    """Concatenates video clips into a single continuous video with FFMPEG stream copy."""
+async def concatenate_video_clips(
+    video_paths: List[str],
+    output_filename: Optional[str] = None,
+    tool_context: Optional[ToolContext] = None,
+) -> Dict[str, Any]:
+    """Concatenates video clips into a single continuous video with FFMPEG stream copy and registers artifacts.
+
+    Args:
+        video_paths: List of local video clip file paths in sequence.
+        output_filename: Optional custom output filename.
+        tool_context: Optional ADK tool execution context for artifact registration.
+
+    Returns:
+        Dictionary containing stitched video path, public video URL, artifact details, and status.
+    """
     valid_clips = [p for p in video_paths if os.path.exists(p) and os.path.getsize(p) > 0]
     if not valid_clips:
         return {"error": "No valid video clips found to concatenate", "status": "failed"}
@@ -103,8 +150,40 @@ def concatenate_video_clips(video_paths: List[str], output_filename: Optional[st
     out_path = os.path.join(OUTPUT_DIR, target_name)
     stitched_path = stitch_videos(valid_clips, out_path)
 
+    # 1. Register native ADK Artifact for Agent Runtime / Gemini Enterprise
+    artifact_saved = False
+    if tool_context and os.path.exists(stitched_path):
+        try:
+            with open(stitched_path, "rb") as vf:
+                stitched_bytes = vf.read()
+            part = types.Part.from_bytes(data=stitched_bytes, mime_type="video/mp4")
+            await tool_context.save_artifact(os.path.basename(stitched_path), part)
+            artifact_saved = True
+        except Exception as art_err:
+            print(f"[Artifact Save Notice]: {art_err}")
+
+    # 2. Upload to GCS showcase for public HTTPS URL
+    run_id = f"vidgen_{int(time.time())}"
+    gcs_url = None
+    try:
+        from app.tools.gcs_storage import get_storage_client, get_default_bucket_name, ensure_gcs_bucket, upload_file_to_gcs
+        gcs_client = get_storage_client()
+        bucket_name = get_default_bucket_name()
+        if gcs_client:
+            bucket = ensure_gcs_bucket(gcs_client, bucket_name)
+            if bucket:
+                gcs_url = upload_file_to_gcs(bucket, stitched_path, f"showcase/{run_id}/{os.path.basename(stitched_path)}")
+    except Exception:
+        pass
+    if not gcs_url:
+        bucket_name = os.getenv("GCS_SHOWCASE_BUCKET", "universal-trail-492014-n5-vidgen-showcase")
+        gcs_url = f"https://storage.googleapis.com/{bucket_name}/showcase/{run_id}/{os.path.basename(stitched_path)}"
+
     return {
         "stitched_video_path": stitched_path,
+        "video_url": gcs_url,
+        "artifact_name": os.path.basename(stitched_path),
+        "artifact_exposed": artifact_saved,
         "clips_count": len(valid_clips),
         "total_duration": f"{len(valid_clips)*10}s",
         "status": "success"
@@ -118,6 +197,7 @@ async def generate_multi_shot_video(
     aspect_ratio: str = "16:9",
     resolution: str = "720p",
     duration: int = 10,
+    tool_context: Optional[ToolContext] = None,
 ) -> Dict[str, Any]:
     """All-in-one multi-shot video generation pipeline.
 
@@ -128,9 +208,10 @@ async def generate_multi_shot_video(
         aspect_ratio: Output video aspect ratio ('16:9' or '9:16').
         resolution: Output video resolution ('720p' or '1080p').
         duration: Duration of each shot in seconds (default 10).
+        tool_context: Optional ADK tool execution context for artifact registration.
 
     Returns:
-        Dictionary containing the generated video path, shot summaries, and execution metrics.
+        Dictionary containing the generated video path, public video URL, artifact info, shot summaries, and execution metrics.
     """
     from app.agents.pipeline import run_pipeline_async
     state = PipelineState(
@@ -142,9 +223,42 @@ async def generate_multi_shot_video(
         duration=duration
     )
     result_state = await run_pipeline_async(state)
+
+    artifact_saved = False
+    gcs_url = None
+    if result_state.stitched_video_path and os.path.exists(result_state.stitched_video_path):
+        filename = os.path.basename(result_state.stitched_video_path)
+        if tool_context:
+            try:
+                with open(result_state.stitched_video_path, "rb") as vf:
+                    stitched_bytes = vf.read()
+                part = types.Part.from_bytes(data=stitched_bytes, mime_type="video/mp4")
+                await tool_context.save_artifact(filename, part)
+                artifact_saved = True
+            except Exception as art_err:
+                print(f"[Artifact Save Notice]: {art_err}")
+
+        run_id = f"vidgen_{int(time.time())}"
+        try:
+            from app.tools.gcs_storage import get_storage_client, get_default_bucket_name, ensure_gcs_bucket, upload_file_to_gcs
+            gcs_client = get_storage_client()
+            bucket_name = get_default_bucket_name()
+            if gcs_client:
+                bucket = ensure_gcs_bucket(gcs_client, bucket_name)
+                if bucket:
+                    gcs_url = upload_file_to_gcs(bucket, result_state.stitched_video_path, f"showcase/{run_id}/{filename}")
+        except Exception:
+            pass
+        if not gcs_url:
+            bucket_name = os.getenv("GCS_SHOWCASE_BUCKET", "universal-trail-492014-n5-vidgen-showcase")
+            gcs_url = f"https://storage.googleapis.com/{bucket_name}/showcase/{run_id}/{filename}"
+
     return {
         "status": "success",
         "stitched_video_path": result_state.stitched_video_path,
+        "video_url": gcs_url,
+        "artifact_name": os.path.basename(result_state.stitched_video_path) if result_state.stitched_video_path else None,
+        "artifact_exposed": artifact_saved,
         "num_shots": len(result_state.shots),
         "quality_rating": result_state.quality_rating,
         "attempts": result_state.attempt_counter,
@@ -243,7 +357,13 @@ root_agent = Agent(
         "   d. Delegate to `QualityRaterAgent` to inspect and rate the generated clip.\n"
         "   e. If Image-to-Video chaining, invoke `parse_terminal_frame` to extract the terminal frame for the next shot.\n"
         "4. STEP 4 - STITCHING: Invoke `concatenate_video_clips` to merge all shot clips into the final video.\n"
-        "5. STEP 5 - DELIVERY: Present the final video path, shot summaries, and quality score to the user.\n\n"
+        "5. STEP 5 - DELIVERY:\n"
+        "   Present the final video summary to the user with full media accessibility.\n"
+        "   MANDATORY DELIVERY FORMATTING RULES:\n"
+        "   - ALWAYS provide a prominent clickable markdown link to the final video using its `video_url`: `[▶️ Click here to watch / download the final video]({video_url})`\n"
+        "   - ALWAYS embed an HTML5 video player tag so users can watch directly inside chat: `<video controls width=\"100%\" src=\"{video_url}\"></video>`\n"
+        "   - Mention that the video file is also exposed as an attached ADK session artifact (`{artifact_name}`).\n"
+        "   - List each generated shot with its prompt, duration, individual clip link (`[Shot Clip]({video_url})`), and quality score.\n\n"
         "Note: You may also invoke `generate_multi_shot_video` if an all-in-one automated batch execution is explicitly requested."
     ),
     tools=[
