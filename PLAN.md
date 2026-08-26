@@ -1,7 +1,7 @@
 # `PLAN.md`
 
 ## 📋 Metadata
-*   **Task:** Expose Video Files via ADK Artifacts & Clickable HTTPS Links (Gemini Enterprise & ADK UI)
+*   **Task:** Fix Multi-Agent Orchestration Flow (Enforce PromptOptimizer -> HealthChecker -> `generate_video_shot_clip` Tool -> QualityRater Loop)
 *   **Target Region:** `asia-east1`
 *   **Date:** 2026-08-26
 *   **Status:** Awaiting User Approval (Stage 1: PLAN)
@@ -10,25 +10,24 @@
 
 ## 🎯 Objectives & Scope
 
-1. **Native ADK Artifact Registration in Tools (`app/agent.py`)**:
-   - In `generate_video_shot_clip`, `concatenate_video_clips`, and `generate_multi_shot_video`:
-     - Accept `tool_context: Optional[ToolContext] = None`.
-     - When video bytes are generated or stitched, call `await tool_context.save_artifact(filename, types.Part.from_bytes(data=video_bytes, mime_type="video/mp4"))`.
-     - This causes Vertex AI Agent Runtime to expose the file directly in the `:streamQuery` event artifacts array for Gemini Enterprise / ADK UI file download card.
+1. **Fix Sub-Agent Peer Transfer Bypass**:
+   - Set `disallow_transfer_to_peers=True` and `disallow_transfer_to_parent=False` on all sub-agents (`ScreenwriterAgent`, `StoryboarderAgent`, `PromptOptimizerAgent`, `HealthCheckerAgent`, `QualityRaterAgent`).
+   - Prevents `HealthCheckerAgent` from skipping tool calls and transferring directly to `QualityRaterAgent`.
+   - Forces all sub-agents to return control back to `vidgen_orchestrator` after each single sub-task.
 
-2. **GCS Showcase Sync & Public HTTPS Streaming**:
-   - Sync the stitched video and clips to `gs://universal-trail-492014-n5-vidgen-showcase` and return `video_url` (`https://storage.googleapis.com/...`).
+2. **Enforce Strict Production Loop in `vidgen_orchestrator`**:
+   - Clearly enforce the per-shot sequence in `vidgen_orchestrator` instructions:
+     1. Delegate to `PromptOptimizerAgent`.
+     2. Delegate to `HealthCheckerAgent`.
+     3. **Tool Call:** Execute `generate_video_shot_clip(...)` to render the MP4 clip.
+     4. Delegate to `QualityRaterAgent` with the `video_path`.
+     5. If score < 0.8 / retry verdict, repeat 1-4 with feedback.
+     6. If chaining, call `parse_terminal_frame(...)`.
 
-3. **Orchestrator Delivery Formatting (`app/agent.py`)**:
-   - Instruct `vidgen_orchestrator` to format the final delivery with:
-     - `[▶️ Click here to watch / download the generated video]({video_url})`
-     - `<video controls width="100%" src="{video_url}"></video>`
-     - Detailed shot breakdown with individual clip URLs and quality scores.
+3. **Testing & Deployment**:
+   - Run test suite (`uv run pytest tests/unit tests/integration`).
+   - Commit and push to `main` for Cloud Run CI/CD.
+   - Update Vertex AI Agent Runtime in `asia-east1`.
 
-4. **Testing & Deployment**:
-   - Run `uv run pytest tests/unit tests/integration`.
-   - Commit to `main` and push to GitHub (triggers Cloud Build for Cloud Run).
-   - Update Vertex AI Agent Runtime in `asia-east1` with `agents-cli deploy`.
-
-5. **Verification**:
-   - Test live execution to verify that artifacts and URLs are properly produced.
+4. **Verification**:
+   - Verify that sub-agents return control to orchestrator and orchestrator executes the tool before rating.

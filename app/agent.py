@@ -275,9 +275,12 @@ screenwriter_agent = Agent(
         "You are an expert cinematic screenwriter for short-form AI generative media. "
         "When given a video concept or narrative prompt, break it down into a structured multi-scene screenplay. "
         "Detail the narrative arc, visual motifs, camera motion, and character progression for each scene. "
-        "Output the complete screenplay clearly formatted with scene headings (e.g. SCENE 1: ESTABLISHING, SCENE 2: ACTION, SCENE 3: RESOLUTION)."
+        "Output the complete screenplay clearly formatted with scene headings (e.g. SCENE 1: ESTABLISHING, SCENE 2: ACTION, SCENE 3: RESOLUTION). "
+        "After drafting the screenplay, return control directly to `vidgen_orchestrator`."
     ),
-    description="Expands high-level video prompts into multi-scene cinematic screenplays."
+    description="Expands high-level video prompts into multi-scene cinematic screenplays.",
+    disallow_transfer_to_peers=True,
+    disallow_transfer_to_parent=False,
 )
 
 storyboarder_agent = Agent(
@@ -290,9 +293,12 @@ storyboarder_agent = Agent(
         "You are an expert AI video storyboarder and prompt engineer. "
         "Convert screenplays into structured shot specifications. "
         "For each shot, specify: shot_index, scene description, camera angle (e.g. wide tracking, close-up), "
-        "character actions, and specific quality evaluation criteria (e.g. subject consistency, lighting continuity)."
+        "character actions, and specific quality evaluation criteria (e.g. subject consistency, lighting continuity). "
+        "After creating the storyboard, return control directly to `vidgen_orchestrator`."
     ),
-    description="Converts screenplays into structured shot specifications and visual prompts."
+    description="Converts screenplays into structured shot specifications and visual prompts.",
+    disallow_transfer_to_peers=True,
+    disallow_transfer_to_parent=False,
 )
 
 prompt_optimizer_agent = Agent(
@@ -303,11 +309,14 @@ prompt_optimizer_agent = Agent(
     ),
     instruction=(
         "You are an expert generative video prompt optimizer specialized in Gemini Omni Flash (`gemini-omni-flash-preview`). "
-        "Given a shot description, enhance it with vivid lighting, motion descriptors, camera direction, and style cues. "
+        "Given a shot description (and optional previous feedback from QualityRaterAgent if retrying), enhance it with vivid lighting, motion descriptors, camera direction, and style cues. "
         "STRICT SINGLE-SHOT RULE: Enforce a single continuous take without cuts, transitions, or edits. "
-        "STRICT DIALOGUE RULE: If spoken dialogue is provided, ensure exact spoken words are preserved without filler."
+        "STRICT DIALOGUE RULE: If spoken dialogue is provided, ensure exact spoken words are preserved without filler. "
+        "Output ONLY the optimized prompt text. After optimizing the prompt, return control directly to `vidgen_orchestrator`."
     ),
-    description="Optimizes visual shot descriptions for Gemini Omni Flash video generation."
+    description="Optimizes visual shot descriptions for Gemini Omni Flash video generation.",
+    disallow_transfer_to_peers=True,
+    disallow_transfer_to_parent=False,
 )
 
 health_checker_agent = Agent(
@@ -319,9 +328,12 @@ health_checker_agent = Agent(
     instruction=(
         "You are a content safety, policy, and guardrail evaluator. "
         "Inspect candidate prompts to ensure compliance with content safety policies, non-violence, and structural requirements. "
-        "Return an audit confirmation (e.g. APPROVED or REJECTED with reason)."
+        "Return an audit confirmation (APPROVED or REJECTED with reason). "
+        "After verifying safety, return control directly to `vidgen_orchestrator` so the video clip can be generated with the `generate_video_shot_clip` tool."
     ),
-    description="Audits prompts for safety compliance and content guardrails."
+    description="Audits candidate prompts for safety and policy compliance.",
+    disallow_transfer_to_peers=True,
+    disallow_transfer_to_parent=False,
 )
 
 quality_rater_agent = Agent(
@@ -332,10 +344,14 @@ quality_rater_agent = Agent(
     ),
     instruction=(
         "You are an AI media quality evaluator. "
-        "Assess video clip quality across: 1) Subject Identity Consistency, 2) Motion Smoothness, 3) Prompt Adherence, 4) Temporal Asset Persistence. "
-        "Provide a numerical quality rating between 0.0 and 1.0, a concise verdict (PASSED / RETRY), and actionable feedback."
+        "You evaluate the quality of a generated video clip at the given `video_path` across: "
+        "1) Subject Identity Consistency, 2) Motion Smoothness, 3) Prompt Adherence, 4) Temporal Asset Persistence. "
+        "Provide a numerical quality score between 0.0 and 1.0, a verdict (PASSED if score >= 0.8, else RETRY), and actionable feedback. "
+        "After providing your evaluation, return control directly to `vidgen_orchestrator`."
     ),
-    description="Evaluates video clip quality and provides rubric scores."
+    description="Evaluates video clip quality and provides rubric scores and feedback.",
+    disallow_transfer_to_peers=True,
+    disallow_transfer_to_parent=False,
 )
 
 root_agent = Agent(
@@ -347,19 +363,22 @@ root_agent = Agent(
     instruction=(
         "You are the Master Pipeline Orchestrator for Multi-Agent Generative Video (`vidgen-omni`).\n"
         "You coordinate a specialized team of AI sub-agents to produce high-fidelity multi-shot generative videos.\n\n"
-        "When the user requests to create or generate a multi-shot video:\n"
-        "1. STEP 1 - SCREENWRITING: Delegate to `ScreenwriterAgent` to expand the narrative concept into a structured screenplay.\n"
-        "2. STEP 2 - STORYBOARDING: Delegate to `StoryboarderAgent` to convert the screenplay into structured shot specifications.\n"
-        "3. STEP 3 - PRODUCTION FOR EACH SHOT:\n"
-        "   a. Delegate to `PromptOptimizerAgent` to optimize the visual prompt for Gemini Omni Flash.\n"
-        "   b. Delegate to `HealthCheckerAgent` to verify safety and policy compliance.\n"
-        "   c. Invoke `generate_video_shot_clip` to generate the clip for this shot.\n"
-        "   d. Delegate to `QualityRaterAgent` to inspect and rate the generated clip.\n"
-        "   e. If Image-to-Video chaining, invoke `parse_terminal_frame` to extract the terminal frame for the next shot.\n"
-        "4. STEP 4 - STITCHING: Invoke `concatenate_video_clips` to merge all shot clips into the final video.\n"
-        "5. STEP 5 - DELIVERY:\n"
-        "   Present the final video summary to the user with full media accessibility.\n"
-        "   MANDATORY DELIVERY FORMATTING RULES:\n"
+        "When the user requests to create or generate a multi-shot video, you MUST execute the following exact pipeline:\n\n"
+        "=== PHASE 1: PRE-PRODUCTION ===\n"
+        "1. Delegate to `ScreenwriterAgent` to expand the narrative concept into a structured screenplay.\n"
+        "2. Delegate to `StoryboarderAgent` to convert the screenplay into structured shot specifications (scenes 1 to N).\n\n"
+        "=== PHASE 2: PRODUCTION LOOP (Execute for Shot 1 to N in sequence) ===\n"
+        "For each shot index `k` (allow up to 2 attempts per shot):\n"
+        "   Step 2.1 - OPTIMIZE: Delegate to `PromptOptimizerAgent` to optimize the visual prompt for Gemini Omni Flash (pass QualityRater feedback if retrying).\n"
+        "   Step 2.2 - AUDIT: Delegate to `HealthCheckerAgent` to verify safety and policy compliance.\n"
+        "   Step 2.3 - CRITICAL TOOL CALL (RENDER): Invoke tool `generate_video_shot_clip(prompt=..., shot_index=k, input_image_path=...)`.\n"
+        "              CRITICAL RULE: You MUST invoke `generate_video_shot_clip` immediately after `HealthCheckerAgent`. NEVER transfer to `QualityRaterAgent` before this tool call has finished and returned `video_path`.\n"
+        "   Step 2.4 - RATE: Delegate to `QualityRaterAgent` passing the generated `video_path` to assess clip quality.\n"
+        "   Step 2.5 - RETRY CHECK: If QualityRaterAgent verdict is RETRY / score < 0.8 and attempt < 2, repeat Steps 2.1-2.4 for shot `k` applying the rater's feedback.\n"
+        "   Step 2.6 - CHAINING: If mode is 'i2v_chaining' and k < N, invoke tool `parse_terminal_frame(video_path=...)` to extract the anchor frame for shot k+1.\n\n"
+        "=== PHASE 3: POST-PRODUCTION & DELIVERY ===\n"
+        "1. STITCH: Invoke tool `concatenate_video_clips(video_paths=[...])` with the final valid clip paths from all shots.\n"
+        "2. DELIVER: Present the final summary to the user with full media accessibility:\n"
         "   - ALWAYS provide a prominent clickable markdown link to the final video using the actual video_url returned by the tool: [▶️ Click here to watch / download the final video](https://...)\n"
         "   - ALWAYS embed an HTML5 video player tag so users can watch directly inside chat: <video controls width=\"100%\" src=\"https://...\"></video> (using the actual HTTPS video_url)\n"
         "   - Mention that the video file is also exposed as an attached ADK session artifact file.\n"
