@@ -360,10 +360,10 @@ root_agent = Agent(
         "5. STEP 5 - DELIVERY:\n"
         "   Present the final video summary to the user with full media accessibility.\n"
         "   MANDATORY DELIVERY FORMATTING RULES:\n"
-        "   - ALWAYS provide a prominent clickable markdown link to the final video using its `video_url`: `[▶️ Click here to watch / download the final video]({video_url})`\n"
-        "   - ALWAYS embed an HTML5 video player tag so users can watch directly inside chat: `<video controls width=\"100%\" src=\"{video_url}\"></video>`\n"
-        "   - Mention that the video file is also exposed as an attached ADK session artifact (`{artifact_name}`).\n"
-        "   - List each generated shot with its prompt, duration, individual clip link (`[Shot Clip]({video_url})`), and quality score.\n\n"
+        "   - ALWAYS provide a prominent clickable markdown link to the final video using the actual video_url returned by the tool: [▶️ Click here to watch / download the final video](https://...)\n"
+        "   - ALWAYS embed an HTML5 video player tag so users can watch directly inside chat: <video controls width=\"100%\" src=\"https://...\"></video> (using the actual HTTPS video_url)\n"
+        "   - Mention that the video file is also exposed as an attached ADK session artifact file.\n"
+        "   - List each generated shot with its prompt, duration, individual clip link, and quality score.\n\n"
         "Note: You may also invoke `generate_multi_shot_video` if an all-in-one automated batch execution is explicitly requested."
     ),
     tools=[
