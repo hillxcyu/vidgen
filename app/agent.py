@@ -268,11 +268,11 @@ screenwriter_agent = Agent(
         retry_options=types.HttpRetryOptions(attempts=3),
     ),
     instruction=(
-        "You are an expert cinematic screenwriter for short-form AI generative media. "
-        "When given a video concept or narrative prompt, break it down into a structured multi-scene screenplay. "
-        "Detail the narrative arc, visual motifs, camera motion, and character progression for each scene. "
-        "Output the complete screenplay clearly formatted with scene headings (e.g. SCENE 1: ESTABLISHING, SCENE 2: ACTION, SCENE 3: RESOLUTION). "
-        "After drafting the screenplay, return control directly to `vidgen_orchestrator`."
+        "You are an expert cinematic screenwriter for short-form AI generative media.\n"
+        "When given a video concept or narrative prompt, break it down into a structured multi-scene screenplay.\n"
+        "Detail the narrative arc, visual motifs, camera motion, and character progression for each scene.\n"
+        "CRITICAL VISIBILITY RULE: You MUST output the complete, beautifully formatted screenplay draft in your response text with scene headings (e.g. `### 🎬 SCENE 1: ESTABLISHING`, `### 🎬 SCENE 2: ACTION`, `### 🎬 SCENE 3: RESOLUTION`) so the user can read the screenplay in the chat.\n"
+        "After presenting the complete screenplay to the user, transfer control back to `vidgen_orchestrator` using `transfer_to_agent(agent_name='vidgen_orchestrator')`."
     ),
     description="Expands high-level video prompts into multi-scene cinematic screenplays.",
     disallow_transfer_to_peers=True,
@@ -286,11 +286,11 @@ storyboarder_agent = Agent(
         retry_options=types.HttpRetryOptions(attempts=3),
     ),
     instruction=(
-        "You are an expert AI video storyboarder and prompt engineer. "
-        "Convert screenplays into structured shot specifications. "
-        "For each shot, specify: shot_index, scene description, camera angle (e.g. wide tracking, close-up), "
-        "character actions, and specific quality evaluation criteria (e.g. subject consistency, lighting continuity). "
-        "After creating the storyboard, return control directly to `vidgen_orchestrator`."
+        "You are an expert AI video storyboarder and prompt engineer.\n"
+        "Convert screenplays into structured shot specifications.\n"
+        "CRITICAL VISIBILITY RULE: You MUST output a structured storyboard breakdown table in your response text for the user, detailing:\n"
+        "| Shot # | Camera Angle | Visual Description | Character Action | Quality Rubric Criteria |\n"
+        "After presenting the complete storyboard table to the user, transfer control back to `vidgen_orchestrator` using `transfer_to_agent(agent_name='vidgen_orchestrator')`."
     ),
     description="Converts screenplays into structured shot specifications and visual prompts.",
     disallow_transfer_to_peers=True,
@@ -304,11 +304,15 @@ prompt_optimizer_agent = Agent(
         retry_options=types.HttpRetryOptions(attempts=3),
     ),
     instruction=(
-        "You are an expert generative video prompt optimizer specialized in Gemini Omni Flash (`gemini-omni-flash-preview`). "
-        "Given a shot description (and optional previous feedback from QualityRaterAgent if retrying), enhance it with vivid lighting, motion descriptors, camera direction, and style cues. "
-        "STRICT SINGLE-SHOT RULE: Enforce a single continuous take without cuts, transitions, or edits. "
-        "STRICT DIALOGUE RULE: If spoken dialogue is provided, ensure exact spoken words are preserved without filler. "
-        "Output ONLY the optimized prompt text. After optimizing the prompt, return control directly to `vidgen_orchestrator`."
+        "You are an expert generative video prompt optimizer specialized in Gemini Omni Flash (`gemini-omni-flash-preview`).\n"
+        "Given a shot description (and optional previous feedback from QualityRaterAgent if retrying), enhance it with vivid lighting, motion descriptors, camera direction, and style cues.\n"
+        "STRICT SINGLE-SHOT RULE: Enforce a single continuous take without cuts, transitions, or edits.\n"
+        "STRICT DIALOGUE RULE: If spoken dialogue is provided, ensure exact spoken words are preserved without filler.\n"
+        "CRITICAL VISIBILITY RULE: You MUST output your prompt optimization report in your response text for the user, highlighting:\n"
+        "- **Shot #**: index\n"
+        "- **Optimized Visual Prompt**: the enhanced cinematic prompt\n"
+        "- **Cinematic Enhancements**: camera motion, volumetric lighting, texture/style descriptors\n"
+        "After presenting the optimization details to the user, transfer control back to `vidgen_orchestrator` using `transfer_to_agent(agent_name='vidgen_orchestrator')`."
     ),
     description="Optimizes visual shot descriptions for Gemini Omni Flash video generation.",
     disallow_transfer_to_peers=True,
@@ -322,10 +326,12 @@ health_checker_agent = Agent(
         retry_options=types.HttpRetryOptions(attempts=3),
     ),
     instruction=(
-        "You are a content safety, policy, and guardrail evaluator. "
-        "Inspect candidate prompts to ensure compliance with content safety policies, non-violence, and structural requirements. "
-        "Return an audit confirmation (APPROVED or REJECTED with reason). "
-        "After verifying safety, return control directly to `vidgen_orchestrator` so the video clip can be generated with the `generate_video_shot_clip` tool."
+        "You are a content safety, policy, and guardrail evaluator.\n"
+        "Inspect candidate prompts to ensure compliance with content safety policies, non-violence, and structural requirements.\n"
+        "CRITICAL VISIBILITY RULE: You MUST output your safety audit confirmation in your response text for the user, stating:\n"
+        "- **Safety Verdict**: `APPROVED` (or `REJECTED`)\n"
+        "- **Checks Verified**: Safety Filters, Single-Shot Continuity, Motion Feasibility\n"
+        "After presenting your audit report to the user, transfer control back to `vidgen_orchestrator` using `transfer_to_agent(agent_name='vidgen_orchestrator')` so the video clip can be generated with the `generate_video_shot_clip` tool."
     ),
     description="Audits candidate prompts for safety and policy compliance.",
     disallow_transfer_to_peers=True,
@@ -339,11 +345,15 @@ quality_rater_agent = Agent(
         retry_options=types.HttpRetryOptions(attempts=3),
     ),
     instruction=(
-        "You are an AI media quality evaluator. "
-        "You evaluate the quality of a generated video clip at the given `video_path` across: "
-        "1) Subject Identity Consistency, 2) Motion Smoothness, 3) Prompt Adherence, 4) Temporal Asset Persistence. "
-        "Provide a numerical quality score between 0.0 and 1.0, a verdict (PASSED if score >= 0.8, else RETRY), and actionable feedback. "
-        "After providing your evaluation, return control directly to `vidgen_orchestrator`."
+        "You are an AI media quality evaluator.\n"
+        "You evaluate the quality of a generated video clip at the given `video_path` across:\n"
+        "1) Subject Identity Consistency, 2) Motion Smoothness, 3) Prompt Adherence, 4) Temporal Asset Persistence.\n"
+        "CRITICAL VISIBILITY RULE: You MUST output your full quality evaluation report in your response text for the user, including:\n"
+        "- **Quality Score**: X.XX / 1.0\n"
+        "- **Verdict**: `PASSED` (if score >= 0.8) or `RETRY`\n"
+        "- **Rubric Breakdown**: Identity Consistency, Motion Smoothness, Prompt Adherence, Temporal Persistence\n"
+        "- **Feedback / Critique**: specific observations and actionable notes\n"
+        "After presenting your quality rating report to the user, transfer control back to `vidgen_orchestrator` using `transfer_to_agent(agent_name='vidgen_orchestrator')`."
     ),
     description="Evaluates video clip quality and provides rubric scores and feedback.",
     disallow_transfer_to_peers=True,
@@ -359,12 +369,12 @@ root_agent = Agent(
     instruction=(
         "You are the Master Pipeline Orchestrator for Multi-Agent Generative Video (`vidgen-omni`).\n"
         "You coordinate a specialized team of AI sub-agents to produce high-fidelity multi-shot generative videos.\n\n"
-        "When the user requests to create or generate a multi-shot video, you MUST execute the following exact pipeline:\n\n"
+        "When the user requests to create or generate a video, you MUST execute the following exact multi-agent pipeline step-by-step:\n\n"
         "=== PHASE 1: PRE-PRODUCTION ===\n"
         "1. Delegate to `ScreenwriterAgent` to expand the narrative concept into a structured screenplay.\n"
         "2. Delegate to `StoryboarderAgent` to convert the screenplay into structured shot specifications (scenes 1 to N).\n\n"
         "=== PHASE 2: PRODUCTION LOOP (Execute for Shot 1 to N in sequence) ===\n"
-        "For each shot index `k` (allow up to 2 attempts per shot):\n"
+        "For each shot index `k` from 1 to N (allow up to 2 attempts per shot):\n"
         "   Step 2.1 - OPTIMIZE: Delegate to `PromptOptimizerAgent` to optimize the visual prompt for Gemini Omni Flash (pass QualityRater feedback if retrying).\n"
         "   Step 2.2 - AUDIT: Delegate to `HealthCheckerAgent` to verify safety and policy compliance.\n"
         "   Step 2.3 - CRITICAL TOOL CALL (RENDER): Invoke tool `generate_video_shot_clip(prompt=..., shot_index=k, input_image_path=...)`.\n"
@@ -378,14 +388,12 @@ root_agent = Agent(
         "   - ALWAYS provide a prominent clickable markdown link to the final video using the actual video_url returned by the tool: [▶️ Click here to watch / download the final video](https://...)\n"
         "   - ALWAYS embed an HTML5 video player tag so users can watch directly inside chat: <video controls width=\"100%\" src=\"https://...\"></video> (using the actual HTTPS video_url)\n"
         "   - Mention that the video file is also exposed as an attached ADK session artifact file.\n"
-        "   - List each generated shot with its prompt, duration, individual clip link, and quality score.\n\n"
-        "Note: You may also invoke `generate_multi_shot_video` if an all-in-one automated batch execution is explicitly requested."
+        "   - List each generated shot with its prompt, duration, individual clip link, and quality score."
     ),
     tools=[
         generate_video_shot_clip,
         parse_terminal_frame,
         concatenate_video_clips,
-        generate_multi_shot_video,
     ],
     sub_agents=[
         screenwriter_agent,
