@@ -14,6 +14,8 @@
 
 import os
 import json
+import base64
+import urllib.request
 import asyncio
 import contextlib
 from typing import Optional, List, Dict, Any
@@ -184,6 +186,127 @@ app.title = "vidgen-omni"
 app.description = "API for interacting with the vidgen-omni multi-agent video generator"
 app.mount("/output", StaticFiles(directory=OUTPUT_DIR), name="output")
 attach_reasoning_engine_routes(app)
+
+
+def format_artifact_for_adk_ui(artifact: Any, artifact_name: str) -> dict:
+    """Format artifact Part into the inlineData/mimeType structure expected by ADK Debug UI."""
+    mime_type = "video/mp4" if artifact_name.endswith(".mp4") else "application/octet-stream"
+    b64_data = ""
+
+    if hasattr(artifact, "inline_data") and artifact.inline_data and getattr(artifact.inline_data, "data", None):
+        mime_type = getattr(artifact.inline_data, "mime_type", None) or mime_type
+        raw = artifact.inline_data.data
+        b64_data = base64.b64encode(raw).decode("utf-8") if isinstance(raw, bytes) else str(raw)
+    elif hasattr(artifact, "text") and artifact.text:
+        mime_type = "text/plain"
+        b64_data = base64.b64encode(artifact.text.encode("utf-8")).decode("utf-8")
+    elif hasattr(artifact, "file_data") and artifact.file_data and getattr(artifact.file_data, "file_uri", None):
+        mime_type = getattr(artifact.file_data, "mime_type", None) or mime_type
+        uri = artifact.file_data.file_uri
+
+        candidates = [
+            uri,
+            os.path.join(OUTPUT_DIR, os.path.basename(artifact_name)),
+            os.path.join("/tmp/vidgen_output", os.path.basename(artifact_name)),
+        ]
+        found_bytes = None
+        for c in candidates:
+            if c and os.path.exists(c) and os.path.isfile(c):
+                try:
+                    with open(c, "rb") as fp:
+                        found_bytes = fp.read()
+                    break
+                except Exception:
+                    pass
+
+        if found_bytes is None and uri.startswith(("http://", "https://")):
+            try:
+                with urllib.request.urlopen(uri, timeout=10) as resp:
+                    found_bytes = resp.read()
+            except Exception as e:
+                print(f"[Artifact Fetch Warning]: {e}")
+
+        if found_bytes:
+            b64_data = base64.b64encode(found_bytes).decode("utf-8")
+        else:
+            b64_data = base64.b64encode(uri.encode("utf-8")).decode("utf-8")
+            mime_type = "text/plain"
+
+    return {
+        "mimeType": mime_type,
+        "data": b64_data,
+        "inlineData": {
+            "mimeType": mime_type,
+            "data": b64_data,
+        },
+        "fileData": {
+            "fileUri": getattr(artifact.file_data, "file_uri", "") if hasattr(artifact, "file_data") and artifact.file_data else "",
+            "mimeType": mime_type,
+        } if hasattr(artifact, "file_data") and artifact.file_data else None,
+        "text": artifact.text if hasattr(artifact, "text") and artifact.text else None,
+    }
+
+
+def attach_enhanced_artifact_routes(fastapi_app: FastAPI) -> None:
+    """Register enhanced artifact routes for ADK Debug UI compatibility."""
+    for r in list(fastapi_app.routes):
+        path = getattr(r, "path", "")
+        if "/artifacts/{artifact_name:path}/versions/{version_id}" in path or path.endswith("/artifacts/{artifact_name:path}"):
+            if "GET" in getattr(r, "methods", []):
+                try:
+                    fastapi_app.routes.remove(r)
+                except ValueError:
+                    pass
+
+    @fastapi_app.get(
+        "/apps/{app_name}/users/{user_id}/sessions/{session_id}/artifacts/{artifact_name:path}/versions/{version_id}"
+    )
+    async def load_artifact_version_enhanced(
+        app_name: str,
+        user_id: str,
+        session_id: str,
+        artifact_name: str,
+        version_id: str,
+    ):
+        version: int | None = None
+        if version_id != "latest":
+            try:
+                version = int(version_id)
+            except ValueError:
+                raise HTTPException(status_code=422, detail="Invalid version ID") from None
+
+        artifact_svc = services.get_artifact_service()
+        artifact = await artifact_svc.load_artifact(
+            app_name=app_name,
+            user_id=user_id,
+            session_id=session_id,
+            filename=artifact_name,
+            version=version,
+        )
+        if not artifact:
+            raise HTTPException(status_code=404, detail="Artifact not found")
+
+        return format_artifact_for_adk_ui(artifact, artifact_name)
+
+    @fastapi_app.get(
+        "/apps/{app_name}/users/{user_id}/sessions/{session_id}/artifacts/{artifact_name:path}"
+    )
+    async def load_artifact_latest_enhanced(
+        app_name: str,
+        user_id: str,
+        session_id: str,
+        artifact_name: str,
+    ):
+        return await load_artifact_version_enhanced(
+            app_name=app_name,
+            user_id=user_id,
+            session_id=session_id,
+            artifact_name=artifact_name,
+            version_id="latest",
+        )
+
+
+attach_enhanced_artifact_routes(app)
 
 # Remove default ADK root routes so our Studio UI handles the root URL
 for r in list(app.routes):
