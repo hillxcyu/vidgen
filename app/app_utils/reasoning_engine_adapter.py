@@ -81,15 +81,36 @@ def attach_reasoning_engine_routes(app: FastAPI) -> None:
         class_method = body.get("class_method") or "async_stream_query"
         method = resolve_method(class_method, streaming=True)
 
-        kwargs = dict(body.get("input") or {})
-        if "user_id" not in kwargs:
-            kwargs["user_id"] = "default_user"
-        if "message" not in kwargs and "prompt" in kwargs:
-            kwargs["message"] = kwargs["prompt"]
+        raw_input = body.get("input") or {}
+        kwargs = dict(raw_input) if isinstance(raw_input, dict) else {}
+
+        if class_method == "streaming_agent_run_with_events":
+            # Gemini Enterprise calling AdkApp.streaming_agent_run_with_events(request_json: str)
+            req_json = kwargs.get("request_json")
+            if req_json is None:
+                req_json = json.dumps(raw_input)
+            elif not isinstance(req_json, str):
+                req_json = json.dumps(req_json)
+            kwargs = {"request_json": req_json}
+        else:
+            sig = inspect.signature(method)
+            param_names = set(sig.parameters.keys())
+            has_var_kw = any(
+                p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()
+            )
+            if ("user_id" in param_names or has_var_kw) and "user_id" not in kwargs:
+                kwargs["user_id"] = "default_user"
+            if ("message" in param_names or has_var_kw) and "message" not in kwargs and "prompt" in kwargs:
+                kwargs["message"] = kwargs["prompt"]
 
         async def generator():
-            async for event in method(**kwargs):
-                yield json.dumps(event) + "\n"
+            try:
+                async for event in method(**kwargs):
+                    yield json.dumps(event) + "\n"
+            except Exception as exc:
+                import logging
+                logging.exception("Error in stream_reasoning_engine generator: %s", exc)
+                raise
 
         return responses.StreamingResponse(
             content=generator(), media_type="application/json"
@@ -100,9 +121,17 @@ def attach_reasoning_engine_routes(app: FastAPI) -> None:
         body = await request.json()
         class_method = body.get("class_method") or "get_session"
         method = resolve_method(class_method, streaming=False)
-        kwargs = dict(body.get("input") or {})
-        if "user_id" not in kwargs and any(x in class_method for x in ("session", "query", "run")):
+        raw_input = body.get("input") or {}
+        kwargs = dict(raw_input) if isinstance(raw_input, dict) else {}
+
+        sig = inspect.signature(method)
+        param_names = set(sig.parameters.keys())
+        has_var_kw = any(
+            p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()
+        )
+        if ("user_id" in param_names or has_var_kw) and "user_id" not in kwargs and any(x in class_method for x in ("session", "query", "run")):
             kwargs["user_id"] = "default_user"
+
         output = (
             await method(**kwargs)
             if inspect.iscoroutinefunction(method)

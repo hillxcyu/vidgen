@@ -1,13 +1,13 @@
 # `ACTION.md`
 
 ## 📋 Metadata
-*   **Execution Task:** Dual UI Routing, Sub-Agent Delegation, and Cloud Run / Agent Runtime Deployment in `asia-east1`
-*   **Started At:** 2026-08-25T11:31:00Z
+*   **Execution Task:** Fix `streaming_agent_run_with_events` and Deploy Updates
+*   **Started At:** 2026-08-26T03:06:30Z
 *   **Status:** IN_PROGRESS
 
 ---
 
 ## 📜 Execution Log
 
-### Phase 1: Dual UI Routing in FastAPI
-* **[2026-08-25T11:31:00Z]** Configuring `app/fast_api_app.py` for `/` Web Studio and `/adk` ADK UI...
+### Phase 1: Code Fix & Local Validation
+* **[2026-08-26T03:06:30Z]** Updating `app/app_utils/reasoning_engine_adapter.py`...

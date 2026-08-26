@@ -2,23 +2,21 @@
 
 ## 📋 Metadata
 *   **Stage:** 2 - Problem Decomposition (DEFINE)
-*   **Timestamp:** 2026-08-25T11:31:00Z
-*   **Target Task:** Dual UI Routing, Orchestrator Sub-Agent Delegation, and Deploy to `asia-east1`
+*   **Timestamp:** 2026-08-26T03:06:30Z
+*   **Target Task:** Fix `streaming_agent_run_with_events` argument handling in `reasoning_engine_adapter.py` and deploy
 *   **Status:** IN_PROGRESS (Stage 3: ACT)
 
 ---
 
 ## 📝 Detailed TODO Breakdown
 
-### Phase 1: Dual UI Routing in FastAPI [frontend] [backend]
-- [ ] `[T001]` **[backend]** Update `app/fast_api_app.py` to route `/` and `/index.html` to our custom Web Studio UI, and mount ADK's Angular Debug & Chat UI at `/adk` and `/dev-ui`.
+### Phase 1: Code Fix & Local Validation [backend] [adapter]
+- [ ] `[T001]` **[backend]** Update `app/app_utils/reasoning_engine_adapter.py` to dynamically inspect method signature and correctly format arguments for `streaming_agent_run_with_events` and standard query methods.
+- [ ] `[T002]` **[test]** Run test suite (`uv run pytest tests/unit tests/integration`) and verify zero regressions.
 
-### Phase 2: Orchestrator Sub-Agent Delegation [agent] [tools]
-- [ ] `[T002]` **[tools]** Add modular single-shot generation tool `generate_video_shot_clip` in `app/agent.py` to support step-by-step clip generation.
-- [ ] `[T003]` **[agent]** Update `root_agent` and subagents (`ScreenwriterAgent`, `StoryboarderAgent`, `PromptOptimizerAgent`, `HealthCheckerAgent`, `QualityRaterAgent`) instructions in `app/agent.py` to support interactive step-by-step delegation.
+### Phase 2: Deployment & CI/CD [deploy] [infra]
+- [ ] `[T003]` **[git]** Commit changes on `main` and push to GitHub to trigger Cloud Build for Cloud Run.
+- [ ] `[T004]` **[deploy]** Update Vertex AI Agent Runtime reasoning engine in `asia-east1` via `agents-cli deploy`.
 
-### Phase 3: Testing & CI/CD Deployment [test] [deploy]
-- [ ] `[T004]` **[test]** Run `uv run pytest tests/unit tests/integration` to verify all tests pass.
-- [ ] `[T005]` **[git]** Commit changes to `main` with detailed commit message and push to GitHub.
-- [ ] `[T006]` **[deploy]** Monitor Cloud Build build in `asia-east1` and verify live Cloud Run frontend at `/` (Studio) and `/adk` (ADK UI).
-- [ ] `[T007]` **[deploy]** Deploy / update Vertex AI Agent Runtime in `asia-east1` with updated sub-agent delegation.
+### Phase 3: Live Verification [verify]
+- [ ] `[T005]` **[verify]** Test live `:streamQuery` with `streaming_agent_run_with_events` against Agent Runtime in `asia-east1` to ensure events stream successfully without error.
