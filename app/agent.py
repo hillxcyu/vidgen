@@ -78,17 +78,7 @@ async def generate_video_shot_clip(
     with open(clip_path, "wb") as f:
         f.write(clip_bytes)
 
-    # 1. Register native ADK Artifact for Agent Runtime / Gemini Enterprise
-    artifact_saved = False
-    if tool_context:
-        try:
-            part = types.Part.from_bytes(data=clip_bytes, mime_type="video/mp4")
-            await tool_context.save_artifact(clip_name, part)
-            artifact_saved = True
-        except Exception as art_err:
-            print(f"[Artifact Save Notice]: {art_err}")
-
-    # 2. Upload to GCS showcase for public HTTPS URL
+    # 1. Upload to GCS showcase for public HTTPS URL
     gcs_url = None
     try:
         from app.tools.gcs_storage import get_storage_client, get_default_bucket_name, ensure_gcs_bucket, upload_file_to_gcs
@@ -103,6 +93,16 @@ async def generate_video_shot_clip(
     if not gcs_url:
         bucket_name = os.getenv("GCS_SHOWCASE_BUCKET", "universal-trail-492014-n5-vidgen-showcase")
         gcs_url = f"https://storage.googleapis.com/{bucket_name}/showcase/shots/{clip_name}"
+
+    # 2. Register native lightweight URI ADK Artifact for Agent Runtime / Gemini Enterprise
+    artifact_saved = False
+    if tool_context:
+        try:
+            part = types.Part.from_uri(file_uri=gcs_url, mime_type="video/mp4")
+            await tool_context.save_artifact(clip_name, part)
+            artifact_saved = True
+        except Exception as art_err:
+            print(f"[Artifact Save Notice]: {art_err}")
 
     return {
         "shot_index": shot_index,
@@ -150,19 +150,7 @@ async def concatenate_video_clips(
     out_path = os.path.join(OUTPUT_DIR, target_name)
     stitched_path = stitch_videos(valid_clips, out_path)
 
-    # 1. Register native ADK Artifact for Agent Runtime / Gemini Enterprise
-    artifact_saved = False
-    if tool_context and os.path.exists(stitched_path):
-        try:
-            with open(stitched_path, "rb") as vf:
-                stitched_bytes = vf.read()
-            part = types.Part.from_bytes(data=stitched_bytes, mime_type="video/mp4")
-            await tool_context.save_artifact(os.path.basename(stitched_path), part)
-            artifact_saved = True
-        except Exception as art_err:
-            print(f"[Artifact Save Notice]: {art_err}")
-
-    # 2. Upload to GCS showcase for public HTTPS URL
+    # 1. Upload to GCS showcase for public HTTPS URL
     run_id = f"vidgen_{int(time.time())}"
     gcs_url = None
     try:
@@ -178,6 +166,16 @@ async def concatenate_video_clips(
     if not gcs_url:
         bucket_name = os.getenv("GCS_SHOWCASE_BUCKET", "universal-trail-492014-n5-vidgen-showcase")
         gcs_url = f"https://storage.googleapis.com/{bucket_name}/showcase/{run_id}/{os.path.basename(stitched_path)}"
+
+    # 2. Register native lightweight URI ADK Artifact for Agent Runtime / Gemini Enterprise
+    artifact_saved = False
+    if tool_context and os.path.exists(stitched_path):
+        try:
+            part = types.Part.from_uri(file_uri=gcs_url, mime_type="video/mp4")
+            await tool_context.save_artifact(os.path.basename(stitched_path), part)
+            artifact_saved = True
+        except Exception as art_err:
+            print(f"[Artifact Save Notice]: {art_err}")
 
     return {
         "stitched_video_path": stitched_path,
@@ -228,16 +226,6 @@ async def generate_multi_shot_video(
     gcs_url = None
     if result_state.stitched_video_path and os.path.exists(result_state.stitched_video_path):
         filename = os.path.basename(result_state.stitched_video_path)
-        if tool_context:
-            try:
-                with open(result_state.stitched_video_path, "rb") as vf:
-                    stitched_bytes = vf.read()
-                part = types.Part.from_bytes(data=stitched_bytes, mime_type="video/mp4")
-                await tool_context.save_artifact(filename, part)
-                artifact_saved = True
-            except Exception as art_err:
-                print(f"[Artifact Save Notice]: {art_err}")
-
         run_id = f"vidgen_{int(time.time())}"
         try:
             from app.tools.gcs_storage import get_storage_client, get_default_bucket_name, ensure_gcs_bucket, upload_file_to_gcs
@@ -252,6 +240,14 @@ async def generate_multi_shot_video(
         if not gcs_url:
             bucket_name = os.getenv("GCS_SHOWCASE_BUCKET", "universal-trail-492014-n5-vidgen-showcase")
             gcs_url = f"https://storage.googleapis.com/{bucket_name}/showcase/{run_id}/{filename}"
+
+        if tool_context:
+            try:
+                part = types.Part.from_uri(file_uri=gcs_url, mime_type="video/mp4")
+                await tool_context.save_artifact(filename, part)
+                artifact_saved = True
+            except Exception as art_err:
+                print(f"[Artifact Save Notice]: {art_err}")
 
     return {
         "status": "success",

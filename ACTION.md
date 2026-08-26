@@ -1,13 +1,13 @@
 # `ACTION.md`
 
 ## 📋 Metadata
-*   **Execution Task:** Fix Stream Serialization Crash for Artifacts (`TypeError: Object of type Part is not JSON serializable`)
-*   **Started At:** 2026-08-26T06:01:00Z
+*   **Execution Task:** Fix Gemini Enterprise "Failed to load attachment" by using URI Artifacts
+*   **Started At:** 2026-08-26T06:28:30Z
 *   **Status:** IN_PROGRESS
 
 ---
 
 ## 📜 Execution Log
 
-### Phase 1: Serialization Fix & Code Refinement
-* **[2026-08-26T06:01:10Z]** Updating `app/app_utils/reasoning_engine_adapter.py` and `app/tools/gcs_storage.py`...
+### Phase 1: Tool Artifact Registration Updates
+* **[2026-08-26T06:28:45Z]** Updating `app/agent.py` to use `types.Part.from_uri` for all video artifacts...
