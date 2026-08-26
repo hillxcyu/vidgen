@@ -1,28 +1,31 @@
 # `PLAN.md`
 
 ## 📋 Metadata
-*   **Task:** Refactor Architecture to ADK `AgentTool` Pattern for 100% Context Cache Alignment
+*   **Task:** Restore Conversational Sub-Agents with Unified Cache-Aligned System Instruction
 *   **Target Region:** `asia-east1`
 *   **Date:** 2026-08-26
-*   **Status:** ✅ ALL_TASKS_COMPLETED
+*   **Status:** IN_PROGRESS (Stage 1: PLAN)
 
 ---
 
 ## 🎯 Objectives & Scope
 
-1. **Eliminate System Instruction Swapping in Main Session**:
-   - [x] Wrapped `ScreenwriterAgent`, `StoryboarderAgent`, `PromptOptimizerAgent`, `HealthCheckerAgent`, and `QualityRaterAgent` inside `google.adk.tools.AgentTool`.
-   - [x] Registered in `root_agent.tools` and cleared `root_agent.sub_agents = []`.
-   - [x] Result: Fixed system instruction for `vidgen_orchestrator`, ensuring 100% context cache alignment and eliminating performance warnings.
+1. **Restore Visible Chat Messages from All Sub-Agents**:
+   - Return to conversational sub-agent hierarchy (`root_agent.sub_agents = [ScreenwriterAgent, StoryboarderAgent, PromptOptimizerAgent, HealthCheckerAgent, QualityRaterAgent]`).
+   - Every sub-agent is an active conversational participant emitting top-level Assistant Message Events directly in the chat stream.
 
-2. **Clean Sub-Agent Role Isolation**:
-   - [x] Streamlined sub-agent instructions for tool-call execution.
-   - [x] Retained `evaluate_video_clip_quality` on `QualityRaterAgent` for multimodal video frame auditing.
+2. **Context Cache Alignment via Unified Base Instruction**:
+   - Establish a shared, static `UNIFIED_BASE_SYSTEM_INSTRUCTION` prefix defining the entire multi-agent system, roles, and rules across all 6 agents (`root_agent` and the 5 sub-agents).
+   - This shared prefix maximizes Gemini Context Caching prefix reuse across agent transfers.
 
-3. **Testing & Deployment**:
-   - [x] 23/23 unit and integration tests passed.
-   - [x] Deployed to Cloud Run via Cloud Build.
-   - [x] Deployed to Vertex AI Agent Runtime in `asia-east1`.
+3. **Retain Multimodal Video Evaluation Tool on `QualityRaterAgent`**:
+   - `QualityRaterAgent` keeps `evaluate_video_clip_quality` to inspect the actual `.mp4` video frames and outputs the score, rubric breakdown, and visual critique to the user.
 
-4. **Verification**:
-   - [x] Verified deployment success on both Agent Runtime and Cloud Run.
+4. **Testing & CI/CD**:
+   - Update `tests/unit/test_agent.py` to assert sub-agents and tools.
+   - Run unit and integration tests (`uv run pytest tests/unit tests/integration`).
+   - Commit & push to `main` for Cloud Run Cloud Build.
+   - Update Vertex AI Agent Runtime in `asia-east1` via `agents-cli deploy`.
+
+5. **Verification**:
+   - Verify visible intermediate messages in chat and live deployment status.
