@@ -103,10 +103,22 @@ def attach_reasoning_engine_routes(app: FastAPI) -> None:
             if ("message" in param_names or has_var_kw) and "message" not in kwargs and "prompt" in kwargs:
                 kwargs["message"] = kwargs["prompt"]
 
+        def _safe_serialize(o):
+            if hasattr(o, "model_dump"):
+                return o.model_dump(exclude_none=True)
+            if hasattr(o, "to_dict"):
+                return o.to_dict()
+            if isinstance(o, bytes):
+                import base64
+                return base64.b64encode(o).decode("utf-8")
+            if hasattr(o, "__dict__"):
+                return o.__dict__
+            return str(o)
+
         async def generator():
             try:
                 async for event in method(**kwargs):
-                    yield json.dumps(event) + "\n"
+                    yield json.dumps(event, default=_safe_serialize) + "\n"
             except Exception as exc:
                 import logging
                 logging.exception("Error in stream_reasoning_engine generator: %s", exc)

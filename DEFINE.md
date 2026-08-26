@@ -2,17 +2,17 @@
 
 ## 📋 Metadata
 *   **Stage:** 2 - Problem Decomposition (DEFINE)
-*   **Timestamp:** 2026-08-26T04:45:30Z
-*   **Target Task:** Fix Multi-Agent Orchestration Flow (`PromptOptimizer` -> `HealthChecker` -> `generate_video_shot_clip` -> `QualityRater`)
+*   **Timestamp:** 2026-08-26T06:01:00Z
+*   **Target Task:** Fix Stream Serialization Crash for Artifacts (`TypeError: Object of type Part is not JSON serializable`)
 *   **Status:** IN_PROGRESS (Stage 3: ACT)
 
 ---
 
 ## 📝 Detailed TODO Breakdown
 
-### Phase 1: Sub-Agent & Orchestrator Configuration [agent] [orchestration]
-- [ ] `[T001]` **[agent]** Configure `disallow_transfer_to_peers=True` and `disallow_transfer_to_parent=False` on all sub-agents in `app/agent.py`.
-- [ ] `[T002]` **[agent]** Update instructions in `app/agent.py` to enforce strict sequential execution (`PromptOptimizer` -> `HealthChecker` -> `generate_video_shot_clip` tool -> `QualityRater` -> Retry Loop).
+### Phase 1: Serialization Fix & Code Refinement [adapter] [storage]
+- [ ] `[T001]` **[adapter]** Update `app/app_utils/reasoning_engine_adapter.py` with custom `safe_json_dumps` to serialize `types.Part`, `_ArtifactVersion`, and nested Pydantic models.
+- [ ] `[T002]` **[storage]** Refine `app/tools/gcs_storage.py` `ensure_gcs_bucket` to prevent redundant IAM policy checks on existing buckets.
 
 ### Phase 2: Testing & CI/CD [test] [deploy]
 - [ ] `[T003]` **[test]** Run test suite (`uv run pytest tests/unit tests/integration`).
@@ -20,4 +20,4 @@
 - [ ] `[T005]` **[deploy]** Update Vertex AI Agent Runtime in `asia-east1` via `agents-cli deploy`.
 
 ### Phase 3: Verification [verify]
-- [ ] `[T006]` **[verify]** Verify live reasoning engine stream query confirms correct orchestration flow.
+- [ ] `[T006]` **[verify]** Verify live reasoning engine stream query serializes events and artifacts properly.

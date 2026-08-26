@@ -52,19 +52,17 @@ def ensure_gcs_bucket(client: Any, bucket_name: str) -> Optional[Any]:
             config = Config()
             location = config.LOCATION if config.LOCATION and config.LOCATION.upper() != "GLOBAL" else "us-central1"
             bucket = client.create_bucket(bucket_name, location=location)
-
-        try:
-            policy = bucket.get_iam_policy(requested_policy_version=3)
-            has_all_users = any(
-                b.get("role") == "roles/storage.objectViewer" and "allUsers" in b.get("members", [])
-                for b in policy.bindings
-            )
-            if not has_all_users:
-                policy.bindings.append({"role": "roles/storage.objectViewer", "members": {"allUsers"}})
-                bucket.set_iam_policy(policy)
-        except Exception as iam_err:
-            print(f"[NOTICE] GCS IAM policy update notice: {iam_err}")
-
+            try:
+                policy = bucket.get_iam_policy(requested_policy_version=3)
+                has_all_users = any(
+                    b.get("role") == "roles/storage.objectViewer" and "allUsers" in b.get("members", [])
+                    for b in policy.bindings
+                )
+                if not has_all_users:
+                    policy.bindings.append({"role": "roles/storage.objectViewer", "members": {"allUsers"}})
+                    bucket.set_iam_policy(policy)
+            except Exception:
+                pass
         return bucket
     except Exception as e:
         print(f"[NOTICE] GCS bucket '{bucket_name}' access notice: {e}")
