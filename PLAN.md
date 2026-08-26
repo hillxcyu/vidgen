@@ -1,7 +1,7 @@
 # `PLAN.md`
 
 ## 📋 Metadata
-*   **Task:** Restore Intermediate Step & Sub-Agent Messages in Chat UI
+*   **Task:** Equip Quality Rater Agent to Audit Actual Video Files via Multimodal Vision
 *   **Target Region:** `asia-east1`
 *   **Date:** 2026-08-26
 *   **Status:** Awaiting User Approval (Stage 1: PLAN)
@@ -11,19 +11,22 @@
 ## 🎯 Objectives & Scope
 
 1. **Root Cause Analysis**:
-   - `root_agent` had `generate_multi_shot_video` (a monolithic all-in-one Python tool) in its tool list. When requested to generate a video, the LLM called this tool directly in one step, executing the entire pipeline silently inside Python and bypassing the 5 ADK sub-agents (`ScreenwriterAgent`, `StoryboarderAgent`, `PromptOptimizerAgent`, `HealthCheckerAgent`, `QualityRaterAgent`).
-   - Sub-agent instructions instructed them to return control directly to `vidgen_orchestrator` without mandating visible, user-facing output messages in the chat stream.
+   - `QualityRaterAgent` was previously defined in `app/agent.py` without any tools (`tools=[]`).
+   - When the orchestrator transferred control to `QualityRaterAgent` passing the text string `video_path`, the LLM had no way to load or inspect the video bytes. It generated synthetic scores from text alone, which is why video file accesses/multimodal spans never appeared in the trace.
 
-2. **Refactor Agent Instructions & Toolset in `app/agent.py`**:
-   - Remove `generate_multi_shot_video` from `root_agent.tools` so `root_agent` strictly uses sequential sub-agent delegation (`ScreenwriterAgent` -> `StoryboarderAgent` -> Production Loop: `PromptOptimizerAgent` -> `HealthCheckerAgent` -> `generate_video_shot_clip` -> `QualityRaterAgent` -> `parse_terminal_frame` -> `concatenate_video_clips`).
-   - Update instructions for each sub-agent to mandate writing complete, formatted user-facing reports (screenplay draft, storyboard table, optimized prompt with visual rationale, safety audit status, rubric evaluation with scores) directly to the chat before transferring control back.
-   - Update `root_agent` instruction to send explicit progress updates at each milestone.
+2. **Implement `evaluate_video_clip_quality` Tool in `app/agent.py`**:
+   - Implement `evaluate_video_clip_quality(video_path: str, prompt: str, evaluation_criteria: Optional[str])`:
+     - Reads the actual `.mp4` video bytes from local filesystem (or GCS).
+     - Passes `types.Part.from_bytes(data=video_bytes, mime_type="video/mp4")` to Gemini 3.7 Flash multimodal vision.
+     - Audits the real video frames across Subject Consistency, Motion Smoothness, Prompt Adherence, and Temporal Asset Persistence.
+     - Returns structured scores, rubric breakdown, verdict, and detailed critique.
+   - Attach `tools=[evaluate_video_clip_quality]` to `QualityRaterAgent`.
+   - Update `QualityRaterAgent` instruction mandating invoking `evaluate_video_clip_quality` on the video file before reporting scores.
 
-3. **Testing & CI/CD**:
-   - Update `tests/unit/test_agent.py` to assert `generate_video_shot_clip` in `root_agent.tools`.
-   - Run unit and integration tests (`uv run pytest tests/unit tests/integration`).
+3. **Testing & Deployment**:
+   - Run test suite (`uv run pytest tests/unit tests/integration`).
    - Commit and push to `main` for Cloud Run.
-   - Update Vertex AI Agent Runtime in `asia-east1` via `agents-cli deploy`.
+   - Deploy to Vertex AI Agent Runtime in `asia-east1`.
 
 4. **Verification**:
-   - Verify multi-agent delegation traces and live reasoning engine stream.
+   - Verify multimodal video evaluation tool execution and live deployment status.

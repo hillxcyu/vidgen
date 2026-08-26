@@ -1,13 +1,13 @@
 # `ACTION.md`
 
 ## 📋 Metadata
-*   **Execution Task:** Restore Intermediate Step & Sub-Agent Messages in Chat UI
-*   **Started At:** 2026-08-26T07:49:00Z
+*   **Execution Task:** Equip Quality Rater Agent to Audit Actual Video Files via Multimodal Vision
+*   **Started At:** 2026-08-26T08:23:00Z
 *   **Status:** IN_PROGRESS
 
 ---
 
 ## 📜 Execution Log
 
-### Phase 1: Agent Instructions & Toolset Refactor
-* **[2026-08-26T07:49:10Z]** Refactoring `ScreenwriterAgent`, `StoryboarderAgent`, `PromptOptimizerAgent`, `HealthCheckerAgent`, `QualityRaterAgent`, and `root_agent` in `app/agent.py`...
+### Phase 1: Tool Definition & Agent Tool Attachment
+* **[2026-08-26T08:23:40Z]** Adding `evaluate_video_clip_quality` tool and attaching it to `QualityRaterAgent` in `app/agent.py`...
