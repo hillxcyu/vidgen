@@ -15,16 +15,20 @@ def test_agent_definitions():
     assert app is not None
     assert app.name == "vidgen-omni"
 
-    sub_agent_names = [sa.name for sa in root_agent.sub_agents]
-    assert "ScreenwriterAgent" in sub_agent_names
-    assert "StoryboarderAgent" in sub_agent_names
-    assert "PromptOptimizerAgent" in sub_agent_names
-    assert "HealthCheckerAgent" in sub_agent_names
-    assert "QualityRaterAgent" in sub_agent_names
+    assert screenwriter_agent.name == "ScreenwriterAgent"
+    assert storyboarder_agent.name == "StoryboarderAgent"
+    assert prompt_optimizer_agent.name == "PromptOptimizerAgent"
+    assert health_checker_agent.name == "HealthCheckerAgent"
+    assert quality_rater_agent.name == "QualityRaterAgent"
 
 
 def test_agent_tools():
-    tool_names = [getattr(t, "__name__", str(t)) for t in root_agent.tools]
+    tool_names = [getattr(t, "name", getattr(t, "__name__", str(t))) for t in root_agent.tools]
+    assert "ScreenwriterAgent" in tool_names
+    assert "StoryboarderAgent" in tool_names
+    assert "PromptOptimizerAgent" in tool_names
+    assert "HealthCheckerAgent" in tool_names
+    assert "QualityRaterAgent" in tool_names
     assert "generate_video_shot_clip" in tool_names
     assert "parse_terminal_frame" in tool_names
     assert "concatenate_video_clips" in tool_names

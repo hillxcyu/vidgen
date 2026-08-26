@@ -1,27 +1,30 @@
 # `PLAN.md`
 
 ## 📋 Metadata
-*   **Task:** Equip Quality Rater Agent to Audit Actual Video Files via Multimodal Vision
+*   **Task:** Refactor Architecture to ADK `AgentTool` Pattern for 100% Context Cache Alignment
 *   **Target Region:** `asia-east1`
 *   **Date:** 2026-08-26
-*   **Status:** ✅ ALL_TASKS_COMPLETED
+*   **Status:** Awaiting User Approval (Stage 1: PLAN)
 
 ---
 
 ## 🎯 Objectives & Scope
 
-1. **Root Cause Analysis**:
-   - [x] Confirmed `QualityRaterAgent` was previously defined in `app/agent.py` without any tools (`tools=[]`), receiving only the string path of the video and estimating scores without multimodal video access.
+1. **Eliminate System Instruction Swapping in Main Session**:
+   - Wrap `ScreenwriterAgent`, `StoryboarderAgent`, `PromptOptimizerAgent`, `HealthCheckerAgent`, and `QualityRaterAgent` inside `google.adk.tools.AgentTool`.
+   - Register them in `root_agent.tools = [AgentTool(...), generate_video_shot_clip, parse_terminal_frame, concatenate_video_clips]`.
+   - Clear `root_agent.sub_agents = []` to eliminate conversational `transfer_to_agent` swaps in the main conversation history.
+   - **Result:** The system prompt for `vidgen_orchestrator` remains 100% static and immutable on every turn in the session, guaranteeing full Gemini context cache alignment and eliminating the ADK Dev UI performance alert.
 
-2. **Implement `evaluate_video_clip_quality` Tool in `app/agent.py`**:
-   - [x] Created `evaluate_video_clip_quality` tool reading real `.mp4` video bytes from local disk / GCS.
-   - [x] Passes `types.Part.from_bytes(data=video_bytes, mime_type="video/mp4")` to Gemini 3.7 Flash for visual frame audit.
-   - [x] Attached `tools=[evaluate_video_clip_quality]` to `QualityRaterAgent` with instructions mandating tool invocation before reporting scores.
+2. **Clean Sub-Agent Role Isolation**:
+   - Update instructions for each sub-agent: they now receive requests as tool inputs and return clean, structured responses (screenplays, storyboards, optimized prompts, safety audits, and multimodal video ratings) without needing to issue `transfer_to_agent`.
+   - `QualityRaterAgent` retains its `evaluate_video_clip_quality` tool for real multimodal `.mp4` video frame inspection.
 
-3. **Testing & Deployment**:
-   - [x] 23/23 unit and integration tests passed.
-   - [x] Deployed to Cloud Run via Cloud Build.
-   - [x] Deployed to Vertex AI Agent Runtime in `asia-east1`.
+3. **Testing & CI/CD**:
+   - Update `tests/unit/test_agent.py` to verify `AgentTool` names on `root_agent.tools`.
+   - Run unit and integration test suite (`uv run pytest tests/unit tests/integration`).
+   - Commit and push to `main` for Cloud Run deployment.
+   - Update Vertex AI Agent Runtime in `asia-east1` via `agents-cli deploy`.
 
 4. **Verification**:
-   - [x] Verified multimodal video evaluation tool execution and live deployment status.
+   - Verify zero cache warnings, clean tool execution traces, and full multimodal video evaluation.
