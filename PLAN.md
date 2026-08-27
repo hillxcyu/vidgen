@@ -1,7 +1,7 @@
 # `PLAN.md`
 
 ## 📋 Metadata
-*   **Task:** Add Reference Image Continuity & Diffusion Risk Auditing to HealthCheckerAgent
+*   **Task:** Make Reference Image Explicit in Tool Calling Arguments & Telemetry Response
 *   **Target Region:** `asia-east1`
 *   **Date:** 2026-08-27
 *   **Status:** IN_PROGRESS
@@ -10,23 +10,16 @@
 
 ## 🎯 Objectives & Scope
 
-### 1. Upgrade `HealthCheckerAgent` in `app/agent.py`
-- [ ] Add explicit **Reference Image & Continuity Risk Auditing** to `HealthCheckerAgent`.
-- [ ] Audit candidate prompts for:
-  1. **Diffusion Drift Hazards**: Competing physical text descriptions (e.g. conflicting hair color, facial traits, clothing colors) that risk overriding the reference image in Omni Flash.
-  2. **Continuity Discrepancies**: Unmotivated wardrobe, accessory, or aesthetic shifts between consecutive shots.
-  3. **Single-Shot Take Integrity**: Absence of internal camera cuts, transitions, or montages within a single 10-second take.
-  4. **Content Safety**: Standard policy and safety guardrails.
-- [ ] Mandate clear structured reporting in the chat stream:
-  - Safety Verdict (`APPROVED` / `REJECTED`)
-  - Reference & Continuity Risk (`CLEAR` / `CONTINUITY_RISK_DETECTED`)
-  - Motion Feasibility & Pacing (`VERIFIED`)
+### 1. Root Cause Analysis of Missing `reference_image_path` in Span Tool Arguments
+* **Shot 1 Behavior**: In standard text-to-video prompt workflows where no prior image is uploaded, Shot 1 generates text-to-video and extracts the first frame as the canonical reference (`tool_context.state['canonical_character_reference']`).
+* **Shot 2+ Auto-Resolution**: While `generate_video_shot_clip` auto-resolves `ref_img_path` from `tool_context.state['canonical_character_reference']` internally, `vidgen_orchestrator` was not explicitly passing `reference_image_path` as an explicit tool call argument in its JSON schema call, and the tool return response did not expose `"reference_image_path"`.
 
-### 2. Update Prompt Templates & Unit Tests
-- [ ] Update `app/prompts/prod_loop_system.txt` with the enhanced Health Checker audit specification.
-- [ ] Update unit tests in `tests/unit/test_prompts.py` and `tests/unit/test_agent.py`.
-
-### 3. Automated Verification, Git & Deployment
-- [ ] Run full test suite: `uv run pytest tests/unit tests/integration`.
-- [ ] Deploy updated agent to Vertex AI Agent Runtime in `asia-east1` (`agents-cli deploy`).
-- [ ] Commit and push changes to `main` on GitHub.
+### 2. Implementation Steps
+- [ ] Upgrade `generate_video_shot_clip` in `app/agent.py`:
+  - Search state across `canonical_character_reference`, `reference_image_path`, and `user:character_bible['main_character_frame']`.
+  - Include `"reference_image_path": ref_img_path` in the tool response dictionary so it is clearly logged in Cloud Trace telemetry spans (`gcp.vertex.agent.tool_response`).
+- [ ] Update `vidgen_orchestrator` instruction in `app/agent.py`:
+  - Explicitly mandate passing `reference_image_path` in `generate_video_shot_clip` whenever a canonical reference is established (for shots $k \ge 2$, or on shot 1 if user supplied an initial image).
+- [ ] Run full test suite (`uv run pytest tests/unit tests/integration`).
+- [ ] Deploy to Vertex AI Agent Runtime in `asia-east1`.
+- [ ] Commit and push to GitHub `main`.

@@ -1,11 +1,11 @@
 # `ACTION.md`
 
 ## 📋 Metadata
-*   **Execution Task:** Add Reference Image Continuity & Diffusion Risk Auditing to HealthCheckerAgent
-*   **Started At:** 2026-08-27T09:12:45Z
+*   **Execution Task:** Explicit Reference Image Tool Arguments & Telemetry Response Expose
+*   **Started At:** 2026-08-27T09:26:30Z
 *   **Status:** IN_PROGRESS
 
 ---
 
 ## 📜 Execution Log
-* **[2026-08-27T09:12:45Z]** Starting Phase 1: Updating `health_checker_agent` in `app/agent.py` and `app/prompts/prod_loop_system.txt`.
+* **[2026-08-27T09:26:30Z]** Initiated Phase 1: Updating `generate_video_shot_clip` and `vidgen_orchestrator` in `app/agent.py`.

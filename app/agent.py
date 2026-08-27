@@ -116,8 +116,18 @@ async def generate_video_shot_clip(
 
     # Canonical character reference for cross-shot facial and clothing locking
     ref_img_path = reference_image_path
-    if not ref_img_path and tool_context and "canonical_character_reference" in tool_context.state:
-        ref_img_path = tool_context.state.get("canonical_character_reference")
+    if not ref_img_path and tool_context:
+        if "canonical_character_reference" in tool_context.state and tool_context.state.get("canonical_character_reference"):
+            ref_img_path = tool_context.state.get("canonical_character_reference")
+        elif "reference_image_path" in tool_context.state and tool_context.state.get("reference_image_path"):
+            ref_img_path = tool_context.state.get("reference_image_path")
+        elif "user:character_bible" in tool_context.state and isinstance(tool_context.state.get("user:character_bible"), dict):
+            ref_img_path = tool_context.state["user:character_bible"].get("main_character_frame")
+
+    if ref_img_path:
+        print(f"[Omni Video Gen] Shot {shot_index} conditioning on reference image: {ref_img_path}")
+    else:
+        print(f"[Omni Video Gen] Shot {shot_index} running text-to-video seed (no reference image provided)")
 
     ref_imgs_b64 = None
     if ref_img_path and os.path.exists(ref_img_path):
@@ -183,6 +193,7 @@ async def generate_video_shot_clip(
             "shot_index": shot_index,
             "video_path": clip_path,
             "video_url": gcs_url,
+            "reference_image_path": ref_img_path,
             "artifact_name": clip_name,
             "duration": duration,
             "status": "completed"
@@ -202,6 +213,7 @@ async def generate_video_shot_clip(
         "shot_index": shot_index,
         "video_path": clip_path,
         "video_url": gcs_url,
+        "reference_image_path": ref_img_path,
         "artifact_name": clip_name,
         "artifact_exposed": artifact_saved,
         "duration": duration,
@@ -701,6 +713,7 @@ root_agent = Agent(
         "   Step 2.1 - OPTIMIZE: Delegate to `PromptOptimizerAgent` to optimize the visual prompt for Gemini Omni Flash (pass QualityRater feedback if retrying).\n"
         "   Step 2.2 - AUDIT: Delegate to `HealthCheckerAgent` to verify safety and policy compliance.\n"
         "   Step 2.3 - CRITICAL TOOL CALL (RENDER): Invoke tool `generate_video_shot_clip(prompt=..., shot_index=k, input_image_path=..., reference_image_path=...)`.\n"
+        "              REFERENCE CONDITIONING: For shots k >= 2 (or whenever an initial character image is provided), pass `reference_image_path` explicitly so Gemini Omni Flash locks the character facial structure, hair, and wardrobe from the reference asset.\n"
         "              CRITICAL RULE: You MUST invoke `generate_video_shot_clip` immediately after `HealthCheckerAgent`. NEVER transfer to `QualityRaterAgent` before this tool call has finished and returned `video_path`.\n"
         "   Step 2.4 - RATE & CROSS-SHOT AUDIT: Delegate to `QualityRaterAgent` passing `video_path` and `reference_image_path` to audit face/wardrobe consistency.\n"
         "   Step 2.5 - PER-SHOT INTERACTIVE DIRECTING CHECKPOINT:\n"
