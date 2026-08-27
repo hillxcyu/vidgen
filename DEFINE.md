@@ -2,25 +2,22 @@
 
 ## 📋 Metadata
 *   **Stage:** 2 - Problem Decomposition (DEFINE)
-*   **Timestamp:** 2026-08-27T08:50:50Z
-*   **Target Task:** Reference Image Conditioning, Role Binding & Prompt Optimizer Synergy
+*   **Timestamp:** 2026-08-27T09:12:30Z
+*   **Target Task:** HealthCheckerAgent Reference Image & Continuity Risk Auditing
 *   **Status:** IN_PROGRESS
 
 ---
 
 ## 📝 Detailed TODO Breakdown
 
-### Phase 1: Omni Client & Control String Refinement [backend] [omni]
-- [ ] `[T001]` **[omni]** Enhance `build_omni_control_string` in `app/tools/omni_client.py` to generate explicit subject role-binding directives that instruct Gemini Omni Flash to lock character appearance to the attached reference image.
-- [ ] `[T002]` **[omni]** Update `generate_omni_clip` payload in `app/tools/omni_client.py` to prioritize the text instruction first in the `interactions.create` payload list before image items.
+### Phase 1: HealthChecker Instructions & Guardrail Upgrade [agent] [safety]
+- [ ] `[T001]` **[agent]** Update `health_checker_agent` instruction in `app/agent.py` to audit for reference image conflicts, diffusion text drift, wardrobe shifts, and single-shot take integrity.
+- [ ] `[T002]` **[agent]** Update `app/prompts/prod_loop_system.txt` with reference risk guardrails.
 
-### Phase 2: Prompt Optimizer Role-Binding Guidelines [agent] [prompt]
-- [ ] `[T003]` **[agent]** Update `PromptOptimizerAgent` instruction in `app/agent.py` to enforce reference-image anchoring rules (preventing competing text physical descriptors).
+### Phase 2: Testing & Verification [test]
+- [ ] `[T003]` **[test]** Update `tests/unit/test_prompts.py` to verify HealthChecker reference risk audit strings.
+- [ ] `[T004]` **[test]** Run full test suite (`uv run pytest tests/unit tests/integration`).
 
-### Phase 3: Automated Testing & Verification [test]
-- [ ] `[T004]` **[test]** Update `tests/unit/test_omni_client.py` to verify new reference directive strings and payload ordering.
-- [ ] `[T005]` **[test]** Run full test suite (`uv run pytest tests/unit tests/integration`).
-
-### Phase 4: Deployment & Git [deploy] [git]
-- [ ] `[T006]` **[deploy]** Deploy agent update to Vertex AI Agent Runtime in `asia-east1`.
-- [ ] `[T007]` **[git]** Commit all changes and push to `main` on GitHub.
+### Phase 3: Deployment & Git [deploy] [git]
+- [ ] `[T005]` **[deploy]** Deploy agent update to Vertex AI Agent Runtime in `asia-east1`.
+- [ ] `[T006]` **[git]** Commit all changes and push to `main` on GitHub.

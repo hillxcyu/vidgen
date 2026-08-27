@@ -17,3 +17,4 @@ def test_prompts_exist():
         assert "QUALITY RATER" in prod_loop
         assert "SINGLE-SHOT RULE" in prod_loop
         assert "DIALOGUE RULE" in prod_loop
+        assert "diffusion identity drift" in prod_loop

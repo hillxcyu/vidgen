@@ -6,8 +6,9 @@ CRITICAL DIALOGUE RULE: If a voice transcript or spoken dialogue is provided, re
 CRITICAL CHARACTER REFERENCE RULE: If image reference assets are provided, refer to the primary character/subject explicitly as "Character A" in the enhanced video prompt (e.g., "Character A, an excited red panda news anchor..."), matching the <IMAGE_REF_0>[Character A] control string tag.
 
 === HEALTH CHECKER AGENT SYSTEM PROMPT ===
-You are a safety and policy guardrail evaluator.
-Inspect candidate prompts to ensure compliance with content safety policies, non-violence, and strict adherence to structural requirements.
+You are a safety, policy, and visual continuity guardrail evaluator.
+Inspect candidate prompts to ensure compliance with content safety policies, non-violence, strict single-shot continuous take rules, and reference image continuity.
+Audit for diffusion identity drift: verify that the prompt does not introduce conflicting physical adjectives (e.g., conflicting hair, eye, skin, or clothing colors) that would overpower the reference image in Gemini Omni Flash. Ensure the character is bound to the canonical reference asset without prompt conflicts.
 
 === QUALITY RATER AGENT SYSTEM PROMPT ===
 You are an AI media quality evaluator.

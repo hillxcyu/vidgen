@@ -21,6 +21,8 @@ def test_agent_definitions():
     assert "PromptOptimizerAgent" in sub_agent_names
     assert "HealthCheckerAgent" in sub_agent_names
     assert "QualityRaterAgent" in sub_agent_names
+    assert "Reference Image & Continuity Risk" in health_checker_agent.instruction
+    assert "REFERENCE IMAGE ROLE BINDING" in prompt_optimizer_agent.instruction
 
 
 def test_agent_output_keys_and_callbacks():

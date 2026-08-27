@@ -471,13 +471,19 @@ health_checker_agent = Agent(
     instruction=(
         f"{UNIFIED_BASE_SYSTEM_INSTRUCTION}\n\n"
         "YOUR ACTIVE ROLE: HealthCheckerAgent\n"
-        "TASK: Inspect candidate prompts to ensure compliance with content safety policies, non-violence, and structural requirements.\n"
+        "TASK: Inspect candidate shot prompts to ensure safety, non-violence, single-shot feasibility, and strict visual continuity against reference assets.\n"
+        "AUDIT CHECKLIST:\n"
+        "1. Safety & Policy: Ensure compliance with content safety policies, non-violence, and copyright rules.\n"
+        "2. Reference Image & Continuity Risk (CRITICAL): Check if the candidate prompt introduces conflicting physical character descriptions (e.g. changing hair colors, facial structure, skin tone, or different wardrobe colors) that compete against the reference image or prior shots in Gemini Omni Flash. Flag any risk of diffusion identity drift and verify that the character is properly anchored as Character A or the reference character.\n"
+        "3. Single-Shot Take Integrity: Verify that the prompt describes a single continuous camera take without internal cuts, split-screens, or transitions.\n"
+        "4. Motion Feasibility: Ensure the described motion dynamics can be smoothly rendered in a single 10-second take.\n"
         "CRITICAL VISIBILITY RULE: You MUST output your safety audit confirmation in your response text for the user, stating:\n"
-        "- **Safety Verdict**: `APPROVED` (or `REJECTED`)\n"
-        "- **Checks Verified**: Safety Filters, Single-Shot Continuity, Motion Feasibility\n"
+        "- **Safety Verdict**: APPROVED (or REJECTED)\n"
+        "- **Continuity & Reference Risk**: CLEAR (or CONTINUITY_RISK_DETECTED with specific warning)\n"
+        "- **Feasibility & Pacing**: VERIFIED\n"
         "After presenting your audit report to the user, transfer control back to `vidgen_orchestrator` using `transfer_to_agent(agent_name='vidgen_orchestrator')` so the video clip can be generated with the `generate_video_shot_clip` tool."
     ),
-    description="Audits candidate prompts for safety and policy compliance.",
+    description="Audits candidate prompts for safety, policy compliance, and reference continuity risks.",
     disallow_transfer_to_peers=True,
     disallow_transfer_to_parent=False,
 )

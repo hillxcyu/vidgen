@@ -1,7 +1,7 @@
 # `PLAN.md`
 
 ## 📋 Metadata
-*   **Task:** Enhance Reference Image Conditioning & Role Binding in Omni Flash & Prompt Optimizer
+*   **Task:** Add Reference Image Continuity & Diffusion Risk Auditing to HealthCheckerAgent
 *   **Target Region:** `asia-east1`
 *   **Date:** 2026-08-27
 *   **Status:** IN_PROGRESS
@@ -10,17 +10,23 @@
 
 ## 🎯 Objectives & Scope
 
-### 1. Refactor `build_omni_control_string` and `generate_omni_clip` in `app/tools/omni_client.py`
-- [ ] Upgrade `build_omni_control_string` to build clean, high-priority natural language role-binding directives (*"Featuring the exact subject depicted in the attached reference image, maintaining their identical facial structure, hair color, and clothing..."*) alongside MMC tags.
-- [ ] Optimize the `interactions.create` payload structure to place the primed text directive first before image data parts, maximizing reference cross-attention weights.
-- [ ] Ensure seamless cooperation between start frame anchors (`<FIRST_FRAME>`) and character reference assets (`# References <IMAGE_REF_0>[Character A]`).
+### 1. Upgrade `HealthCheckerAgent` in `app/agent.py`
+- [ ] Add explicit **Reference Image & Continuity Risk Auditing** to `HealthCheckerAgent`.
+- [ ] Audit candidate prompts for:
+  1. **Diffusion Drift Hazards**: Competing physical text descriptions (e.g. conflicting hair color, facial traits, clothing colors) that risk overriding the reference image in Omni Flash.
+  2. **Continuity Discrepancies**: Unmotivated wardrobe, accessory, or aesthetic shifts between consecutive shots.
+  3. **Single-Shot Take Integrity**: Absence of internal camera cuts, transitions, or montages within a single 10-second take.
+  4. **Content Safety**: Standard policy and safety guardrails.
+- [ ] Mandate clear structured reporting in the chat stream:
+  - Safety Verdict (`APPROVED` / `REJECTED`)
+  - Reference & Continuity Risk (`CLEAR` / `CONTINUITY_RISK_DETECTED`)
+  - Motion Feasibility & Pacing (`VERIFIED`)
 
-### 2. Update `PromptOptimizerAgent` in `app/agent.py`
-- [ ] Update `PromptOptimizerAgent` instructions: When a reference image is present, avoid re-inventing or competing with physical appearance descriptors in text (avoid conflicting hair colors, jawlines, clothing styles).
-- [ ] Direct the optimizer to focus text descriptions on **cinematic camera angles, motion trajectory, volumetric lighting, and scene atmosphere**, explicitly anchoring the actor to the reference image.
+### 2. Update Prompt Templates & Unit Tests
+- [ ] Update `app/prompts/prod_loop_system.txt` with the enhanced Health Checker audit specification.
+- [ ] Update unit tests in `tests/unit/test_prompts.py` and `tests/unit/test_agent.py`.
 
-### 3. Verification & Deployment
-- [ ] Update / add unit tests in `tests/unit/test_omni_client.py` and `tests/unit/test_prompts.py`.
+### 3. Automated Verification, Git & Deployment
 - [ ] Run full test suite: `uv run pytest tests/unit tests/integration`.
-- [ ] Deploy updated agent to Vertex AI Agent Runtime (`agents-cli deploy`).
+- [ ] Deploy updated agent to Vertex AI Agent Runtime in `asia-east1` (`agents-cli deploy`).
 - [ ] Commit and push changes to `main` on GitHub.
