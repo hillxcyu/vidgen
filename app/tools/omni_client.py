@@ -128,7 +128,24 @@ def generate_omni_clip(
     ref_imgs = reference_images_b64 if reference_images_b64 is not None else reference_assets_b64
     ref_auds = reference_audio_b64 or []
     config = Config()
-    payload = []
+    # Format full control string according to Google Omni / Video Station specification
+    formatted_prompt = build_omni_control_string(
+        prompt=prompt,
+        input_image_b64=input_image_b64,
+        end_image_b64=end_image_b64,
+        reference_images_b64=ref_imgs,
+        reference_audio_b64=ref_auds,
+        voice_transcript=voice_transcript,
+        aspect_ratio=aspect_ratio,
+        resolution=resolution,
+        duration=duration
+    )
+
+    # Place text prompt first to maximize reference image cross-attention weighting
+    payload = [{
+        "type": "text",
+        "text": formatted_prompt
+    }]
 
     # Mode B: Image-to-Video Chaining & Dual-Anchor (First & Last Frame)
     if input_image_b64:
@@ -152,24 +169,6 @@ def generate_omni_clip(
                 "data": img_b64,
                 "mime_type": "image/png"
             })
-
-    # Format full control string according to Google Omni / Video Station specification
-    formatted_prompt = build_omni_control_string(
-        prompt=prompt,
-        input_image_b64=input_image_b64,
-        end_image_b64=end_image_b64,
-        reference_images_b64=ref_imgs,
-        reference_audio_b64=ref_auds,
-        voice_transcript=voice_transcript,
-        aspect_ratio=aspect_ratio,
-        resolution=resolution,
-        duration=duration
-    )
-
-    payload.append({
-        "type": "text",
-        "text": formatted_prompt
-    })
 
     try:
         interaction = client.interactions.create(

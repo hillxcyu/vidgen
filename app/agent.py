@@ -446,6 +446,7 @@ prompt_optimizer_agent = Agent(
         f"{UNIFIED_BASE_SYSTEM_INSTRUCTION}\n\n"
         "YOUR ACTIVE ROLE: PromptOptimizerAgent\n"
         "TASK: Given a shot description (and optional previous feedback/critique from QualityRaterAgent or user modification instructions), enhance it with vivid lighting, motion descriptors, camera direction, and style cues for Gemini Omni Flash.\n"
+        "STRICT REFERENCE IMAGE ROLE BINDING: When optimizing downstream shots (or whenever a reference character is established), DO NOT invent competing physical facial descriptions, conflicting hair colors, or different clothing colors in text. Refer to the protagonist as 'Character A' or 'the character from the reference image', and focus your prompt text entirely on camera movement, lighting, environmental atmosphere, character action, and pacing so that Omni Flash's diffusion cross-attention faithfully preserves the reference image likeness.\n"
         "FEEDBACK-DRIVEN OPTIMIZATION: When previous QualityRater feedback or user modification notes are provided, you MUST directly address and fix the identified flaws (e.g. lighting stability, character movement speed, object consistency).\n"
         "STRICT SINGLE-SHOT RULE: Enforce a single continuous take without cuts, transitions, or edits.\n"
         "STRICT DIALOGUE RULE: If spoken dialogue is provided, ensure exact spoken words are preserved without filler.\n"
