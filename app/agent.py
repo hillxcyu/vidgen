@@ -610,16 +610,32 @@ async def evaluate_video_clip_quality(
 
     # Resolve canonical reference image for cross-shot continuity checking
     ref_img_path = reference_image_path
-    if not ref_img_path and tool_context and "canonical_character_reference" in tool_context.state:
-        ref_img_path = tool_context.state.get("canonical_character_reference")
+    if not ref_img_path and tool_context:
+        if "canonical_character_reference" in tool_context.state and tool_context.state.get("canonical_character_reference"):
+            ref_img_path = tool_context.state.get("canonical_character_reference")
+        elif "reference_image_path" in tool_context.state and tool_context.state.get("reference_image_path"):
+            ref_img_path = tool_context.state.get("reference_image_path")
+        elif "user:character_bible" in tool_context.state and isinstance(tool_context.state.get("user:character_bible"), dict):
+            ref_img_path = tool_context.state["user:character_bible"].get("main_character_frame")
 
     ref_img_bytes = None
-    if ref_img_path and os.path.exists(ref_img_path):
+    if ref_img_path and os.path.exists(ref_img_path) and os.path.isfile(ref_img_path):
         try:
             with open(ref_img_path, "rb") as ref_f:
                 ref_img_bytes = ref_f.read()
         except Exception as ref_read_err:
             print(f"[Ref Image Read Notice]: {ref_read_err}")
+    elif ref_img_path and ref_img_path.startswith(("http://", "https://")):
+        try:
+            with urllib.request.urlopen(ref_img_path, timeout=15) as resp:
+                ref_img_bytes = resp.read()
+        except Exception as ref_dl_err:
+            print(f"[Ref Image Download Notice]: {ref_dl_err}")
+
+    if ref_img_bytes:
+        print(f"[Quality Rater Multimodal] Attached Reference Image ({ref_img_path}) for character identity and wardrobe consistency audit.")
+    else:
+        print("[Quality Rater Multimodal] Running standard visual audit (no reference image attached).")
 
     client = get_genai_client()
     criteria_str = f"Specific Scene Goal: {evaluation_criteria}" if evaluation_criteria else "Standard quality audit."
