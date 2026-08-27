@@ -150,8 +150,8 @@ async def generate_video_shot_clip(
     with open(clip_path, "wb") as f:
         f.write(clip_bytes)
 
-    # Automatically extract canonical reference frame from Shot 1 if not already established
-    if shot_index == 1:
+    # Automatically extract canonical reference frame from Shot 1 ONLY if no reference image was supplied
+    if shot_index == 1 and not ref_img_path:
         try:
             anchor_frame = extract_first_frame(clip_path)
             if anchor_frame and tool_context:
@@ -713,7 +713,7 @@ root_agent = Agent(
         "   Step 2.1 - OPTIMIZE: Delegate to `PromptOptimizerAgent` to optimize the visual prompt for Gemini Omni Flash (pass QualityRater feedback if retrying).\n"
         "   Step 2.2 - AUDIT: Delegate to `HealthCheckerAgent` to verify safety and policy compliance.\n"
         "   Step 2.3 - CRITICAL TOOL CALL (RENDER): Invoke tool `generate_video_shot_clip(prompt=..., shot_index=k, input_image_path=..., reference_image_path=...)`.\n"
-        "              REFERENCE CONDITIONING: For shots k >= 2 (or whenever an initial character image is provided), pass `reference_image_path` explicitly so Gemini Omni Flash locks the character facial structure, hair, and wardrobe from the reference asset.\n"
+        "              REFERENCE CONDITIONING (CRITICAL): If the user provides a reference image (via file path, URL, or image upload) in their initial request, you MUST pass `reference_image_path` on **Shot 1** as well as all subsequent shots. For workflows without an initial user image, Shot 1 generates text-to-video and automatically establishes the reference for shots k >= 2.\n"
         "              CRITICAL RULE: You MUST invoke `generate_video_shot_clip` immediately after `HealthCheckerAgent`. NEVER transfer to `QualityRaterAgent` before this tool call has finished and returned `video_path`.\n"
         "   Step 2.4 - RATE & CROSS-SHOT AUDIT: Delegate to `QualityRaterAgent` passing `video_path` and `reference_image_path` to audit face/wardrobe consistency.\n"
         "   Step 2.5 - PER-SHOT INTERACTIVE DIRECTING CHECKPOINT:\n"
