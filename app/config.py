@@ -4,13 +4,17 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
-load_dotenv()
+load_dotenv(override=True)
 
 # Force Google GenAI SDK and ADK Runner to use Vertex AI ADC mode
 os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "true"
 
 class Config:
-    PROJECT_ID: str = os.getenv("GOOGLE_CLOUD_PROJECT", "universal-trail-492014-n5")
+    PROJECT_ID: str = (
+        os.getenv("GOOGLE_CLOUD_PROJECT")
+        if os.getenv("GOOGLE_CLOUD_PROJECT") and os.getenv("GOOGLE_CLOUD_PROJECT") != "vital-octagon-19612"
+        else "universal-trail-492014-n5"
+    )
     LOCATION: str = os.getenv("GOOGLE_CLOUD_LOCATION", "global")
     ORCHESTRATOR_MODEL: str = os.getenv("ORCHESTRATOR_MODEL", "gemini-3.7-flash")
     VIDEO_GEN_MODEL: str = os.getenv("VIDEO_GEN_MODEL", "gemini-omni-flash-preview")

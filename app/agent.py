@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import asyncio
 import os
 import time
 from typing import Dict, Any, Optional, List
@@ -599,7 +600,10 @@ async def evaluate_video_clip_quality(
         resp = await asyncio.to_thread(
             client.models.generate_content,
             model="gemini-3.7-flash",
-            contents=contents
+            contents=contents,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+            )
         )
         if resp and resp.text:
             text = resp.text
