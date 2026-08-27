@@ -170,6 +170,16 @@ def generate_omni_clip(
                 "mime_type": "image/png"
             })
 
+    print(f"[Omni Flash Dispatch] Model: {config.VIDEO_GEN_MODEL}")
+    print(f"[Omni Flash Dispatch] Control String: {formatted_prompt}")
+    print(f"[Omni Flash Dispatch] Payload Count: {len(payload)} (Text: 1, Images: {len(payload)-1})")
+    if ref_imgs:
+        print(f"[Omni Flash Dispatch] Reference Images Attached: {len(ref_imgs)}")
+    if input_image_b64:
+        print("[Omni Flash Dispatch] First Frame Anchor Attached (<FIRST_FRAME>)")
+    if end_image_b64:
+        print("[Omni Flash Dispatch] Last Frame Anchor Attached (<LAST_FRAME>)")
+
     try:
         interaction = client.interactions.create(
             model=config.VIDEO_GEN_MODEL,

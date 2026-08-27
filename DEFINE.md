@@ -2,17 +2,17 @@
 
 ## 📋 Metadata
 *   **Stage:** 2 - Problem Decomposition (DEFINE)
-*   **Timestamp:** 2026-08-27T09:38:30Z
-*   **Target Task:** User-Provided Reference Image Ingestion for Shot 1
+*   **Timestamp:** 2026-08-27T09:57:20Z
+*   **Target Task:** Automatic User Reference Image Ingestion & Omni Flash Logging
 *   **Status:** IN_PROGRESS
 
 ---
 
 ## 📝 Detailed TODO Breakdown
 
-### Phase 1: Callback & Agent Instructions [agent] [callback]
-- [ ] `[T001]` **[callback]** Update `init_session_state` in [`app/agent.py`](file:///usr/local/google/home/xcyu/projects/reusable/vidgen/app/agent.py) to parse user prompt / input events for attached images or referenced image paths and store into `state["canonical_character_reference"]`.
-- [ ] `[T002]` **[agent]** Update `vidgen_orchestrator`, `StoryboarderAgent`, and `PromptOptimizerAgent` in [`app/agent.py`](file:///usr/local/google/home/xcyu/projects/reusable/vidgen/app/agent.py) to explicitly bind Shot 1 to `reference_image_path`.
+### Phase 1: Ingestion Callback & Omni Logging [agent] [logging]
+- [ ] `[T001]` **[agent]** Update `init_session_state` in [`app/agent.py`](file:///usr/local/google/home/xcyu/projects/reusable/vidgen/app/agent.py) to extract user-attached images, file URIs, and text image paths directly into `state["canonical_character_reference"]`.
+- [ ] `[T002]` **[logging]** Add verbose logging in `generate_omni_clip` ([`app/tools/omni_client.py`](file:///usr/local/google/home/xcyu/projects/reusable/vidgen/app/tools/omni_client.py)) to print the exact control string and payload structure to Cloud Logging.
 
 ### Phase 2: Testing & Verification [test]
 - [ ] `[T003]` **[test]** Run full test suite (`uv run pytest tests/unit tests/integration`).

@@ -65,6 +65,48 @@ async def init_session_state(callback_context: CallbackContext) -> None:
     if "app:total_shots_generated" not in state:
         state["app:total_shots_generated"] = 0
 
+    # Automatically extract user-attached images or referenced image paths as canonical reference
+    if hasattr(callback_context, "user_content") and callback_context.user_content:
+        parts = getattr(callback_context.user_content, "parts", []) or []
+        for part in parts:
+            if hasattr(part, "inline_data") and part.inline_data and getattr(part.inline_data, "mime_type", "").startswith("image/"):
+                img_data = part.inline_data.data
+                if isinstance(img_data, str):
+                    import base64
+                    img_bytes = base64.b64decode(img_data)
+                elif isinstance(img_data, bytes):
+                    img_bytes = img_data
+                else:
+                    img_bytes = None
+                
+                if img_bytes:
+                    user_ref_path = os.path.join(OUTPUT_DIR, "user_uploaded_reference.png")
+                    try:
+                        with open(user_ref_path, "wb") as f_img:
+                            f_img.write(img_bytes)
+                        state["canonical_character_reference"] = user_ref_path
+                        state["reference_image_path"] = user_ref_path
+                        print(f"[Reference Ingestion] Saved user-uploaded image to {user_ref_path}")
+                        break
+                    except Exception as save_err:
+                        print(f"[Reference Ingestion Notice]: {save_err}")
+            elif hasattr(part, "file_data") and part.file_data and getattr(part.file_data, "file_uri", ""):
+                file_uri = part.file_data.file_uri
+                state["canonical_character_reference"] = file_uri
+                state["reference_image_path"] = file_uri
+                print(f"[Reference Ingestion] Captured user file URI: {file_uri}")
+                break
+            elif hasattr(part, "text") and part.text:
+                import re
+                path_match = re.search(r'(?:(?:/[^\s"\']+\.(?:png|jpg|jpeg|webp))|(?:gs://[^\s"\']+\.(?:png|jpg|jpeg|webp))|(?:https?://[^\s"\']+\.(?:png|jpg|jpeg|webp)))', part.text)
+                if path_match:
+                    found_path = path_match.group(0)
+                    if os.path.exists(found_path) or found_path.startswith(("gs://", "http://", "https://")):
+                        state["canonical_character_reference"] = found_path
+                        state["reference_image_path"] = found_path
+                        print(f"[Reference Ingestion] Captured image path from user text: {found_path}")
+                        break
+
 
 async def sync_session_to_memory(callback_context: CallbackContext) -> None:
     """Persists session events, character lore, and directorial preferences to ADK MemoryBank."""
