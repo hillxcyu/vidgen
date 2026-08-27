@@ -17,6 +17,7 @@ import time
 from typing import Dict, Any, Optional, List
 
 from google.adk.agents import Agent
+from google.adk.agents.callback_context import CallbackContext
 from google.adk.apps import App
 from google.adk.models import Gemini
 from google.adk.tools import ToolContext, AgentTool
@@ -32,6 +33,29 @@ from app.state import PipelineState, VideoShot, StoryboardEntry
 MODEL = os.getenv("ORCHESTRATOR_MODEL", "gemini-3.7-flash")
 OUTPUT_DIR = os.getenv("VIDGEN_OUTPUT_DIR", "/tmp/vidgen_output")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+
+async def init_session_state(callback_context: CallbackContext) -> None:
+    """Initializes default pipeline state, user preferences, and app metrics on session start."""
+    state = callback_context.state
+    if "pipeline_stage" not in state:
+        state["pipeline_stage"] = "pre_production"
+    if "shots" not in state:
+        state["shots"] = {}
+    if "user:preferred_aspect_ratio" not in state:
+        state["user:preferred_aspect_ratio"] = "16:9"
+    if "user:preferred_resolution" not in state:
+        state["user:preferred_resolution"] = "720p"
+    if "user:default_mode" not in state:
+        state["user:default_mode"] = "i2v_chaining"
+    if "user:total_videos_created" not in state:
+        state["user:total_videos_created"] = 0
+    if "user:total_shots_generated" not in state:
+        state["user:total_shots_generated"] = 0
+    if "app:total_videos_rendered" not in state:
+        state["app:total_videos_rendered"] = 0
+    if "app:total_shots_generated" not in state:
+        state["app:total_shots_generated"] = 0
 
 
 async def generate_video_shot_clip(
@@ -112,6 +136,27 @@ async def generate_video_shot_clip(
         except Exception as art_err:
             print(f"[Artifact Save Notice]: {art_err}")
 
+        # --- STATE UPDATES (Session, Temp, User, App Scopes) ---
+        shots_state = dict(tool_context.state.get("shots", {}))
+        shots_state[str(shot_index)] = {
+            "shot_index": shot_index,
+            "video_path": clip_path,
+            "video_url": gcs_url,
+            "artifact_name": clip_name,
+            "duration": duration,
+            "status": "completed"
+        }
+        tool_context.state["shots"] = shots_state
+        tool_context.state["pipeline_stage"] = "production"
+
+        # Turn/Temp scope
+        tool_context.state["temp:latest_rendered_shot"] = clip_path
+        tool_context.state["temp:latest_shot_index"] = shot_index
+
+        # App & User metrics
+        tool_context.state["app:total_shots_generated"] = tool_context.state.get("app:total_shots_generated", 0) + 1
+        tool_context.state["user:total_shots_generated"] = tool_context.state.get("user:total_shots_generated", 0) + 1
+
     return {
         "shot_index": shot_index,
         "video_path": clip_path,
@@ -123,11 +168,13 @@ async def generate_video_shot_clip(
     }
 
 
-def parse_initial_frame(video_path: str) -> Dict[str, Any]:
+def parse_initial_frame(video_path: str, tool_context: Optional[ToolContext] = None) -> Dict[str, Any]:
     """Extracts the initial (first) frame of a video clip for dual-anchor visual continuity."""
     shot_name = os.path.splitext(os.path.basename(video_path))[0]
     out_frame_path = os.path.join(OUTPUT_DIR, f"{shot_name}_first_frame.png")
     frame_b64 = extract_first_frame(video_path, output_image_path=out_frame_path)
+    if tool_context:
+        tool_context.state["temp:first_frame_anchor"] = out_frame_path
     return {
         "video_path": video_path,
         "frame_image_path": out_frame_path,
@@ -135,11 +182,13 @@ def parse_initial_frame(video_path: str) -> Dict[str, Any]:
     }
 
 
-def parse_terminal_frame(video_path: str) -> Dict[str, Any]:
+def parse_terminal_frame(video_path: str, tool_context: Optional[ToolContext] = None) -> Dict[str, Any]:
     """Extracts the final terminal frame of a video clip for Image-to-Video chaining."""
     shot_name = os.path.splitext(os.path.basename(video_path))[0]
     out_frame_path = os.path.join(OUTPUT_DIR, f"{shot_name}_last_frame.png")
     frame_b64 = extract_last_frame(video_path, output_image_path=out_frame_path)
+    if tool_context:
+        tool_context.state["temp:last_frame_anchor"] = out_frame_path
     return {
         "video_path": video_path,
         "frame_image_path": out_frame_path,
@@ -196,6 +245,13 @@ async def concatenate_video_clips(
             artifact_saved = True
         except Exception as art_err:
             print(f"[Artifact Save Notice]: {art_err}")
+
+        # --- STATE UPDATES (Session, User, App Scopes) ---
+        tool_context.state["stitched_video_path"] = stitched_path
+        tool_context.state["stitched_video_url"] = gcs_url
+        tool_context.state["pipeline_stage"] = "post_production"
+        tool_context.state["app:total_videos_rendered"] = tool_context.state.get("app:total_videos_rendered", 0) + 1
+        tool_context.state["user:total_videos_created"] = tool_context.state.get("user:total_videos_created", 0) + 1
 
     return {
         "stitched_video_path": stitched_path,
@@ -313,6 +369,7 @@ screenwriter_agent = Agent(
         "After presenting the complete screenplay to the user, transfer control back to `vidgen_orchestrator` using `transfer_to_agent(agent_name='vidgen_orchestrator')`."
     ),
     description="Expands high-level video prompts into multi-scene cinematic screenplays.",
+    output_key="screenplay",
     disallow_transfer_to_peers=True,
     disallow_transfer_to_parent=False,
 )
@@ -332,6 +389,7 @@ storyboarder_agent = Agent(
         "After presenting the complete storyboard table to the user, transfer control back to `vidgen_orchestrator` using `transfer_to_agent(agent_name='vidgen_orchestrator')`."
     ),
     description="Converts screenplays into structured shot specifications and visual prompts.",
+    output_key="storyboard",
     disallow_transfer_to_peers=True,
     disallow_transfer_to_parent=False,
 )
@@ -385,6 +443,7 @@ async def evaluate_video_clip_quality(
     video_path: str,
     prompt: str,
     evaluation_criteria: Optional[str] = None,
+    tool_context: Optional[ToolContext] = None,
 ) -> dict:
     """Inspects and audits an actual MP4 video clip file using Gemini multimodal vision.
 
@@ -392,6 +451,7 @@ async def evaluate_video_clip_quality(
         video_path: Local filesystem path or public URL of the generated .mp4 video clip.
         prompt: The visual prompt describing what should happen in the shot.
         evaluation_criteria: Specific quality criteria or character/lighting requirements.
+        tool_context: Optional ADK tool execution context for state tracking.
 
     Returns:
         Structured evaluation result with numerical score (0.0 to 1.0), rubric breakdown, verdict (PASSED/RETRY), and detailed perceptual critique.
@@ -425,7 +485,7 @@ async def evaluate_video_clip_quality(
             print(f"[Video Download Error]: {e}")
 
     if not video_bytes:
-        return {
+        res = {
             "score": 0.0,
             "verdict": "RETRY",
             "rubric_breakdown": {
@@ -437,6 +497,11 @@ async def evaluate_video_clip_quality(
             "feedback": f"Could not open video file at {video_path} for visual inspection.",
             "criteria_evaluated": evaluation_criteria,
         }
+        if tool_context:
+            tool_context.state["quality_rating"] = 0.0
+            tool_context.state["quality_verdict"] = "RETRY"
+            tool_context.state["rater_feedback"] = res["feedback"]
+        return res
 
     client = get_genai_client()
     criteria_str = f"Specific Scene Goal: {evaluation_criteria}" if evaluation_criteria else "Standard quality audit."
@@ -456,6 +521,7 @@ async def evaluate_video_clip_quality(
         "- feedback: detailed paragraph describing specific visual observations from the video"
     )
 
+    result_data = None
     try:
         resp = await asyncio.to_thread(
             client.models.generate_content,
@@ -470,7 +536,7 @@ async def evaluate_video_clip_quality(
             json_match = re.search(r"\{.*\}", text, re.DOTALL)
             clean_text = json_match.group(0) if json_match else text
             data = json.loads(clean_text)
-            return {
+            result_data = {
                 "score": float(data.get("score", 0.9)),
                 "verdict": data.get("verdict", "PASSED"),
                 "rubric_breakdown": data.get("rubric_breakdown", {}),
@@ -480,18 +546,27 @@ async def evaluate_video_clip_quality(
     except Exception as e:
         print(f"[Multimodal Video Evaluation Notice]: {e}")
 
-    return {
-        "score": 0.88,
-        "verdict": "PASSED",
-        "rubric_breakdown": {
-            "subject_identity_consistency": 0.90,
-            "motion_smoothness": 0.88,
-            "prompt_adherence": 0.88,
-            "temporal_asset_persistence": 0.88
-        },
-        "feedback": "Video inspected with high visual fidelity and motion stability.",
-        "criteria_evaluated": evaluation_criteria,
-    }
+    if not result_data:
+        result_data = {
+            "score": 0.88,
+            "verdict": "PASSED",
+            "rubric_breakdown": {
+                "subject_identity_consistency": 0.90,
+                "motion_smoothness": 0.88,
+                "prompt_adherence": 0.88,
+                "temporal_asset_persistence": 0.88
+            },
+            "feedback": "Video inspected with high visual fidelity and motion stability.",
+            "criteria_evaluated": evaluation_criteria,
+        }
+
+    if tool_context:
+        tool_context.state["quality_rating"] = result_data["score"]
+        tool_context.state["quality_verdict"] = result_data["verdict"]
+        tool_context.state["rater_feedback"] = result_data["feedback"]
+        tool_context.state["rubric_breakdown"] = result_data["rubric_breakdown"]
+
+    return result_data
 
 
 quality_rater_agent = Agent(
@@ -566,6 +641,7 @@ root_agent = Agent(
         "7. FINAL EVALUATION: Delegate to `QualityRaterAgent` to audit the newly stitched final video.\n"
         "8. DELIVER: Present the updated final video with clickable link, embedded HTML5 player, updated shot metrics, and final quality rating."
     ),
+    before_agent_callback=init_session_state,
     tools=[
         generate_video_shot_clip,
         parse_initial_frame,
@@ -585,3 +661,4 @@ app = App(
     root_agent=root_agent,
     name="vidgen-omni",
 )
+
