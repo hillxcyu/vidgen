@@ -1,13 +1,13 @@
 # `ACTION.md`
 
 ## 📋 Metadata
-*   **Execution Task:** Implement Advanced Multi-Agent Features (3. HITL Directing Checkpoints ➔ 4. Long-Term Directing Memory ➔ 5. A2A Fleet Collaboration)
-*   **Started At:** 2026-08-27T06:20:45Z
+*   **Execution Task:** Fix Cross-Shot Character Identity & Wardrobe Continuity in Quality Rater & Video Generation
+*   **Started At:** 2026-08-27T07:17:25Z
 *   **Status:** IN_PROGRESS
 
 ---
 
 ## 📜 Execution Log
 
-### Phase 1: Human-in-the-Loop Directing Checkpoints & Interactive Modes
-* **[2026-08-27T06:20:50Z]** Configuring `user:directing_mode` and interactive storyboard review in `app/agent.py`...
+### Phase 1: Quality Rater Multimodal Cross-Shot Inspection
+* **[2026-08-27T07:17:30Z]** Modifying `evaluate_video_clip_quality` in `app/agent.py` to support `reference_image_path` and multimodal image+video cross-shot comparison...

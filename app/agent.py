@@ -79,6 +79,7 @@ async def generate_video_shot_clip(
     shot_index: int = 1,
     input_image_path: Optional[str] = None,
     end_image_path: Optional[str] = None,
+    reference_image_path: Optional[str] = None,
     aspect_ratio: str = "16:9",
     resolution: str = "720p",
     duration: int = 10,
@@ -91,6 +92,7 @@ async def generate_video_shot_clip(
         shot_index: Index number of the shot (e.g. 1, 2, 3).
         input_image_path: Optional path to starting/anchor frame image (e.g. last frame of shot k-1).
         end_image_path: Optional path to ending/anchor frame image (e.g. first frame of shot k+1).
+        reference_image_path: Optional path to canonical character reference image for cross-shot identity locking.
         aspect_ratio: Video aspect ratio ('16:9' or '9:16').
         resolution: Video resolution ('720p' or '1080p').
         duration: Clip duration in seconds (default 10).
@@ -111,10 +113,21 @@ async def generate_video_shot_clip(
         with open(end_image_path, "rb") as end_f:
             end_image_b64 = base64.b64encode(end_f.read()).decode("utf-8")
 
+    # Canonical character reference for cross-shot facial and clothing locking
+    ref_img_path = reference_image_path
+    if not ref_img_path and tool_context and "canonical_character_reference" in tool_context.state:
+        ref_img_path = tool_context.state.get("canonical_character_reference")
+
+    ref_imgs_b64 = None
+    if ref_img_path and os.path.exists(ref_img_path):
+        with open(ref_img_path, "rb") as ref_f:
+            ref_imgs_b64 = [base64.b64encode(ref_f.read()).decode("utf-8")]
+
     clip_bytes = generate_omni_clip(
         prompt=prompt,
         input_image_b64=input_image_b64,
         end_image_b64=end_image_b64,
+        reference_images_b64=ref_imgs_b64,
         aspect_ratio=aspect_ratio,
         resolution=resolution,
         duration=duration,
@@ -125,6 +138,17 @@ async def generate_video_shot_clip(
     clip_path = os.path.join(OUTPUT_DIR, clip_name)
     with open(clip_path, "wb") as f:
         f.write(clip_bytes)
+
+    # Automatically extract canonical reference frame from Shot 1 if not already established
+    if shot_index == 1:
+        try:
+            anchor_frame = extract_first_frame(clip_path)
+            if anchor_frame and tool_context:
+                tool_context.state["canonical_character_reference"] = anchor_frame
+                if "user:character_bible" in tool_context.state and isinstance(tool_context.state["user:character_bible"], dict):
+                    tool_context.state["user:character_bible"]["main_character_frame"] = anchor_frame
+        except Exception as anchor_err:
+            print(f"[Anchor Extraction Notice]: {anchor_err}")
 
     # 1. Upload to GCS showcase for public HTTPS URL
     gcs_url = None
@@ -142,7 +166,7 @@ async def generate_video_shot_clip(
         bucket_name = os.getenv("GCS_SHOWCASE_BUCKET", "universal-trail-492014-n5-vidgen-showcase")
         gcs_url = f"https://storage.googleapis.com/{bucket_name}/showcase/shots/{clip_name}"
 
-    # 2. Register native lightweight URI ADK Artifact for Agent Runtime / Gemini Enterprise
+    # 2. Register native lightweight URI ADK Artifact and update state
     artifact_saved = False
     if tool_context:
         try:
@@ -460,6 +484,7 @@ async def evaluate_video_clip_quality(
     video_path: str,
     prompt: str,
     evaluation_criteria: Optional[str] = None,
+    reference_image_path: Optional[str] = None,
     tool_context: Optional[ToolContext] = None,
 ) -> dict:
     """Inspects and audits an actual MP4 video clip file using Gemini multimodal vision.
@@ -468,6 +493,7 @@ async def evaluate_video_clip_quality(
         video_path: Local filesystem path or public URL of the generated .mp4 video clip.
         prompt: The visual prompt describing what should happen in the shot.
         evaluation_criteria: Specific quality criteria or character/lighting requirements.
+        reference_image_path: Optional path to canonical character reference image for cross-shot continuity audit.
         tool_context: Optional ADK tool execution context for state tracking.
 
     Returns:
@@ -520,14 +546,38 @@ async def evaluate_video_clip_quality(
             tool_context.state["rater_feedback"] = res["feedback"]
         return res
 
+    # Resolve canonical reference image for cross-shot continuity checking
+    ref_img_path = reference_image_path
+    if not ref_img_path and tool_context and "canonical_character_reference" in tool_context.state:
+        ref_img_path = tool_context.state.get("canonical_character_reference")
+
+    ref_img_bytes = None
+    if ref_img_path and os.path.exists(ref_img_path):
+        try:
+            with open(ref_img_path, "rb") as ref_f:
+                ref_img_bytes = ref_f.read()
+        except Exception as ref_read_err:
+            print(f"[Ref Image Read Notice]: {ref_read_err}")
+
     client = get_genai_client()
     criteria_str = f"Specific Scene Goal: {evaluation_criteria}" if evaluation_criteria else "Standard quality audit."
+    
+    continuity_rubric = ""
+    if ref_img_bytes:
+        continuity_rubric = (
+            "CRITICAL CROSS-SHOT CONTINUITY CHECK (REFERENCE IMAGE ATTACHED):\n"
+            "- Facial Identity: Compare the character in the video to the attached Reference Image. Facial features, hair color, facial hair, skin tone, and character ethnicity MUST match the reference image.\n"
+            "- Wardrobe & Colors: Clothing style, jacket color, shirt, pants, and accessories MUST be consistent with the reference image.\n"
+            "- MANDATORY PENALTY: If the character's face morphs into a different person, hair changes color, or clothing changes color/style unexpectedly, assign score < 0.60, verdict 'RETRY', and explicitly detail the continuity discrepancy in 'feedback'.\n\n"
+        )
+
     eval_prompt = (
         "You are the QualityRaterAgent evaluating an actual AI-generated MP4 video clip.\n"
         f"Target Shot Prompt: '{prompt}'\n"
         f"{criteria_str}\n\n"
+        f"{continuity_rubric}"
         "Inspect the provided video clip across 4 key evaluation rubrics:\n"
-        "1. Subject Identity Consistency (character/object consistency throughout the shot)\n"
+        "1. Subject Identity Consistency (character/object consistency throughout the shot and against reference image)\n"
         "2. Motion Smoothness & Dynamics (natural pacing, no jitter or abrupt morphs)\n"
         "3. Visual Prompt Adherence (visual elements match the target prompt)\n"
         "4. Temporal Asset Persistence (lighting, clothing, background stability)\n\n"
@@ -538,15 +588,18 @@ async def evaluate_video_clip_quality(
         "- feedback: detailed paragraph describing specific visual observations from the video"
     )
 
+    contents = [eval_prompt]
+    if ref_img_bytes:
+        mime = "image/jpeg" if ref_img_path.lower().endswith((".jpg", ".jpeg")) else "image/png"
+        contents.append(types.Part.from_bytes(data=ref_img_bytes, mime_type=mime))
+    contents.append(types.Part.from_bytes(data=video_bytes, mime_type="video/mp4"))
+
     result_data = None
     try:
         resp = await asyncio.to_thread(
             client.models.generate_content,
             model="gemini-3.7-flash",
-            contents=[
-                eval_prompt,
-                types.Part.from_bytes(data=video_bytes, mime_type="video/mp4")
-            ]
+            contents=contents
         )
         if resp and resp.text:
             text = resp.text
@@ -554,10 +607,10 @@ async def evaluate_video_clip_quality(
             clean_text = json_match.group(0) if json_match else text
             data = json.loads(clean_text)
             result_data = {
-                "score": float(data.get("score", 0.9)),
-                "verdict": data.get("verdict", "PASSED"),
+                "score": float(data.get("score", 0.0)),
+                "verdict": str(data.get("verdict", "RETRY")).upper(),
                 "rubric_breakdown": data.get("rubric_breakdown", {}),
-                "feedback": data.get("feedback", "Video inspected successfully."),
+                "feedback": data.get("feedback", "Video inspected."),
                 "criteria_evaluated": evaluation_criteria,
             }
     except Exception as e:
@@ -565,15 +618,15 @@ async def evaluate_video_clip_quality(
 
     if not result_data:
         result_data = {
-            "score": 0.88,
-            "verdict": "PASSED",
+            "score": 0.0,
+            "verdict": "RETRY",
             "rubric_breakdown": {
-                "subject_identity_consistency": 0.90,
-                "motion_smoothness": 0.88,
-                "prompt_adherence": 0.88,
-                "temporal_asset_persistence": 0.88
+                "subject_identity_consistency": 0.0,
+                "motion_smoothness": 0.0,
+                "prompt_adherence": 0.0,
+                "temporal_asset_persistence": 0.0
             },
-            "feedback": "Video inspected with high visual fidelity and motion stability.",
+            "feedback": "Multimodal video analysis failed to parse. Retry required.",
             "criteria_evaluated": evaluation_criteria,
         }
 
@@ -632,15 +685,25 @@ root_agent = Agent(
         "     '🎬 **Storyboard Ready for Director's Review**:\n"
         "      Review the shot breakdown table above. Reply **Approve** (or **Proceed**) to begin rendering these shots with Gemini Omni Flash, or reply with any adjustments to camera angles, lighting, or dialogue.'\n"
         "   - Once the user approves or confirms (or if in `autonomous` mode), proceed immediately to Phase 2.\n\n"
-        "--- PHASE 2: PRODUCTION LOOP (Execute for Shot 1 to N in sequence) ---\n"
-        "For each shot index `k` from 1 to N (allow up to 2 attempts per shot):\n"
+        "--- PHASE 2: PRODUCTION LOOP & PER-SHOT DIRECTING REVIEW ---\n"
+        "For each shot index `k` from 1 to N:\n"
         "   Step 2.1 - OPTIMIZE: Delegate to `PromptOptimizerAgent` to optimize the visual prompt for Gemini Omni Flash (pass QualityRater feedback if retrying).\n"
         "   Step 2.2 - AUDIT: Delegate to `HealthCheckerAgent` to verify safety and policy compliance.\n"
-        "   Step 2.3 - CRITICAL TOOL CALL (RENDER): Invoke tool `generate_video_shot_clip(prompt=..., shot_index=k, input_image_path=...)`.\n"
+        "   Step 2.3 - CRITICAL TOOL CALL (RENDER): Invoke tool `generate_video_shot_clip(prompt=..., shot_index=k, input_image_path=..., reference_image_path=...)`.\n"
         "              CRITICAL RULE: You MUST invoke `generate_video_shot_clip` immediately after `HealthCheckerAgent`. NEVER transfer to `QualityRaterAgent` before this tool call has finished and returned `video_path`.\n"
-        "   Step 2.4 - RATE: Delegate to `QualityRaterAgent` passing the generated `video_path` to assess clip quality.\n"
-        "   Step 2.5 - RETRY CHECK: If QualityRaterAgent verdict is RETRY / score < 0.8 and attempt < 2, repeat Steps 2.1-2.4 for shot `k` applying the rater's feedback.\n"
-        "   Step 2.6 - CHAINING: If mode is 'i2v_chaining' and k < N, invoke tool `parse_terminal_frame(video_path=...)` to extract the anchor frame for shot k+1.\n\n"
+        "   Step 2.4 - RATE & CROSS-SHOT AUDIT: Delegate to `QualityRaterAgent` passing `video_path` and `reference_image_path` to audit face/wardrobe consistency.\n"
+        "   Step 2.5 - PER-SHOT INTERACTIVE DIRECTING CHECKPOINT:\n"
+        "              - Deliver Shot `k` preview immediately in the chat stream: embed `<video controls width=\"100%\" src=\"https://...\"></video>`, provide clickable link, and display the quality rating score & verdict.\n"
+        "              - If `user:directing_mode == 'interactive'` (default) and user did not specify immediate autonomous batch execution:\n"
+        "                PAUSE the turn and ask the director for review:\n"
+        "                '🎬 **Shot #{k} Ready for Director Review (Score: {score}/1.0)**:\n"
+        "                 - Watch the clip above.\n"
+        "                 - Reply **Approve** (or **Proceed**) to continue to Shot #{k+1} (or final assembly if last shot).\n"
+        "                 - Or reply with custom modification notes to regenerate Shot #{k} using dual-anchor constraints.'\n"
+        "              - When user replies 'Approve' / 'Proceed' (or in `autonomous` mode):\n"
+        "                If mode is 'i2v_chaining' and k < N, invoke tool `parse_terminal_frame(video_path=...)` to extract anchor frame for shot k+1, then proceed to shot k+1.\n"
+        "                If k == N, proceed to Phase 3.\n"
+        "              - When user requests modifications on Shot `k`: Trigger Workflow B (Dual-Anchor regeneration) and present the revised shot for approval.\n\n"
         "--- PHASE 3: POST-PRODUCTION & FINAL EVALUATION ---\n"
         "1. STITCH: Invoke tool `concatenate_video_clips(video_paths=[...])` with the final valid clip paths from all shots.\n"
         "2. FINAL QUALITY EVALUATION (CRITICAL STEP): Delegate to `QualityRaterAgent` passing `video_path=stitched_video_path` to evaluate the complete final video across narrative pacing, cross-shot visual continuity, and color grading.\n"
@@ -658,11 +721,12 @@ root_agent = Agent(
         "   - First Frame Anchor (Starting Frame): If preceding shot `k-1` exists, invoke tool `parse_terminal_frame(video_path='...shot_{k-1}.mp4')` to extract its last frame as `input_image_path`.\n"
         "   - Last Frame Anchor (Ending Frame): If succeeding shot `k+1` exists, invoke tool `parse_initial_frame(video_path='...shot_{k+1}.mp4')` to extract its first frame as `end_image_path`.\n"
         "   (This dual-anchor constraint guarantees that newly generated shot `k` seamlessly connects to both shot `k-1` and shot `k+1` without breaking narrative and visual flow).\n"
-        "4. DUAL-ANCHOR RENDER: Invoke tool `generate_video_shot_clip(prompt=..., shot_index=k, input_image_path=..., end_image_path=...)`.\n"
-        "5. RATE: Delegate to `QualityRaterAgent` passing the newly generated `video_path` to audit shot `k`.\n"
-        "6. RE-STITCH: Invoke tool `concatenate_video_clips(video_paths=[...])` with the updated list of shot video paths.\n"
-        "7. FINAL EVALUATION: Delegate to `QualityRaterAgent` to audit the newly stitched final video.\n"
-        "8. DELIVER: Present the updated final video with clickable link, embedded HTML5 player, updated shot metrics, and final quality rating."
+        "4. DUAL-ANCHOR RENDER: Invoke tool `generate_video_shot_clip(prompt=..., shot_index=k, input_image_path=..., end_image_path=..., reference_image_path=...)`.\n"
+        "5. RATE: Delegate to `QualityRaterAgent` passing the newly generated `video_path` and `reference_image_path` to audit shot `k`.\n"
+        "6. INTERACTIVE REVIEW: Present the revised shot clip with player and rating to the user for approval.\n"
+        "7. RE-STITCH (Upon approval): Invoke tool `concatenate_video_clips(video_paths=[...])` with the updated list of shot video paths.\n"
+        "8. FINAL EVALUATION: Delegate to `QualityRaterAgent` to audit the newly stitched final video.\n"
+        "9. DELIVER: Present the updated final video with clickable link, embedded HTML5 player, updated shot metrics, and final quality rating."
     ),
     before_agent_callback=init_session_state,
     after_agent_callback=sync_session_to_memory,

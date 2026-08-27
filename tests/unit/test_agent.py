@@ -72,3 +72,27 @@ async def test_sync_session_to_memory():
     await sync_session_to_memory(mock_ctx)
 
 
+@pytest.mark.asyncio
+async def test_evaluate_video_clip_quality_with_reference():
+    from app.agent import evaluate_video_clip_quality
+    # Test missing file error path
+    res = await evaluate_video_clip_quality(
+        video_path="/non/existent/video.mp4",
+        prompt="A detective walking in the rain",
+        reference_image_path="/non/existent/ref.png"
+    )
+    assert res["score"] == 0.0
+    assert res["verdict"] == "RETRY"
+
+
+@pytest.mark.asyncio
+async def test_generate_video_shot_clip_signature():
+    from app.agent import generate_video_shot_clip
+    import inspect
+    sig = inspect.signature(generate_video_shot_clip)
+    assert "reference_image_path" in sig.parameters
+    assert "input_image_path" in sig.parameters
+    assert "end_image_path" in sig.parameters
+
+
+
