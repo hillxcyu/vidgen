@@ -2,29 +2,30 @@
 
 ## 📋 Metadata
 *   **Stage:** 2 - Problem Decomposition (DEFINE)
-*   **Timestamp:** 2026-08-27T03:16:25Z
-*   **Target Task:** Implement Full ADK State Management with All Scopes (Session, Temp, User, App)
+*   **Timestamp:** 2026-08-27T06:20:35Z
+*   **Target Task:** Implement Advanced Multi-Agent Features (3. HITL Directing Checkpoints ➔ 4. Long-Term Directing Memory ➔ 5. A2A Fleet Collaboration)
 *   **Status:** IN_PROGRESS (Stage 3: ACT)
 
 ---
 
 ## 📝 Detailed TODO Breakdown
 
-### Phase 1: Agent Output Keys & Dynamic State Binding [agent]
-- [ ] `[T001]` **[agent]** Add `output_key="screenplay"` to `ScreenwriterAgent` and `output_key="storyboard"` to `StoryboarderAgent` in `app/agent.py`.
-- [ ] `[T002]` **[agent]** Update agent instructions to reference `{screenplay}`, `{storyboard}`, `{rater_feedback}` where appropriate while preserving cache-aligned prefix.
+### Phase 1: Human-in-the-Loop (HITL) Directing Checkpoints [agent] [backend]
+- [ ] `[T001]` **[agent]** Add `user:directing_mode` (`"interactive"` vs `"autonomous"`) to `init_session_state` in `app/agent.py`.
+- [ ] `[T002]` **[agent]** Update `vidgen_orchestrator` instructions to support interactive pre-production review (pausing after storyboard for director feedback when in interactive mode, or auto-proceeding when approved/autonomous).
+- [ ] `[T003]` **[agent]** Update `StoryboarderAgent` and `PromptOptimizerAgent` to accept interactive revisions smoothly.
 
-### Phase 2: Tool Context State Mutations Across All 4 Scopes [tools] [agent]
-- [ ] `[T003]` **[tools]** Update `generate_video_shot_clip` to write `state["shots"]`, `state["temp:latest_rendered_shot"]`, increment `state["app:total_shots_generated"]` and `state["user:total_shots_generated"]`.
-- [ ] `[T004]` **[tools]** Update `parse_initial_frame` and `parse_terminal_frame` to write `state["temp:first_frame_anchor"]` and `state["temp:last_frame_anchor"]`.
-- [ ] `[T005]` **[tools]** Update `evaluate_video_clip_quality` to accept `tool_context: Optional[ToolContext]` and record `state["quality_rating"]`, `state["quality_verdict"]`, and `state["rater_feedback"]`.
-- [ ] `[T006]` **[tools]** Update `concatenate_video_clips` to record `state["stitched_video_url"]`, `state["stitched_video_path"]`, set `state["pipeline_stage"] = "delivered"`, and increment `state["app:total_videos_rendered"]` and `state["user:total_videos_created"]`.
+### Phase 2: Long-Term Directing Memory (`MemoryBank` & Character Bible) [memory] [agent]
+- [ ] `[T004]` **[memory]** Import and configure `PreloadMemoryTool` from `google.adk.tools.preload_memory_tool` (or `LoadMemoryTool`) in `root_agent.tools`.
+- [ ] `[T005]` **[memory]** Add `after_agent_callback=sync_session_to_memory` to `root_agent` to send completed video sessions to ADK `MemoryBank`.
+- [ ] `[T006]` **[agent]** Add `user:character_bible` and `user:cinematic_preferences` handling in `init_session_state` and agent instructions for cross-session character & universe persistence.
 
-### Phase 3: Testing & CI/CD [test] [deploy]
-- [ ] `[T007]` **[test]** Update `tests/unit/test_agent.py` and `tests/unit/test_state.py` to test state mutations and keys.
-- [ ] `[T008]` **[test]** Run test suite (`uv run pytest tests/unit tests/integration`).
-- [ ] `[T009]` **[git]** Commit changes on `main` and push to GitHub (triggers Cloud Run Cloud Build).
-- [ ] `[T010]` **[deploy]** Update Vertex AI Agent Runtime in `asia-east1` via `agents-cli deploy`.
+### Phase 3: Agent-to-Agent (A2A) Fleet Collaboration [a2a] [backend]
+- [ ] `[T007]` **[a2a]** Enhance `app/app_utils/a2a.py` with structured skills declaration (`multi_shot_cinematic_generation`, `dual_anchor_shot_revision`, `multimodal_video_quality_rating`) and Agent Card metadata.
+- [ ] `[T008]` **[a2a]** Verify A2A endpoint and runner integration in `app/fast_api_app.py`.
 
-### Phase 4: Verification [verify]
-- [ ] `[T011]` **[verify]** Verify live reasoning engine deployment and state tab visualization.
+### Phase 4: Testing & Verification [test] [deploy]
+- [ ] `[T009]` **[test]** Add unit tests for memory tools, directing mode toggles, and A2A card in `tests/unit/test_agent.py` and `tests/unit/test_a2a.py`.
+- [ ] `[T010]` **[test]** Run full test suite (`uv run pytest tests/unit tests/integration`).
+- [ ] `[T011]` **[git]** Commit changes on `main` and push to GitHub (triggers Cloud Run Cloud Build).
+- [ ] `[T012]` **[deploy]** Update Vertex AI Agent Runtime in `asia-east1`.

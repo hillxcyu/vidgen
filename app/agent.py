@@ -21,6 +21,7 @@ from google.adk.agents.callback_context import CallbackContext
 from google.adk.apps import App
 from google.adk.models import Gemini
 from google.adk.tools import ToolContext, AgentTool
+from google.adk.tools.preload_memory_tool import PreloadMemoryTool
 from google.genai import types
 
 from app.config import Config, get_genai_client
@@ -42,12 +43,18 @@ async def init_session_state(callback_context: CallbackContext) -> None:
         state["pipeline_stage"] = "pre_production"
     if "shots" not in state:
         state["shots"] = {}
+    if "user:directing_mode" not in state:
+        state["user:directing_mode"] = "interactive"
     if "user:preferred_aspect_ratio" not in state:
         state["user:preferred_aspect_ratio"] = "16:9"
     if "user:preferred_resolution" not in state:
         state["user:preferred_resolution"] = "720p"
     if "user:default_mode" not in state:
         state["user:default_mode"] = "i2v_chaining"
+    if "user:cinematic_style" not in state:
+        state["user:cinematic_style"] = "cinematic 16:9, volumetric lighting, rich color palette, natural motion"
+    if "user:character_bible" not in state:
+        state["user:character_bible"] = {}
     if "user:total_videos_created" not in state:
         state["user:total_videos_created"] = 0
     if "user:total_shots_generated" not in state:
@@ -56,6 +63,15 @@ async def init_session_state(callback_context: CallbackContext) -> None:
         state["app:total_videos_rendered"] = 0
     if "app:total_shots_generated" not in state:
         state["app:total_shots_generated"] = 0
+
+
+async def sync_session_to_memory(callback_context: CallbackContext) -> None:
+    """Persists session events, character lore, and directorial preferences to ADK MemoryBank."""
+    try:
+        await callback_context.add_session_to_memory()
+    except Exception as mem_err:
+        print(f"[Memory Sync Notice]: {mem_err}")
+
 
 
 async def generate_video_shot_clip(
@@ -340,7 +356,7 @@ async def generate_multi_shot_video(
 UNIFIED_BASE_SYSTEM_INSTRUCTION = (
     "You are an expert AI agent in the VidGen-Omni Multi-Agent Generative Video Production System.\n"
     "System Architecture & Pipeline Roles:\n"
-    "- ScreenwriterAgent: Expands narrative ideas into structured multi-scene screenplays with clear scene headings.\n"
+    "- ScreenwriterAgent: Expands narrative ideas into structured multi-scene screenplays with clear scene headings, maintaining visual continuity with recurrent universe lore from `{user:character_bible}` and `{user:cinematic_style}`.\n"
     "- StoryboarderAgent: Converts screenplays into shot breakdown tables with camera angles, visual descriptions, character actions, and rubrics.\n"
     "- PromptOptimizerAgent: Enhances visual prompts for Gemini Omni Flash (`gemini-omni-flash-preview`), enforcing single-shot continuous motion without cuts, incorporating previous QualityRater feedback on retries/modifications, and preserving dialogue.\n"
     "- HealthCheckerAgent: Audits candidate prompts for content safety, policy compliance, and visual feasibility.\n"
@@ -348,8 +364,9 @@ UNIFIED_BASE_SYSTEM_INSTRUCTION = (
     "- parse_initial_frame (Tool): Extracts the initial (first) frame of a video clip for dual-anchor visual continuity.\n"
     "- parse_terminal_frame (Tool): Extracts the terminal (last) frame of a video clip for Image-to-Video chaining.\n"
     "- concatenate_video_clips (Tool): Stitches individual video clips into the final video file.\n"
+    "- PreloadMemoryTool (Tool): Automatically retrieves long-term directorial style preferences, recurring character lore, and project history from ADK MemoryBank.\n"
     "- QualityRaterAgent: Audits individual video clips and the complete final stitched video using multimodal vision (`evaluate_video_clip_quality` tool).\n"
-    "- vidgen_orchestrator: Master pipeline coordinator that manages sub-agents, orchestrates dual-anchor shot modifications, and delivers video links and player to the user.\n\n"
+    "- vidgen_orchestrator: Master pipeline coordinator that manages sub-agents, orchestrates interactive directing checkpoints, manages dual-anchor shot modifications, and delivers video links and player to the user.\n\n"
     "CRITICAL VISIBILITY REQUIREMENT: Every agent in this system MUST output its complete, formatted markdown report directly in the chat stream so the user sees all progress in real-time."
 )
 
@@ -606,9 +623,15 @@ root_agent = Agent(
         "You coordinate a specialized team of AI sub-agents to produce high-fidelity multi-shot generative videos.\n\n"
         "=== WORKFLOW A: INITIAL MULTI-SHOT GENERATION ===\n"
         "When the user requests to create or generate a new video, execute the following exact pipeline step-by-step:\n\n"
-        "--- PHASE 1: PRE-PRODUCTION ---\n"
-        "1. Delegate to `ScreenwriterAgent` to expand the narrative concept into a structured screenplay.\n"
-        "2. Delegate to `StoryboarderAgent` to convert the screenplay into structured shot specifications (scenes 1 to N).\n\n"
+        "--- PHASE 1: PRE-PRODUCTION & DIRECTING REVIEW ---\n"
+        "1. Delegate to `ScreenwriterAgent` to expand the narrative concept into a structured screenplay (recalling persistent lore from `{user:character_bible}` and `{user:cinematic_style}`).\n"
+        "2. Delegate to `StoryboarderAgent` to convert the screenplay into structured shot specifications (scenes 1 to N).\n"
+        "3. INTERACTIVE DIRECTING CHECKPOINT:\n"
+        "   - If `user:directing_mode == 'interactive'` (default) and the user has not explicitly commanded immediate batch execution:\n"
+        "     Present the full storyboard table and ask the user for confirmation:\n"
+        "     '🎬 **Storyboard Ready for Director's Review**:\n"
+        "      Review the shot breakdown table above. Reply **Approve** (or **Proceed**) to begin rendering these shots with Gemini Omni Flash, or reply with any adjustments to camera angles, lighting, or dialogue.'\n"
+        "   - Once the user approves or confirms (or if in `autonomous` mode), proceed immediately to Phase 2.\n\n"
         "--- PHASE 2: PRODUCTION LOOP (Execute for Shot 1 to N in sequence) ---\n"
         "For each shot index `k` from 1 to N (allow up to 2 attempts per shot):\n"
         "   Step 2.1 - OPTIMIZE: Delegate to `PromptOptimizerAgent` to optimize the visual prompt for Gemini Omni Flash (pass QualityRater feedback if retrying).\n"
@@ -642,7 +665,9 @@ root_agent = Agent(
         "8. DELIVER: Present the updated final video with clickable link, embedded HTML5 player, updated shot metrics, and final quality rating."
     ),
     before_agent_callback=init_session_state,
+    after_agent_callback=sync_session_to_memory,
     tools=[
+        PreloadMemoryTool(),
         generate_video_shot_clip,
         parse_initial_frame,
         parse_terminal_frame,

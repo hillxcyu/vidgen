@@ -1,7 +1,7 @@
 # `PLAN.md`
 
 ## 📋 Metadata
-*   **Task:** Implement Full ADK State Management with All Scopes (Session, Temp, User, App)
+*   **Task:** Implement Advanced Multi-Agent Features (3. HITL Directing Checkpoints ➔ 4. Long-Term Directing Memory ➔ 5. A2A Fleet Collaboration & MCP)
 *   **Target Region:** `asia-east1`
 *   **Date:** 2026-08-27
 *   **Status:** Awaiting User Approval (Stage 1: PLAN)
@@ -10,39 +10,44 @@
 
 ## 🎯 Objectives & Scope
 
-1. **Session-Scoped State (`state["key"]`)**:
-   - Capture screenplay in `state["screenplay"]` via `output_key="screenplay"` on `ScreenwriterAgent`.
-   - Capture storyboard in `state["storyboard"]` via `output_key="storyboard"` on `StoryboarderAgent`.
-   - Record generated shot clips in `state["shots"]` dictionary in `generate_video_shot_clip`.
-   - Record final stitched video URL and path in `state["stitched_video_url"]` and `state["stitched_video_path"]` in `concatenate_video_clips`.
-   - Record rater feedback and quality metrics in `state["quality_rating"]`, `state["quality_verdict"]`, and `state["rater_feedback"]`.
-   - Track pipeline lifecycle in `state["pipeline_stage"]` (`"pre_production"`, `"production"`, `"post_production"`, `"delivered"`).
+### 3. Human-in-the-Loop (HITL) Interactive Directing Checkpoints
+- [ ] **Directing Modes (`state["user:directing_mode"]`)**:
+  - `"interactive"` (Default for user creative control): Pauses at key milestones (post-storyboard, post-shot critique) for user review and approval.
+  - `"autonomous"` (For automated batch/A2A rendering): Runs end-to-end without pausing.
+- [ ] **Pre-Production Storyboard Approval Milestone**:
+  - After `StoryboarderAgent` outputs the shot breakdown table, `vidgen_orchestrator` presents the plan and allows the user to approve all shots or adjust individual camera angles, dialogue, or visual prompts before launching video generation.
+- [ ] **Interactive Shot Revision & Feedback Trigger**:
+  - After `QualityRaterAgent` audits each clip, users can seamlessly direct immediate dual-anchor shot modifications before final assembly.
 
-2. **Temporary / Turn-Scoped State (`state["temp:key"]`)**:
-   - Store transient frame paths and intermediate render data in `state["temp:latest_shot_index"]`, `state["temp:first_frame_anchor"]`, and `state["temp:last_frame_anchor"]` during the current turn.
+---
 
-3. **User-Persistent State (`state["user:key"]`)**:
-   - Store user preferences that persist across sessions for the same user:
-     - `state["user:preferred_aspect_ratio"]` (e.g. `"16:9"` or `"9:16"`)
-     - `state["user:preferred_resolution"]` (e.g. `"720p"` or `"1080p"`)
-     - `state["user:default_mode"]` (`"i2v_chaining"`)
-     - `state["user:total_videos_created"]` (user video counter)
+### 4. Long-Term Directing Memory (`MemoryBank` & Character Bible)
+- [ ] **ADK Memory Integration**:
+  - Register `PreloadMemoryTool` (or `LoadMemoryTool`) in `root_agent.tools`.
+  - Add `after_agent_callback` to sync conversational events with ADK `MemoryBank` via `callback_context.add_session_to_memory()`.
+- [ ] **Directorial Preferences & Style Memory**:
+  - Automatically recall user visual preferences (e.g. *"2.39:1 widescreen, cyber-noir lighting, volumetric fog, orchestral mood"*).
+- [ ] **Persistent Character & Universe Bible (`state["user:character_bible"]`)**:
+  - Retain character profiles, visual descriptions, and costume details across distinct sessions for recurring characters and multi-episode series.
 
-4. **App-Wide State (`state["app:key"]`)**:
-   - Store application-level global metrics across all users:
-     - `state["app:total_videos_rendered"]` (cumulative counter)
-     - `state["app:total_shots_generated"]` (cumulative counter)
+---
 
-5. **Dynamic Prompt State Injection & Tool Context Binding**:
-   - Update `app/agent.py` to equip `generate_video_shot_clip`, `parse_initial_frame`, `parse_terminal_frame`, `concatenate_video_clips`, and `evaluate_video_clip_quality` with `tool_context: ToolContext` to write to `tool_context.state`.
-   - Configure `output_key` on `ScreenwriterAgent` and `StoryboarderAgent`.
-   - Use `{rater_feedback}` and `{storyboard}` placeholders where appropriate.
+### 5. Agent-to-Agent (A2A) Fleet Collaboration & MCP Ecosystem
+- [ ] **A2A Agent Card & Capabilities Declaration**:
+  - Enhance `app/app_utils/a2a.py` with structured Agent Card metadata, exposing capabilities (`multi_shot_cinematic_generation`, `dual_anchor_shot_revision`, `multimodal_video_quality_rating`).
+- [ ] **MCP Ecosystem Readiness**:
+  - Provide MCP tool integrations and exported schemas for external marketing agents, autonomous publishers, and content pipeline orchestrators.
 
-6. **Testing & Deployment**:
-   - Update unit tests in `tests/unit/test_agent.py` to verify state keys and tool context state mutations.
-   - Run unit and integration tests (`uv run pytest tests/unit tests/integration`).
-   - Commit & push to `main` (Cloud Run deployment).
-   - Update Vertex AI Agent Runtime in `asia-east1` via `agents-cli deploy`.
+---
 
-7. **Verification**:
-   - Verify that the State tab in the ADK Dev UI clearly renders the rich hierarchical session state, user settings, app counters, and transient artifacts.
+## 🧪 Testing & Verification Plan
+
+1. **Unit & Integration Tests**:
+   - Test interactive directing mode toggle and state handling.
+   - Test memory tools and memory callbacks.
+   - Test A2A card generation and endpoint handling.
+2. **Regression Testing**:
+   - Run full pytest test suite (`uv run pytest tests/unit tests/integration`).
+3. **Deployment**:
+   - Commit & push to `main` for Cloud Run CI/CD.
+   - Deploy to Vertex AI Agent Runtime in `asia-east1`.

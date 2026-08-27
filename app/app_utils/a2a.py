@@ -27,7 +27,7 @@ from a2a.server.routes import (
 )
 from a2a.server.routes.common import DefaultServerCallContextBuilder
 from a2a.server.tasks import TaskStore
-from a2a.types import AgentCapabilities, AgentCard, AgentExtension, AgentInterface
+from a2a.types import AgentCapabilities, AgentCard, AgentExtension, AgentInterface, AgentSkill
 from a2a.utils.constants import AGENT_CARD_WELL_KNOWN_PATH
 from google.adk.a2a.executor.a2a_agent_executor import A2aAgentExecutor
 from google.adk.a2a.utils.agent_card_builder import AgentCardBuilder
@@ -118,6 +118,25 @@ async def attach_a2a_routes(
         rpc_url=f"{resolved_app_url}{rpc_path}",
         agent_version=resolved_agent_version,
     ).build()
+
+    # Explicitly register VidGen-Omni production skills for A2A discovery
+    agent_card.skills.extend([
+        AgentSkill(
+            id="multi_shot_cinematic_generation",
+            name="Multi-Shot Cinematic Video Generation",
+            description="Generates continuous multi-shot cinematic videos from narrative concept with screenplay expansion, storyboard breakdown, chained I2V Gemini Omni rendering, and video stitching.",
+        ),
+        AgentSkill(
+            id="dual_anchor_shot_revision",
+            name="Dual-Anchor Shot Revision",
+            description="Modifies or regenerates an individual shot k in a multi-shot video anchored to preceding shot k-1 and succeeding shot k+1 without breaking narrative and visual flow.",
+        ),
+        AgentSkill(
+            id="multimodal_video_quality_rating",
+            name="Multimodal Video Quality Inspection",
+            description="Audits MP4 video clips and stitched videos using Gemini 3.7 Flash multimodal vision across Subject Identity, Motion Smoothness, Prompt Adherence, and Temporal Persistence.",
+        ),
+    ])
 
     request_handler = DefaultRequestHandler(
         agent_executor=A2aAgentExecutor(runner=runner),

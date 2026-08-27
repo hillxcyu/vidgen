@@ -27,14 +27,16 @@ def test_agent_output_keys_and_callbacks():
     assert screenwriter_agent.output_key == "screenplay"
     assert storyboarder_agent.output_key == "storyboard"
     assert root_agent.before_agent_callback is not None
+    assert root_agent.after_agent_callback is not None
 
 
 def test_agent_tools():
-    tool_names = [getattr(t, "__name__", str(t)) for t in root_agent.tools]
+    tool_names = [getattr(t, "__name__", getattr(t, "name", str(t))) for t in root_agent.tools]
     assert "generate_video_shot_clip" in tool_names
     assert "parse_initial_frame" in tool_names
     assert "parse_terminal_frame" in tool_names
     assert "concatenate_video_clips" in tool_names
+    assert any("preload_memory" in name.lower() or "memory" in name.lower() for name in tool_names)
     
     # Verify QualityRaterAgent has multimodal inspection tool
     quality_rater_tools = [getattr(t, "__name__", str(t)) for t in quality_rater_agent.tools]
@@ -44,7 +46,7 @@ def test_agent_tools():
 import pytest
 import asyncio
 from unittest.mock import MagicMock
-from app.agent import init_session_state, parse_initial_frame, parse_terminal_frame
+from app.agent import init_session_state, sync_session_to_memory, parse_initial_frame, parse_terminal_frame
 
 
 @pytest.mark.asyncio
@@ -53,9 +55,20 @@ async def test_init_session_state():
     mock_ctx.state = {}
     await init_session_state(mock_ctx)
     assert mock_ctx.state["pipeline_stage"] == "pre_production"
+    assert mock_ctx.state["user:directing_mode"] == "interactive"
     assert mock_ctx.state["user:preferred_aspect_ratio"] == "16:9"
     assert mock_ctx.state["user:preferred_resolution"] == "720p"
     assert mock_ctx.state["user:default_mode"] == "i2v_chaining"
+    assert "user:cinematic_style" in mock_ctx.state
+    assert "user:character_bible" in mock_ctx.state
     assert mock_ctx.state["app:total_videos_rendered"] == 0
     assert mock_ctx.state["app:total_shots_generated"] == 0
+
+
+@pytest.mark.asyncio
+async def test_sync_session_to_memory():
+    mock_ctx = MagicMock()
+    mock_ctx.add_session_to_memory = MagicMock()
+    await sync_session_to_memory(mock_ctx)
+
 
