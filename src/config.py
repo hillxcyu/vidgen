@@ -10,7 +10,7 @@ load_dotenv()
 os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "true"
 
 class Config:
-    PROJECT_ID: str = os.getenv("GOOGLE_CLOUD_PROJECT", "universal-trail-492014-n5")
+    PROJECT_ID: str = os.getenv("GOOGLE_CLOUD_PROJECT", "vital-octagon-19612")
     LOCATION: str = os.getenv("GOOGLE_CLOUD_LOCATION", "global")
     ORCHESTRATOR_MODEL: str = os.getenv("ORCHESTRATOR_MODEL", "gemini-3.7-flash")
     VIDEO_GEN_MODEL: str = os.getenv("VIDEO_GEN_MODEL", "gemini-omni-1.1-flash-preview")

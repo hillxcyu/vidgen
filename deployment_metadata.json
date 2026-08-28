@@ -1,7 +1,7 @@
 {
-  "remote_agent_runtime_id": "projects/456465962826/locations/asia-east1/reasoningEngines/5283399662068301824",
+  "remote_agent_runtime_id": "projects/440790012685/locations/asia-east1/reasoningEngines/4207320826103463936",
   "deployment_target": "agent_runtime",
   "is_a2a": true,
   "agent_directory": "app",
-  "deployment_timestamp": "2026-08-27T10:34:21+00:00"
+  "deployment_timestamp": "2026-08-28T06:49:37.302986+00:00"
 }
