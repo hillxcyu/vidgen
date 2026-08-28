@@ -1,46 +1,51 @@
 # `PLAN.md`
 
 ## 📋 Metadata
-*   **Task:** Deploy Full Video Generation Pipeline (Cloud Run Frontend & Agent Runtime) to Project `vital-octagon-19612`
-*   **Account:** `xcyu@google.com`
-*   **Target Project:** `vital-octagon-19612`
-*   **Target Region:** `asia-east1` / `global`
+*   **Task:** Fix Reference Image Ingestion in Sequential Image-to-Video (`i2v_chaining`) Mode
+*   **Target Region:** `asia-east1`
 *   **Date:** 2026-08-28
-*   **Status:** ✅ DEPLOYMENT_COMPLETE
+*   **Status:** PENDING_USER_APPROVAL
 
 ---
 
-## 🎯 Architecture & Deployment Summary
+## 🔍 Root Cause Analysis
 
+In [`app/fast_api_app.py`](file:///usr/local/google/home/xcyu/projects/reusable/vidgen/app/fast_api_app.py#L668-L687) and [`app/agents/pipeline.py`](file:///usr/local/google/home/xcyu/projects/reusable/vidgen/app/agents/pipeline.py#L656-L675), there was an `if/else` branch:
+
+```python
+# CURRENT CODE (BUG):
+if mode == "i2v_chaining":
+    video_bytes = generate_omni_clip(
+        prompt=optimized_prompt,
+        input_image_b64=prev_frame_b64, # <--- Only passed previous frame anchor!
+        # reference_images_b64 was DROPPED!
+    )
+else: # reference mode
+    video_bytes = generate_omni_clip(
+        prompt=optimized_prompt,
+        reference_images_b64=reference_assets_b64, # <--- Passed reference image
+    )
 ```
-  [ Web Browser / User UI ]
-              │
-              ▼
-   [ Google Cloud Run Frontend ]
-   • Service URL: https://vidgen-frontend-440790012685.asia-east1.run.app
-   • Region: asia-east1
-   • Runs: FastAPI interactive studio UI (app/fast_api_app.py + index.html)
-   • Env: GOOGLE_CLOUD_PROJECT="vital-octagon-19612", GOOGLE_CLOUD_LOCATION="global"
-   • GCS Bucket: gs://vital-octagon-19612-vidgen-showcase (CORS enabled)
-              │
-              ▼
-   [ Vertex AI Agent Runtime / Gemini Models ]
-   • Agent Runtime ID: projects/440790012685/locations/asia-east1/reasoningEngines/4207320826103463936
-   • Agent Card URL: https://asia-east1-aiplatform.googleapis.com/reasoningEngines/v1/projects/440790012685/locations/asia-east1/reasoningEngines/4207320826103463936/api/a2a/app/.well-known/agent-card.json
-```
+
+### Why this broke I2V Mode:
+1. **Shot 1**: `prev_frame_b64` is `None` and `reference_images_b64` was not passed. Shot 1 generated from pure text without seeing the character reference image.
+2. **Shots 2 & 3**: Only the terminal frame was passed (`<FIRST_FRAME>`), but the canonical character reference image was never attached as `<IMAGE_REF_0>[Character A]`.
+
+In contrast, **Asset Reference Mode** passed `reference_images_b64=reference_assets_b64`, which is why it worked properly!
 
 ---
 
-## 📋 Step-by-Step Execution Status
+## 📋 Proposed Step-by-Step Fix Plan
 
-1. [x] **Update Project Defaults in Configuration**:
-   * Set default `PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT", "vital-octagon-19612")` in [`app/config.py`](file:///usr/local/google/home/xcyu/projects/reusable/vidgen/app/config.py) and [`src/config.py`](file:///usr/local/google/home/xcyu/projects/reusable/vidgen/src/config.py).
-2. [x] **Verify Tests**:
-   * Ran test suite: `uv run pytest tests/unit tests/integration` (**31/31 passed, 100%**).
-3. [x] **Deploy Cloud Run Frontend**:
-   * Built container image: `asia-east1-docker.pkg.dev/vital-octagon-19612/vidgen/vidgen-omni:latest`
-   * Deployed service: `https://vidgen-frontend-440790012685.asia-east1.run.app`
-4. [x] **Deploy Vertex AI Agent Runtime Backend**:
-   * Deployed reasoning engine: `projects/440790012685/locations/asia-east1/reasoningEngines/4207320826103463936`
-5. [x] **Commit & Push**:
-   * Committed all deployment metadata and pushed to `main` on GitHub.
+1. **Unify Reference Asset Injection in I2V Mode**:
+   * Update [`app/fast_api_app.py`](file:///usr/local/google/home/xcyu/projects/reusable/vidgen/app/fast_api_app.py) and [`app/agents/pipeline.py`](file:///usr/local/google/home/xcyu/projects/reusable/vidgen/app/agents/pipeline.py) so `generate_omni_clip` receives `reference_images_b64=reference_assets_b64` across **all modes** (both `i2v_chaining` and `reference`).
+   * For **Shot 1**: `input_image_b64` is `None`, and `reference_images_b64` attaches `<IMAGE_REF_0>[Character A]image_0.png`.
+   * For **Shots 2+**: Passes **both** `<FIRST_FRAME>image_0.png` (for seamless motion chaining) AND `<IMAGE_REF_0>[Character A]image_1.png` (for persistent character identity locking).
+
+2. **Verify with Pytest**:
+   * Run full test suite: `uv run pytest tests/unit tests/integration`.
+
+3. **Deploy Updated Container to Cloud Run & Agent Runtime**:
+   * Build container with Cloud Build and update Cloud Run (`vidgen-frontend`) in `vital-octagon-19612`.
+   * Deploy updated agent to Vertex AI Agent Runtime in `vital-octagon-19612`.
+   * Commit and push to GitHub `main`.

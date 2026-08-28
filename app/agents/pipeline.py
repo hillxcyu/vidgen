@@ -653,26 +653,16 @@ async def run_production_loop_async(
                     "state": state.model_dump()
                 })
 
-            if state.mode == "i2v_chaining":
-                video_bytes = generate_omni_clip(
-                    prompt=optimized_shot_prompt,
-                    input_image_b64=prev_frame_b64,
-                    voice_transcript=shot.spoken_dialogue,
-                    aspect_ratio=state.aspect_ratio,
-                    resolution=state.resolution,
-                    duration=state.duration,
-                    client=client
-                )
-            else:
-                video_bytes = generate_omni_clip(
-                    prompt=optimized_shot_prompt,
-                    reference_images_b64=state.reference_assets_b64,
-                    voice_transcript=shot.spoken_dialogue,
-                    aspect_ratio=state.aspect_ratio,
-                    resolution=state.resolution,
-                    duration=state.duration,
-                    client=client
-                )
+            video_bytes = generate_omni_clip(
+                prompt=optimized_shot_prompt,
+                input_image_b64=prev_frame_b64 if state.mode == "i2v_chaining" else None,
+                reference_images_b64=state.reference_assets_b64,
+                voice_transcript=shot.spoken_dialogue,
+                aspect_ratio=state.aspect_ratio,
+                resolution=state.resolution,
+                duration=state.duration,
+                client=client
+            )
 
             with open(clip_filename, "wb") as f:
                 f.write(video_bytes)

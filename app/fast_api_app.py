@@ -665,26 +665,16 @@ async def run_adk_pipeline_background(adk_session: Session):
                     }
                 }, state_dict)
 
-                if mode == "i2v_chaining":
-                    video_bytes = generate_omni_clip(
-                        prompt=optimized_prompt,
-                        input_image_b64=prev_frame_b64,
-                        voice_transcript=shot.spoken_dialogue,
-                        aspect_ratio=aspect_ratio,
-                        resolution=resolution,
-                        duration=duration,
-                        client=client
-                    )
-                else:
-                    video_bytes = generate_omni_clip(
-                        prompt=optimized_prompt,
-                        reference_images_b64=reference_assets_b64,
-                        voice_transcript=shot.spoken_dialogue,
-                        aspect_ratio=aspect_ratio,
-                        resolution=resolution,
-                        duration=duration,
-                        client=client
-                    )
+                video_bytes = generate_omni_clip(
+                    prompt=optimized_prompt,
+                    input_image_b64=prev_frame_b64 if mode == "i2v_chaining" else None,
+                    reference_images_b64=reference_assets_b64,
+                    voice_transcript=shot.spoken_dialogue,
+                    aspect_ratio=aspect_ratio,
+                    resolution=resolution,
+                    duration=duration,
+                    client=client
+                )
 
                 with open(clip_filename, "wb") as f:
                     f.write(video_bytes)
