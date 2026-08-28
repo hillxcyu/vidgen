@@ -61,7 +61,7 @@ def test_generate_omni_clip_i2v_mode():
     assert result == fake_mp4_bytes
     mock_client.interactions.create.assert_called_once()
     call_args = mock_client.interactions.create.call_args[1]
-    assert call_args["model"] == "gemini-omni-flash-preview"
+    assert call_args["model"] == "gemini-omni-1.1-flash-preview"
     assert len(call_args["input"]) == 2
     assert call_args["input"][0]["type"] == "image"
     assert call_args["input"][1]["type"] == "text"

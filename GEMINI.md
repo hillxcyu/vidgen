@@ -42,6 +42,6 @@ Requires explicit human approval. Run `agents-cli deploy` only after user confir
 ## Operational Guidelines for Coding Agents
 
 - **Code preservation**: Only modify code directly targeted by the user's request. Preserve all surrounding code, config values, comments, and formatting.
-- **Model selection**: Screenwriter, Storyboarder, Prompt Optimizer, Health Checker, and Quality Rater use `gemini-3.7-flash`. Video generation uses `gemini-omni-flash-preview`.
+- **Model selection**: Screenwriter, Storyboarder, Prompt Optimizer, Health Checker, and Quality Rater use `gemini-3.7-flash`. Video generation uses `gemini-omni-1.1-flash-preview`.
 - **Location**: Set `GOOGLE_CLOUD_LOCATION="global"` for Vertex AI GenAI SDK.
 - **Run Python with `uv`**: `uv run python ...`

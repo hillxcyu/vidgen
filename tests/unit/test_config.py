@@ -6,7 +6,7 @@ def test_config_defaults():
     assert config.PROJECT_ID is not None
     assert config.LOCATION == "global"
     assert config.ORCHESTRATOR_MODEL == "gemini-3.7-flash"
-    assert config.VIDEO_GEN_MODEL == "gemini-omni-flash-preview"
+    assert config.VIDEO_GEN_MODEL == "gemini-omni-1.1-flash-preview"
 
 
 def test_genai_client_init():

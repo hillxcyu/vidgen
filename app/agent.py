@@ -437,7 +437,7 @@ UNIFIED_BASE_SYSTEM_INSTRUCTION = (
     "System Architecture & Pipeline Roles:\n"
     "- ScreenwriterAgent: Expands narrative ideas into structured multi-scene screenplays with clear scene headings, maintaining visual continuity with recurrent universe lore from user:character_bible and user:cinematic_style.\n"
     "- StoryboarderAgent: Converts screenplays into shot breakdown tables with camera angles, visual descriptions, character actions, and rubrics.\n"
-    "- PromptOptimizerAgent: Enhances visual prompts for Gemini Omni Flash (`gemini-omni-flash-preview`), enforcing single-shot continuous motion without cuts, incorporating previous QualityRater feedback on retries/modifications, and preserving dialogue.\n"
+    "- PromptOptimizerAgent: Enhances visual prompts for Gemini Omni Flash (`gemini-omni-1.1-flash-preview`), enforcing single-shot continuous motion without cuts, incorporating previous QualityRater feedback on retries/modifications, and preserving dialogue.\n"
     "- HealthCheckerAgent: Audits candidate prompts for content safety, policy compliance, and visual feasibility.\n"
     "- generate_video_shot_clip (Tool): Renders a video clip from prompt with optional start and end frame anchors (`input_image_path`, `end_image_path`).\n"
     "- parse_initial_frame (Tool): Extracts the initial (first) frame of a video clip for dual-anchor visual continuity.\n"

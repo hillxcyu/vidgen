@@ -108,7 +108,7 @@ def generate_omni_clip(
     duration: int = 10,
     client: Optional[genai.Client] = None,
 ) -> bytes:
-    """Wrapper tool for Gemini Omni Flash (gemini-omni-flash-preview) using interactions.create API.
+    """Wrapper tool for Gemini Omni Flash (gemini-omni-1.1-flash-preview) using interactions.create API.
     
     Supports:
     - MMC Control Strings formatting (MMC mode tags, audio reference tags & FC argument tokens)

@@ -5,7 +5,7 @@
 [![Docker](https://img.shields.io/badge/Docker-Containerized-blue)](https://docker.com)
 [![Pytest](https://img.shields.io/badge/Pytest-23%2F23%20Passed%20(100%25)-brightgreen)](https://pytest.org)
 
-**vidgen-omni** is a production-grade multi-agent generative video orchestration system built with **Google Agent Development Kit (ADK 2.0)**, **Gemini 3.7 Flash**, and **Gemini Omni Flash** (`gemini-omni-flash-preview`).
+**vidgen-omni** is a production-grade multi-agent generative video orchestration system built with **Google Agent Development Kit (ADK 2.0)**, **Gemini 3.7 Flash**, and **Gemini Omni Flash** (`gemini-omni-1.1-flash-preview`).
 
 It coordinates a specialized team of 5 AI agents to transform high-level natural language prompts into cohesive multi-shot cinematic videos with character identity preservation and motion continuity via **Sequential Image-to-Video (I2V) Prompt Chaining**.
 

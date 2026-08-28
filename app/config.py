@@ -17,7 +17,7 @@ class Config:
     )
     LOCATION: str = os.getenv("GOOGLE_CLOUD_LOCATION", "global")
     ORCHESTRATOR_MODEL: str = os.getenv("ORCHESTRATOR_MODEL", "gemini-3.7-flash")
-    VIDEO_GEN_MODEL: str = os.getenv("VIDEO_GEN_MODEL", "gemini-omni-flash-preview")
+    VIDEO_GEN_MODEL: str = os.getenv("VIDEO_GEN_MODEL", "gemini-omni-1.1-flash-preview")
     ORCHESTRATOR_TIMEOUT_MS: int = int(os.getenv("ORCHESTRATOR_TIMEOUT_MS", "60000"))
     VIDEO_GEN_TIMEOUT_MS: int = int(os.getenv("VIDEO_GEN_TIMEOUT_MS", "600000"))
 
