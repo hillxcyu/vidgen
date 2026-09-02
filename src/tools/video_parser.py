@@ -107,3 +107,54 @@ def extract_audio_reference(video_path: str, output_wav_path: Optional[str] = No
         return None
 
     return None
+
+
+def create_agentic_video_part(
+    video_path_or_uri: str,
+    video_bytes: Optional[bytes] = None,
+    media_processing: str = "agentic"
+):
+    """Builds a Google GenAI Part with explicit media_processing ('agentic' or 'static')
+    for advanced multimodal video understanding.
+
+    Supports:
+    - GCS file URIs: gs://bucket/path/to/clip.mp4
+    - GCS HTTPS showcase URLs: https://storage.googleapis.com/bucket/path/to/clip.mp4 (converted to gs://)
+    - Raw byte buffers (inline_data Blob with media_processing)
+    - Local file paths (reads bytes into inline_data Blob with media_processing)
+    """
+    from google.genai import types
+
+    # 1. Normalize GCS HTTPS showcase URLs to native gs:// URI
+    file_uri = None
+    if video_path_or_uri.startswith("gs://"):
+        file_uri = video_path_or_uri
+    elif video_path_or_uri.startswith("https://storage.googleapis.com/"):
+        file_uri = "gs://" + video_path_or_uri.removeprefix("https://storage.googleapis.com/")
+
+    if file_uri:
+        return types.Part(
+            file_data=types.FileData(file_uri=file_uri, mime_type="video/mp4"),
+            media_processing=media_processing
+        )
+
+    # 2. Local bytes or file
+    data = video_bytes
+    if not data and os.path.exists(video_path_or_uri) and os.path.isfile(video_path_or_uri):
+        try:
+            with open(video_path_or_uri, "rb") as fp:
+                data = fp.read()
+        except Exception:
+            pass
+
+    if data:
+        return types.Part(
+            inline_data=types.Blob(data=data, mime_type="video/mp4"),
+            media_processing=media_processing
+        )
+
+    # 3. Fallback to file_data with original URI
+    return types.Part(
+        file_data=types.FileData(file_uri=video_path_or_uri, mime_type="video/mp4"),
+        media_processing=media_processing
+    )

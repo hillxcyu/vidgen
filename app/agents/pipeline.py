@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 
 from app.config import Config, get_genai_client
 from app.state import PipelineState, VideoShot, StoryboardEntry
-from app.tools.video_parser import extract_last_frame, extract_keyframes
+from app.tools.video_parser import extract_last_frame, extract_keyframes, create_agentic_video_part
 from app.tools.omni_client import generate_omni_clip, build_omni_control_string
 from app.tools.stitcher import stitch_videos
 
@@ -380,11 +380,13 @@ async def evaluate_clip_quality(
 
     eval_res = None
     last_error = None
+    video_part = create_agentic_video_part(video_path_or_uri=video_path, video_bytes=video_bytes, media_processing=config.MEDIA_PROCESSING)
+
     if client:
         try:
             genai_contents = [
                 eval_instructions,
-                types.Part.from_bytes(data=video_bytes, mime_type="video/mp4")
+                video_part
             ]
             resp = await asyncio.to_thread(
                 client.models.generate_content,
@@ -406,7 +408,7 @@ async def evaluate_clip_quality(
             text = await run_adk_agent(
                 rater,
                 eval_instructions,
-                media_parts=[types.Part.from_bytes(data=video_bytes, mime_type="video/mp4")],
+                media_parts=[video_part],
                 session_service=session_service,
                 session_id=session_id,
                 client=client

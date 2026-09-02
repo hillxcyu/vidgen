@@ -26,7 +26,7 @@ from google.adk.tools.preload_memory_tool import PreloadMemoryTool
 from google.genai import types
 
 from app.config import Config, get_genai_client
-from app.tools.video_parser import extract_first_frame, extract_last_frame, extract_keyframes
+from app.tools.video_parser import extract_first_frame, extract_last_frame, extract_keyframes, create_agentic_video_part
 from app.tools.omni_client import generate_omni_clip, build_omni_control_string
 from app.tools.stitcher import stitch_videos
 from app.state import PipelineState, VideoShot, StoryboardEntry
@@ -650,7 +650,8 @@ async def evaluate_video_clip_quality(
         )
 
     eval_prompt = (
-        "You are the QualityRaterAgent evaluating an actual AI-generated MP4 video clip.\n"
+        "You are the QualityRaterAgent performing an autonomous agentic video understanding audit on an actual AI-generated MP4 video clip.\n"
+        "Leverage agentic video understanding to dynamically inspect critical timestamps, focus on motion transitions, evaluate physics/snow spray/footwork, and verify character likeness persistence across the full duration.\n"
         f"Target Shot Prompt: '{prompt}'\n"
         f"{criteria_str}\n\n"
         f"{continuity_rubric}"
@@ -670,7 +671,8 @@ async def evaluate_video_clip_quality(
     if ref_img_bytes:
         mime = "image/jpeg" if ref_img_path.lower().endswith((".jpg", ".jpeg")) else "image/png"
         contents.append(types.Part.from_bytes(data=ref_img_bytes, mime_type=mime))
-    contents.append(types.Part.from_bytes(data=video_bytes, mime_type="video/mp4"))
+    video_media_proc = os.getenv("MEDIA_PROCESSING", "agentic")
+    contents.append(create_agentic_video_part(video_path_or_uri=video_path, video_bytes=video_bytes, media_processing=video_media_proc))
 
     result_data = None
     try:
@@ -729,8 +731,8 @@ quality_rater_agent = Agent(
     instruction=(
         f"{UNIFIED_BASE_SYSTEM_INSTRUCTION}\n\n"
         "YOUR ACTIVE ROLE: QualityRaterAgent\n"
-        "TASK: Evaluate the quality of a generated video clip or the complete final stitched video at `video_path` across Subject Identity Consistency, Motion Smoothness, Prompt Adherence, and Temporal Asset Persistence.\n"
-        "CRITICAL TOOL INSTRUCTION: Whenever you are asked to evaluate a video clip or stitched video, you MUST invoke the `evaluate_video_clip_quality(video_path=..., prompt=..., evaluation_criteria=...)` tool to inspect and audit the actual MP4 video file using multimodal vision.\n"
+        "TASK: Evaluate the quality of a generated video clip or the complete final stitched video at `video_path` across Subject Identity Consistency, Motion Smoothness, Prompt Adherence, and Temporal Asset Persistence using agentic video understanding (`media_processing='agentic'`).\n"
+        "CRITICAL TOOL INSTRUCTION: Whenever you are asked to evaluate a video clip or stitched video, you MUST invoke the `evaluate_video_clip_quality(video_path=..., prompt=..., evaluation_criteria=...)` tool to inspect and audit the actual MP4 video file using agentic video understanding.\n"
         "FOR FINAL STITCHED VIDEO: When auditing the full stitched video, evaluate overall narrative pacing, cross-shot visual continuity, color grading stability, and audio flow.\n"
         "CRITICAL VISIBILITY RULE: You MUST output your full quality evaluation report in your response text for the user, including:\n"
         "- **Quality Score**: X.XX / 1.0\n"

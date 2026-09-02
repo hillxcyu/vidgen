@@ -1,51 +1,59 @@
 # `PLAN.md`
 
 ## 📋 Metadata
-*   **Task:** Fix Reference Image Ingestion in Sequential Image-to-Video (`i2v_chaining`) Mode
-*   **Target Region:** `asia-east1`
-*   **Date:** 2026-08-28
+*   **Feature:** Incorporate Gemini Agentic Video Understanding (`media_processing="agentic"`)
+*   **Target Models:** `gemini-3.7-flash` (Quality Rater / Video Auditor)
+*   **Created At:** 2026-09-02T01:38:00Z
 *   **Status:** PENDING_USER_APPROVAL
 
 ---
 
-## 🔍 Root Cause Analysis
+## 🎯 Goal & Overview
 
-In [`app/fast_api_app.py`](file:///usr/local/google/home/xcyu/projects/reusable/vidgen/app/fast_api_app.py#L668-L687) and [`app/agents/pipeline.py`](file:///usr/local/google/home/xcyu/projects/reusable/vidgen/app/agents/pipeline.py#L656-L675), there was an `if/else` branch:
+Incorporate Google GenAI's newly released **Agentic Video Understanding** (`media_processing="agentic"`) into VidGen-Omni.
 
-```python
-# CURRENT CODE (BUG):
-if mode == "i2v_chaining":
-    video_bytes = generate_omni_clip(
-        prompt=optimized_prompt,
-        input_image_b64=prev_frame_b64, # <--- Only passed previous frame anchor!
-        # reference_images_b64 was DROPPED!
-    )
-else: # reference mode
-    video_bytes = generate_omni_clip(
-        prompt=optimized_prompt,
-        reference_images_b64=reference_assets_b64, # <--- Passed reference image
-    )
-```
-
-### Why this broke I2V Mode:
-1. **Shot 1**: `prev_frame_b64` is `None` and `reference_images_b64` was not passed. Shot 1 generated from pure text without seeing the character reference image.
-2. **Shots 2 & 3**: Only the terminal frame was passed (`<FIRST_FRAME>`), but the canonical character reference image was never attached as `<IMAGE_REF_0>[Character A]`.
-
-In contrast, **Asset Reference Mode** passed `reference_images_b64=reference_assets_b64`, which is why it worked properly!
+Instead of static frame-by-frame subsampling, setting `media_processing="agentic"` on video `types.Part` allows `gemini-3.7-flash` to act as an autonomous multimodal video agent. It dynamically inspects relevant video segments, zooms into character details at arbitrary timestamps, tracks physics and motion dynamics, and detects micro-discrepancies in cross-shot identity and continuity.
 
 ---
 
-## 📋 Proposed Step-by-Step Fix Plan
+## 🛠️ Step-by-Step Implementation Plan
 
-1. **Unify Reference Asset Injection in I2V Mode**:
-   * Update [`app/fast_api_app.py`](file:///usr/local/google/home/xcyu/projects/reusable/vidgen/app/fast_api_app.py) and [`app/agents/pipeline.py`](file:///usr/local/google/home/xcyu/projects/reusable/vidgen/app/agents/pipeline.py) so `generate_omni_clip` receives `reference_images_b64=reference_assets_b64` across **all modes** (both `i2v_chaining` and `reference`).
-   * For **Shot 1**: `input_image_b64` is `None`, and `reference_images_b64` attaches `<IMAGE_REF_0>[Character A]image_0.png`.
-   * For **Shots 2+**: Passes **both** `<FIRST_FRAME>image_0.png` (for seamless motion chaining) AND `<IMAGE_REF_0>[Character A]image_1.png` (for persistent character identity locking).
+### 1️⃣ Dependency & Environment Upgrade
+* Update `pyproject.toml` dependency from `google-genai>=0.1.0` to `google-genai>=2.21.0` (which introduces `media_processing` on `types.Part` / `types.MediaProcessing.AGENTIC`).
+* Update the local virtualenv via `uv pip install "google-genai>=2.21.0"`.
 
-2. **Verify with Pytest**:
-   * Run full test suite: `uv run pytest tests/unit tests/integration`.
+### 2️⃣ Configuration & Video Part Helper
+* In [`app/config.py`](file:///usr/local/google/home/xcyu/projects/reusable/vidgen/app/config.py) and [`src/config.py`](file:///usr/local/google/home/xcyu/projects/reusable/vidgen/src/config.py):
+  * Add `MEDIA_PROCESSING: str = os.getenv("MEDIA_PROCESSING", "agentic")` (options: `"agentic"`, `"static"`).
+* Create a dedicated utility function in [`app/tools/video_parser.py`](file:///usr/local/google/home/xcyu/projects/reusable/vidgen/app/tools/video_parser.py) (and [`src/tools/video_parser.py`](file:///usr/local/google/home/xcyu/projects/reusable/vidgen/src/tools/video_parser.py)):
+  ```python
+  def create_agentic_video_part(
+      video_path_or_uri: str,
+      video_bytes: Optional[bytes] = None,
+      media_processing: str = "agentic"
+  ) -> types.Part:
+      """Builds a types.Part with explicit media_processing ('agentic' or 'static')
+      supporting both GCS file_uri (gs://...) and inline byte blobs."""
+  ```
+  * Automatically converts GCS HTTPS showcase URLs (`https://storage.googleapis.com/<bucket>/<object>`) to `gs://<bucket>/<object>` when available, enabling zero-download streaming for Cloud Run and Vertex AI.
 
-3. **Deploy Updated Container to Cloud Run & Agent Runtime**:
-   * Build container with Cloud Build and update Cloud Run (`vidgen-frontend`) in `vital-octagon-19612`.
-   * Deploy updated agent to Vertex AI Agent Runtime in `vital-octagon-19612`.
-   * Commit and push to GitHub `main`.
+### 3️⃣ Quality Rater Agent Video Inspection Upgrades
+* In [`app/agent.py`](file:///usr/local/google/home/xcyu/projects/reusable/vidgen/app/agent.py) (`evaluate_video_clip_quality`):
+  * Replace static `Part.from_bytes` with `create_agentic_video_part(video_path=video_path, video_bytes=video_bytes, media_processing=config.MEDIA_PROCESSING)`.
+  * Update `QualityRaterAgent` system instructions to direct `gemini-3.7-flash` to leverage agentic video understanding:
+    * Pinpoint exact timestamps of motion artifacts, speed changes, or drift.
+    * Dynamically inspect character facial consistency against the reference image across all seconds of the clip.
+* In [`app/agents/pipeline.py`](file:///usr/local/google/home/xcyu/projects/reusable/vidgen/app/agents/pipeline.py) and [`src/agents/stitcher_graph.py`](file:///usr/local/google/home/xcyu/projects/reusable/vidgen/src/agents/stitcher_graph.py) (`evaluate_clip_quality`):
+  * Apply `create_agentic_video_part` with `media_processing="agentic"`.
+
+### 4️⃣ Verification & Testing
+* Add unit tests in `tests/unit/test_agentic_video.py` verifying:
+  * `types.Part` correctly sets `media_processing="agentic"`.
+  * `create_agentic_video_part` correctly handles `gs://` URIs, HTTPS URLs, and local raw byte buffers.
+  * Quality Rater executes with agentic video understanding.
+* Run full test suite: `uv run pytest tests/unit tests/integration`.
+
+### 5️⃣ Deployment & Documentation
+* Build updated container image via Cloud Build and redeploy to Cloud Run (`vidgen-frontend`) in `vital-octagon-19612`.
+* Deploy updated agent to Vertex AI Agent Runtime in `vital-octagon-19612`.
+* Commit and push changes to GitHub `main`.

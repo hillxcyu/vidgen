@@ -16,7 +16,7 @@ from google.adk.workflow import Workflow, FunctionNode, Edge, START
 
 from src.config import Config, get_genai_client
 from src.state import PipelineState, VideoShot, StoryboardEntry
-from src.tools.video_parser import extract_last_frame
+from src.tools.video_parser import extract_last_frame, create_agentic_video_part
 from src.tools.omni_client import generate_omni_clip
 from src.tools.stitcher import stitch_videos
 
@@ -328,7 +328,8 @@ async def evaluate_clip_quality(
             res_dict = res.model_dump()
             res_dict["consolidated_rubric"] = consolidated_rubric
             return res_dict
-        media_parts.append(types.Part.from_bytes(data=video_bytes, mime_type="video/mp4"))
+        config = Config()
+        media_parts.append(create_agentic_video_part(video_path_or_uri=video_path, video_bytes=video_bytes, media_processing=config.MEDIA_PROCESSING))
     except Exception as e:
         res = QualityEvaluationResult(
             score=0.0,
