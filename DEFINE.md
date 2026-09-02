@@ -2,32 +2,30 @@
 
 ## 📋 Metadata
 *   **Stage:** 2 - Problem Decomposition (DEFINE)
-*   **Timestamp:** 2026-09-02T01:43:20Z
-*   **Target Task:** Incorporate Gemini Agentic Video Understanding (`media_processing="agentic"`)
+*   **Timestamp:** 2026-09-02T06:34:45Z
+*   **Target Task:** Reference Adherence Benchmark: Pipeline-Optimized vs. Simple Prompt on Gemini Omni Flash 1.1
 *   **Status:** COMPLETED
 
 ---
 
 ## 📝 Detailed TODO Breakdown
 
-### Phase 1: Dependencies & Configuration [backend]
-- [x] `[T001]` **[backend]** Update `pyproject.toml` to require `google-genai>=2.21.0`.
-- [x] `[T002]` **[backend]** Install/upgrade `google-genai` in the virtualenv (`uv pip install "google-genai>=2.21.0"`).
-- [x] `[T003]` **[backend]** Add `MEDIA_PROCESSING: str = os.getenv("MEDIA_PROCESSING", "agentic")` in [`app/config.py`](file:///usr/local/google/home/xcyu/projects/reusable/vidgen/app/config.py) and [`src/config.py`](file:///usr/local/google/home/xcyu/projects/reusable/vidgen/src/config.py).
+### Phase 1: Reference Image Generation [backend]
+- [x] `[T001]` **[backend]** Generate canonical reference portrait of a 20-year-old Asian male using `gemini-3.1-flash-image` (Nano Banana 2) on Vertex AI (`project: vital-octagon-19612`).
+- [x] `[T002]` **[backend]** Save reference image to `benchmarks/reference_xcyu.png` (1.5MB) and extract base64 string.
 
-### Phase 2: Agentic Video Part Helper [backend] [tools]
-- [x] `[T004]` **[backend]** Implement `create_agentic_video_part()` in [`app/tools/video_parser.py`](file:///usr/local/google/home/xcyu/projects/reusable/vidgen/app/tools/video_parser.py) and [`src/tools/video_parser.py`](file:///usr/local/google/home/xcyu/projects/reusable/vidgen/src/tools/video_parser.py) to format `types.Part(file_data=..., media_processing="agentic")` for `gs://` URIs and `types.Part(inline_data=..., media_processing="agentic")` for raw byte buffers.
+### Phase 2: Video Generations via Omni Flash [backend]
+- [x] `[T003]` **[backend]** Generate Video A (Pipeline Optimized Prompt) with MMC control strings (`[# References <IMAGE_REF_0>[Character A]image_0.png] [aspect_ratio=16:9] [resolution=720p] [duration=5s] Character A, ...`) and attached reference image via `gemini-omni-1.1-flash-preview`. Saved to `benchmarks/video_pipeline_optimized.mp4` (2.4MB, 40.2s generation latency).
+- [x] `[T004]` **[backend]** Generate Video B (Simple Prompt) with `[aspect_ratio=16:9] [resolution=720p] [duration=5s] xcyu (reference image) skiing in Hakuba` and attached reference image via `gemini-omni-1.1-flash-preview`. Saved to `benchmarks/video_simple_prompt.mp4` (2.8MB, 27.6s generation latency).
 
-### Phase 3: Quality Rater Integration [backend] [pipeline]
-- [x] `[T005]` **[backend]** Update `evaluate_video_clip_quality` and `QualityRaterAgent` prompt in [`app/agent.py`](file:///usr/local/google/home/xcyu/projects/reusable/vidgen/app/agent.py) to use `create_agentic_video_part` with `media_processing="agentic"` and temporal audit directives.
-- [x] `[T006]` **[backend]** Update `evaluate_clip_quality` in [`app/agents/pipeline.py`](file:///usr/local/google/home/xcyu/projects/reusable/vidgen/app/agents/pipeline.py) and [`src/agents/stitcher_graph.py`](file:///usr/local/google/home/xcyu/projects/reusable/vidgen/src/agents/stitcher_graph.py) to use `create_agentic_video_part`.
+### Phase 3: Agentic Quality Evaluation & Report Generation [backend] [frontend]
+- [x] `[T005]` **[backend]** Run `evaluate_video_clip_quality` with Gemini 3.7 Flash on both videos comparing against `reference_xcyu.png`.
+  - Video A (Optimized): Facial Similarity 0.90, Outfit 0.95, Motion 0.92, Overall 0.92 (STRONG_ADHERENCE).
+  - Video B (Simple): Facial Similarity 0.96, Outfit 0.97, Motion 0.94, Overall 0.96 (STRONG_ADHERENCE).
+- [x] `[T006]` **[frontend]** Construct interactive side-by-side HTML comparison report (`benchmarks/index.html`) displaying the reference image, both video players, verbatim prompts, and quantitative/qualitative analysis.
 
-### Phase 4: Unit & Integration Testing [test]
-- [x] `[T007]` **[test]** Create unit test suite [`tests/unit/test_agentic_video.py`](file:///usr/local/google/home/xcyu/projects/reusable/vidgen/tests/unit/test_agentic_video.py) testing `create_agentic_video_part` with `gs://` URI, HTTPS URL, and inline bytes.
-- [x] `[T008]` **[test]** Run full test suite: `uv run pytest tests/unit tests/integration` (37/37 passed, 100%).
-
-### Phase 5: Cloud Build & Deployment [cloudrun] [deploy]
-- [x] `[T009]` **[cloudrun]** Build updated Docker container `asia-east1-docker.pkg.dev/vital-octagon-19612/vidgen/vidgen-omni:latest` via Cloud Build (`status: SUCCESS`).
-- [x] `[T010]` **[cloudrun]** Redeploy Cloud Run frontend `vidgen-frontend` in `asia-east1` (Revision `vidgen-frontend-00003-d9n`).
-- [x] `[T011]` **[deploy]** Redeploy Vertex AI Agent Runtime reasoning engine in `vital-octagon-19612` (`asia-east1`) (`4207320826103463936`).
-- [x] `[T012]` **[git]** Commit and push all changes to GitHub `main`.
+### Phase 4: Deployment to x20 Web Hosting [deploy]
+- [x] `[T007]` **[deploy]** Create target directory `/google/data/rw/users/xc/xcyu/www/reports/r2v_omini_flash_1_1/`.
+- [x] `[T008]` **[deploy]** Copy `index.html`, `reference_xcyu.png`, `video_pipeline_optimized.mp4`, and `video_simple_prompt.mp4` to the x20 web directory.
+- [x] `[T009]` **[deploy]** Apply `chmod -R a+rX /google/data/rw/users/xc/xcyu/www/reports/r2v_omini_flash_1_1/`.
+- [x] `[T010]` **[deploy]** Verify HTTP 200/302 response via `curl` and provide live link: `https://x20web.corp.google.com/~xcyu/reports/r2v_omini_flash_1_1/`.

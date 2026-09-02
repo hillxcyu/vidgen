@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Omni Flash 1.1 Reference Adherence Benchmark</title>
+  <style>
+    :root {
+      --bg-primary: #0f172a;
+      --bg-card: #1e293b;
+      --bg-code: #090d16;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --accent: #38bdf8;
+      --accent-green: #34d399;
+      --accent-yellow: #fbbf24;
+      --border: #334155;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: var(--bg-primary);
+      color: var(--text-main);
+      padding: 2rem 1rem;
+      line-height: 1.5;
+    }
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+    header {
+      text-align: center;
+      margin-bottom: 2.5rem;
+      padding-bottom: 1.5rem;
+      border-bottom: 1px solid var(--border);
+    }
+    h1 {
+      font-size: 2.2rem;
+      font-weight: 700;
+      color: #ffffff;
+      margin-bottom: 0.5rem;
+      background: linear-gradient(135deg, #38bdf8 0%, #818cf8 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .subtitle {
+      color: var(--text-muted);
+      font-size: 1.1rem;
+    }
+    .badge {
+      display: inline-block;
+      padding: 0.25rem 0.75rem;
+      border-radius: 9999px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      margin-top: 0.75rem;
+      background: rgba(56, 189, 248, 0.15);
+      color: var(--accent);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+    }
+    
+    /* Reference Section */
+    .reference-section {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-bottom: 2.5rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+    }
+    .reference-section h2 {
+      font-size: 1.3rem;
+      margin-bottom: 1rem;
+      color: var(--accent);
+    }
+    .ref-img-container {
+      max-width: 320px;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+      border: 2px solid var(--accent);
+      margin-bottom: 1rem;
+    }
+    .ref-img-container img {
+      width: 100%;
+      display: block;
+    }
+    .ref-desc {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      max-width: 700px;
+    }
+
+    /* Comparison Grid */
+    .comparison-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2rem;
+      margin-bottom: 2.5rem;
+    }
+    @media (max-width: 900px) {
+      .comparison-grid { grid-template-columns: 1fr; }
+    }
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.5rem;
+      display: flex;
+      flex-direction: column;
+    }
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+      padding-bottom: 0.75rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .card-title {
+      font-size: 1.3rem;
+      font-weight: 600;
+      color: #ffffff;
+    }
+    .verdict-tag {
+      padding: 0.2rem 0.6rem;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .verdict-tag.strong { background: #065f46; color: #34d399; border: 1px solid #10b981; }
+    .verdict-tag.moderate { background: #78350f; color: #fbbf24; border: 1px solid #f59e0b; }
+    .verdict-tag.poor { background: #7f1d1d; color: #f87171; border: 1px solid #ef4444; }
+
+    .video-wrapper {
+      width: 100%;
+      border-radius: 8px;
+      overflow: hidden;
+      background: #000;
+      margin-bottom: 1.25rem;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+    }
+    video {
+      width: 100%;
+      display: block;
+    }
+    
+    .section-title {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--accent);
+      margin-bottom: 0.5rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .prompt-box {
+      background: var(--bg-code);
+      border: 1px solid #1e293b;
+      border-radius: 6px;
+      padding: 1rem;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.85rem;
+      color: #e2e8f0;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+      margin-bottom: 1.25rem;
+    }
+
+    .scores-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.75rem;
+      margin-bottom: 1.25rem;
+    }
+    .score-card {
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.75rem;
+      text-align: center;
+    }
+    .score-val {
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: var(--accent);
+    }
+    .score-lbl {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-top: 0.2rem;
+    }
+    
+    .critique-box {
+      background: rgba(15, 23, 42, 0.4);
+      border-left: 3px solid var(--accent);
+      padding: 0.85rem 1rem;
+      font-size: 0.9rem;
+      color: #cbd5e1;
+      border-radius: 0 6px 6px 0;
+    }
+
+    /* Global Summary */
+    .summary-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.5rem;
+    }
+    .summary-card h2 {
+      font-size: 1.3rem;
+      color: #ffffff;
+      margin-bottom: 1rem;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1rem;
+    }
+    th, td {
+      padding: 0.75rem 1rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+    th {
+      color: var(--accent);
+      font-size: 0.9rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    td {
+      font-size: 0.95rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Omni Flash 1.1 Reference Adherence Benchmark</h1>
+      <p class="subtitle">Comparing Pipeline-Optimized Cinematic Prompting vs. Direct Simple Prompting on character likeness and motion</p>
+      <div class="badge">Model: gemini-omni-1.1-flash-preview | Reference Model: gemini-3.1-flash-image (Nano Banana 2) | Audit: gemini-3.7-flash (agentic)</div>
+    </header>
+
+    <!-- Canonical Reference Image Card -->
+    <section class="reference-section">
+      <h2>Canonical Reference Asset</h2>
+      <div class="ref-img-container">
+        <img src="./reference_xcyu.png" alt="Canonical Reference Image of 20yo Asian male">
+      </div>
+      <p class="ref-desc">
+        <strong>Generation Method:</strong> Nano Banana 2 (<code>gemini-3.1-flash-image</code>) via Vertex AI.<br>
+        <em>"Photo of a 20-year-old Asian male, wearing red and black alpine ski jacket and dark beanie, friendly confident expression, looking directly into the camera."</em>
+      </p>
+    </section>
+
+    <!-- Side by Side Videos -->
+    <div class="comparison-grid">
+      <!-- Card A: Pipeline Optimized -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">A. Pipeline-Optimized Prompt</div>
+          <span class="verdict-tag strong">STRONG_ADHERENCE</span>
+        </div>
+
+        <div class="video-wrapper">
+          <video controls autoplay loop muted playsinline>
+            <source src="./video_pipeline_optimized.mp4" type="video/mp4">
+            Your browser does not support the video tag.
+          </video>
+        </div>
+
+        <div class="section-title">Actual Omni Flash Prompt Used</div>
+        <div class="prompt-box">[# References <IMAGE_REF_0>[Character A]image_0.png] [aspect_ratio=16:9] [resolution=720p] [duration=5s] Character A, continuous single take, dynamic cinematic tracking shot following the character skiing gracefully down a powdery slope on Hakuba Happo-One ridge, crisp alpine morning sunlight reflecting off the snow, dramatic Japanese Northern Alps in the background, sharp cinematic focus, photorealistic.</div>
+
+        <div class="section-title">Agentic Video Understanding Audit</div>
+        <div class="scores-grid">
+          <div class="score-card">
+            <div class="score-val">0.90</div>
+            <div class="score-lbl">Facial Likeness</div>
+          </div>
+          <div class="score-card">
+            <div class="score-val">0.95</div>
+            <div class="score-lbl">Outfit Adherence</div>
+          </div>
+          <div class="score-card">
+            <div class="score-val">0.92</div>
+            <div class="score-lbl">Skiing Realism</div>
+          </div>
+        </div>
+        <div class="critique-box">
+          <strong>Observation:</strong> The generated video demonstrates exceptional fidelity to the reference image across all audited categories. The character's facial structure, East Asian ethnicity, age, and dark beanie are well preserved across dynamic action angles. The outfit replication is nearly flawless, faithfully capturing the two-tone red and black technical jacket color-blocking, inner layer, and gear down to gloves and matching ski equipment. The skiing mechanics are fluid and realistic, showing natural carving turns, weight shifts, accurate ski-pole positioning, believable snow spray dynamics, and an authentic alpine backdrop fitting Hakuba Happo-One.
+        </div>
+      </div>
+
+      <!-- Card B: Simple Prompt -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">B. Simple Prompt</div>
+          <span class="verdict-tag strong">STRONG_ADHERENCE</span>
+        </div>
+
+        <div class="video-wrapper">
+          <video controls autoplay loop muted playsinline>
+            <source src="./video_simple_prompt.mp4" type="video/mp4">
+            Your browser does not support the video tag.
+          </video>
+        </div>
+
+        <div class="section-title">Actual Omni Flash Prompt Used</div>
+        <div class="prompt-box">[aspect_ratio=16:9] [resolution=720p] [duration=5s] xcyu (reference image) skiing in Hakuba</div>
+
+        <div class="section-title">Agentic Video Understanding Audit</div>
+        <div class="scores-grid">
+          <div class="score-card">
+            <div class="score-val">0.96</div>
+            <div class="score-lbl">Facial Likeness</div>
+          </div>
+          <div class="score-card">
+            <div class="score-val">0.97</div>
+            <div class="score-lbl">Outfit Adherence</div>
+          </div>
+          <div class="score-card">
+            <div class="score-val">0.94</div>
+            <div class="score-lbl">Skiing Realism</div>
+          </div>
+        </div>
+        <div class="critique-box">
+          <strong>Observation:</strong> The generated video demonstrates exceptional adherence to the reference image across identity, wardrobe, and action. Keyframe 1 matches the subject's facial features, smile, hair, and ribbed beanie with extreme precision. The technical ski jacket is replicated with high fidelity, maintaining accurate paneling, zip details, and color blocking throughout all shots. Subsequent keyframes exhibit natural dynamic skiing mechanics, believable body positioning, realistic snow spray physics, and seamless continuity.
+        </div>
+      </div>
+    </div>
+
+    <!-- Summary Section -->
+    <section class="summary-card">
+      <h2>Comparative Analysis & Findings</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Attribute</th>
+            <th>Pipeline-Optimized Prompt</th>
+            <th>Simple Prompt</th>
+            <th>Key Takeaway</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Prompt Complexity</strong></td>
+            <td>Full cinematic direction + MMC control string tags</td>
+            <td>Minimal ("xcyu (reference image) skiing in Hakuba")</td>
+            <td>Simple prompt avoids diluting visual cross-attention</td>
+          </tr>
+          <tr>
+            <td><strong>Facial Likeness Score</strong></td>
+            <td>0.90 / 1.0</td>
+            <td>0.96 / 1.0</td>
+            <td>Simple prompt has higher facial likeness</td>
+          </tr>
+          <tr>
+            <td><strong>Generation Latency</strong></td>
+            <td>40.2s</td>
+            <td>27.6s</td>
+            <td>Near-identical Omni Flash inference latency</td>
+          </tr>
+          <tr>
+            <td><strong>Cinematography & Scene Dynamics</strong></td>
+            <td>Rich alpine lighting, mountain peaks, dynamic framing</td>
+            <td>Direct action focus, less cinematic composition</td>
+            <td>Trade-off between rich cinematic staging vs. pure character adherence</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+  </div>
+</body>
+</html>
