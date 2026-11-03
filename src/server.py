@@ -11,7 +11,13 @@ from google.genai import types
 
 from src.config import Config, get_genai_client
 from src.state import PipelineState, VideoShot, StoryboardEntry
-from src.tools.video_parser import extract_last_frame
+from src.tools.video_parser import (
+    extract_last_frame,
+    extract_video_tail,
+    trim_video_prefix,
+    detect_seam_jump_cut,
+    detect_r2v_first_frame_lock,
+)
 from src.tools.omni_client import generate_omni_clip
 from src.tools.stitcher import stitch_videos
 from src.agents.stitcher_graph import (
@@ -297,7 +303,7 @@ async def run_adk_pipeline_background(adk_session: Session):
         state = PipelineState(
             original_intent=prompt,
             num_shots=num_shots,
-            mode=mode if mode in ["reference", "i2v_chaining"] else "i2v_chaining",
+            mode=mode if mode in ["reference", "i2v_chaining", "video_extend"] else "i2v_chaining",
             aspect_ratio=aspect_ratio,
             resolution=resolution,
             duration=duration,
@@ -340,9 +346,17 @@ async def run_adk_pipeline_background(adk_session: Session):
         screenwriter = agents["screenwriter"]
         storyboarder = agents["storyboarder"]
         transcript_ctx = f"\nVoice Transcript Spoken Lines: '{state.voice_transcript}'" if state.voice_transcript else ""
+        extend_mode_ctx = (
+            "\nCONTINUOUS EXTENSION RULE (video_extend mode): Design all scenes as one unbroken continuous single-take camera journey where each scene smoothly continues from the exact ending pose and space of the previous scene without hard location cuts."
+            if state.mode == "video_extend" else ""
+        )
+        r2v_anchor_ctx = (
+            "\nREFERENCE-TO-VIDEO SCENE-1 RULE: A studio-white subject/product reference image is provided. Scene 1 (and all scenes) MUST open immediately on Frame 0 inside a rich physical environment—NEVER describe, open on, or transition/dissolve out of a white studio backdrop."
+            if state.reference_assets_b64 else ""
+        )
 
         screenplay_prompt = (
-            f"User request: '{state.original_intent}'. Mode: {state.mode}.{transcript_ctx}\n"
+            f"User request: '{state.original_intent}'. Mode: {state.mode}.{transcript_ctx}{extend_mode_ctx}{r2v_anchor_ctx}\n"
             f"Write a concise {state.num_shots}-scene screenplay breakdown describing visual motifs, camera directions, character actions, and dialogue distribution."
         )
         try:
@@ -371,7 +385,7 @@ async def run_adk_pipeline_background(adk_session: Session):
         try:
             storyboard_prompt = (
                 f"You are the StoryboarderAgent. Convert the following screenplay into a structured {state.num_shots}-scene video storyboard with custom quality evaluation criteria for each scene.\n\n"
-                f"SCREENPLAY:\n{screenplay_text}\n\n"
+                f"SCREENPLAY:\n{screenplay_text}{extend_mode_ctx}{r2v_anchor_ctx}\n\n"
                 "CRITICAL TRANSCRIPT SEGMENTATION RULE: If a Voice Transcript is provided above, you MUST segment and chronologically split the transcript across the scenes. "
                 "Each scene MUST receive its exact corresponding line of dialogue in 'spoken_dialogue'. Only Scene 1 may contain the opening greeting if present in the transcript.\n"
                 f"Return ONLY a JSON list of {state.num_shots} items, where each item has keys: "
@@ -435,6 +449,10 @@ async def run_adk_pipeline_background(adk_session: Session):
 
         generated_clip_paths = []
         prev_frame_b64: Optional[str] = None
+        prev_last_frame_b64: Optional[str] = None
+        prev_clip_path: Optional[str] = None
+        prev_video_tail_b64: Optional[str] = None
+        prev_video_tail_sec: float = 0.0
         active_audio_b64: List[str] = state.reference_audio_b64 or []
 
         for idx, shot in enumerate(state.shots):
@@ -447,8 +465,26 @@ async def run_adk_pipeline_background(adk_session: Session):
                 state.attempt_counter += 1
 
                 # Step 4: PromptOptimizerAgent
+                is_extend_shot = state.mode == "video_extend" and prev_video_tail_b64 is not None
+                is_r2v_shot = bool(
+                    state.reference_assets_b64
+                    and (
+                        (state.mode == "reference")
+                        or (state.mode == "i2v_chaining" and not prev_frame_b64)
+                        or (state.mode == "video_extend" and not prev_video_tail_b64)
+                    )
+                )
                 shot_dialogue = shot.spoken_dialogue or (state.voice_transcript if idx == 0 else None)
-                optimized_shot_prompt = await optimize_prompt(shot.prompt, voice_transcript=shot_dialogue, feedback=feedback, session_service=adk_session_service, session_id=session_id, client=client)
+                optimized_shot_prompt = await optimize_prompt(
+                    shot.prompt,
+                    voice_transcript=shot_dialogue,
+                    feedback=feedback,
+                    is_extend_shot=is_extend_shot,
+                    is_r2v_shot=is_r2v_shot,
+                    session_service=adk_session_service,
+                    session_id=session_id,
+                    client=client,
+                )
                 broadcast_log(session_id, {
                     'step': 4,
                     'agent': 'PromptOptimizerAgent',
@@ -471,10 +507,27 @@ async def run_adk_pipeline_background(adk_session: Session):
                     optimized_shot_prompt = shot.prompt
 
                 from src.tools.omni_client import build_omni_control_string
+                is_extend_shot = state.mode == "video_extend" and prev_video_tail_b64 is not None
+                active_refs_b64 = (
+                    state.reference_assets_b64
+                    if (
+                        (state.mode == "reference")
+                        or (state.mode == "i2v_chaining" and not prev_frame_b64)
+                        or (state.mode == "video_extend" and not prev_video_tail_b64)
+                    )
+                    else None
+                )
+                shot_task = (
+                    "extend"
+                    if is_extend_shot
+                    else ("reference_to_video" if active_refs_b64 else None)
+                )
                 control_str = build_omni_control_string(
                     prompt=optimized_shot_prompt,
                     input_image_b64=prev_frame_b64 if state.mode == "i2v_chaining" else None,
-                    reference_assets_b64=state.reference_assets_b64,
+                    input_video_b64=prev_video_tail_b64 if is_extend_shot else None,
+                    task=shot_task,
+                    reference_assets_b64=active_refs_b64,
                     reference_audio_b64=active_audio_b64,
                     voice_transcript=shot_dialogue,
                     aspect_ratio=state.aspect_ratio,
@@ -490,22 +543,69 @@ async def run_adk_pipeline_background(adk_session: Session):
                     'step': 6,
                     'agent': 'GeminiOmniFlash',
                     'action': 'RENDER_CLIP',
-                    'details': {'shot_index': shot.shot_index, 'mode': state.mode, 'prompt': optimized_shot_prompt, 'has_input_image': prev_frame_b64 is not None or len(state.reference_assets_b64) > 0, 'has_audio_reference': len(active_audio_b64) > 0}
+                    'details': {
+                        'shot_index': shot.shot_index,
+                        'mode': state.mode,
+                        'task': shot_task or 'image_to_video',
+                        'prompt': optimized_shot_prompt,
+                        'has_input_image': prev_frame_b64 is not None,
+                        'has_reference_anchor': bool(active_refs_b64),
+                        'has_input_video_tail': is_extend_shot,
+                        'input_tail_seconds': round(prev_video_tail_sec, 2) if is_extend_shot else 0.0,
+                        'has_audio_reference': len(active_audio_b64) > 0,
+                    }
                 }, state_dict)
 
                 try:
-                    video_bytes = await asyncio.to_thread(
-                        generate_omni_clip,
-                        prompt=optimized_shot_prompt,
-                        input_image_b64=prev_frame_b64 if state.mode == "i2v_chaining" else None,
-                        reference_images_b64=state.reference_assets_b64,
-                        reference_audio_b64=active_audio_b64,
-                        voice_transcript=shot_dialogue,
-                        aspect_ratio=state.aspect_ratio,
-                        resolution=state.resolution,
-                        duration=state.duration,
-                        client=client
-                    )
+                    try:
+                        video_bytes = await asyncio.to_thread(
+                            generate_omni_clip,
+                            prompt=optimized_shot_prompt,
+                            input_image_b64=prev_frame_b64 if state.mode == "i2v_chaining" else None,
+                            input_video_b64=prev_video_tail_b64 if is_extend_shot else None,
+                            task=shot_task,
+                            reference_images_b64=active_refs_b64,
+                            reference_audio_b64=active_audio_b64,
+                            voice_transcript=shot_dialogue,
+                            aspect_ratio=state.aspect_ratio,
+                            resolution=state.resolution,
+                            duration=state.duration,
+                            client=client
+                        )
+                    except Exception as gen_err:
+                        if (
+                            is_extend_shot
+                            and prev_clip_path
+                            and "speech_edit" in str(gen_err).lower()
+                        ):
+                            silent_tail_b64, _ = await asyncio.to_thread(
+                                extract_video_tail,
+                                prev_clip_path,
+                                Config.VIDEO_EXTEND_INPUT_SECONDS,
+                                True,
+                            )
+                            video_bytes = await asyncio.to_thread(
+                                generate_omni_clip,
+                                prompt=optimized_shot_prompt,
+                                input_video_b64=silent_tail_b64,
+                                task="extend",
+                                reference_audio_b64=active_audio_b64,
+                                voice_transcript=shot_dialogue,
+                                aspect_ratio=state.aspect_ratio,
+                                resolution=state.resolution,
+                                duration=state.duration,
+                                client=client,
+                            )
+                        else:
+                            raise
+                    if is_extend_shot and prev_video_tail_sec > 0:
+                        video_bytes = await asyncio.to_thread(
+                            trim_video_prefix,
+                            video_bytes,
+                            prev_video_tail_sec,
+                            float(state.duration or 10),
+                            prev_last_frame_b64,
+                        )
                 except Exception as render_err:
                     error_msg = str(render_err)
                     print(f"[RENDER ERROR]: {error_msg}")
@@ -521,6 +621,35 @@ async def run_adk_pipeline_background(adk_session: Session):
 
                 with open(clip_filename, "wb") as f:
                     f.write(video_bytes)
+
+                if active_refs_b64 and not is_extend_shot and not prev_frame_b64:
+                    locked_to_ref, r2v_f0_mae = await asyncio.to_thread(
+                        detect_r2v_first_frame_lock,
+                        active_refs_b64[0],
+                        clip_filename,
+                        12.0,
+                    )
+                    if locked_to_ref and attempt < shot_max_attempts - 1:
+                        feedback = (
+                            f"Frame 0 echoed the white-background reference image (MAE={r2v_f0_mae:.2f}). "
+                            "Open immediately inside the full target environment with dynamic camera framing—no studio white backdrop."
+                        )
+                        continue
+
+                if is_extend_shot and prev_last_frame_b64:
+                    has_jump_cut, seam_mae, peak_mae = await asyncio.to_thread(
+                        detect_seam_jump_cut,
+                        prev_last_frame_b64,
+                        clip_filename,
+                        28.0,
+                        5,
+                    )
+                    if has_jump_cut and attempt < shot_max_attempts - 1:
+                        feedback = (
+                            f"Hard jump-cut detected at extension boundary (peak MAE={peak_mae:.1f}). "
+                            "Continue seamlessly from the exact ending frame and environment in a single continuous camera take with zero scene cuts."
+                        )
+                        continue
 
                 # Step 7: QualityRaterAgent
                 eval_result = await evaluate_clip_quality(
@@ -578,6 +707,37 @@ async def run_adk_pipeline_background(adk_session: Session):
                     await asyncio.sleep(0.3)
                 except Exception:
                     prev_frame_b64 = None
+            elif state.mode == "video_extend":
+                prev_clip_path = clip_filename
+                try:
+                    prev_last_frame_b64 = await asyncio.to_thread(extract_last_frame, clip_filename, output_image_path=frame_filename)
+                    shot.extracted_last_frame_b64 = prev_last_frame_b64
+                except Exception:
+                    prev_last_frame_b64 = None
+                try:
+                    prev_video_tail_b64, prev_video_tail_sec = await asyncio.to_thread(
+                        extract_video_tail,
+                        clip_filename,
+                        Config.VIDEO_EXTEND_INPUT_SECONDS,
+                        False,
+                    )
+                    broadcast_log(session_id, {
+                        'step': 8,
+                        'agent': 'OpenCVVideoParser',
+                        'action': 'EXTRACT_VIDEO_TAIL',
+                        'details': {
+                            'shot_index': shot.shot_index,
+                            'tail_seconds': round(prev_video_tail_sec, 2),
+                            'strip_audio': False,
+                            'task': 'extend',
+                            'frame_file': f'shot_{shot.shot_index}_last_frame.png',
+                            'passed_to_next_shot': True
+                        }
+                    }, state_dict)
+                    await asyncio.sleep(0.3)
+                except Exception:
+                    prev_video_tail_b64 = None
+                    prev_video_tail_sec = 0.0
 
         # Step 9: FFMPEGStitcher
         stitched_path = os.path.join(OUTPUT_DIR, f"output_stitched_{len(generated_clip_paths)*10}s.mp4")
@@ -641,7 +801,8 @@ async def run_adk_pipeline_background(adk_session: Session):
 async def serve_index():
     return FileResponse(TEMPLATE_PATH, media_type="text/html")
 
-from src.tools.gcs_storage import save_run, get_saved_runs, delete_saved_run
+from fastapi.responses import HTMLResponse, FileResponse, StreamingResponse, Response
+from src.tools.gcs_storage import save_run, get_saved_runs, delete_saved_run, get_storage_client
 
 class SaveRunRequest(BaseModel):
     run_id: str
@@ -683,3 +844,29 @@ async def list_runs_endpoint():
 async def delete_run_endpoint(run_id: str):
     success = await asyncio.to_thread(delete_saved_run, run_id)
     return {"status": "deleted" if success else "not_found"}
+
+
+@app.get("/api/gcs/{bucket_name}/{blob_path:path}")
+async def proxy_gcs_media(bucket_name: str, blob_path: str):
+    """Streams GCS showcase media (MP4/PNG) using server ADC credentials when Public Access Prevention is enforced."""
+    def _download() -> bytes:
+        client = get_storage_client()
+        if not client:
+            raise FileNotFoundError("GCS client unavailable")
+        bucket = client.bucket(bucket_name)
+        blob = bucket.blob(blob_path)
+        return blob.download_as_bytes()
+
+    try:
+        data = await asyncio.to_thread(_download)
+    except Exception as err:
+        raise HTTPException(status_code=404, detail=f"GCS media not found: {err}")
+
+    media_type = "video/mp4" if blob_path.endswith(".mp4") else (
+        "image/png" if blob_path.endswith(".png") else "application/octet-stream"
+    )
+    return Response(
+        content=data,
+        media_type=media_type,
+        headers={"Cache-Control": "no-cache, max-age=0", "Accept-Ranges": "bytes"},
+    )

@@ -15,7 +15,15 @@ from pydantic import BaseModel, Field
 
 from app.config import Config, get_genai_client
 from app.state import PipelineState, VideoShot, StoryboardEntry
-from app.tools.video_parser import extract_last_frame, extract_keyframes, create_agentic_video_part
+from app.tools.video_parser import (
+    extract_last_frame,
+    extract_keyframes,
+    create_agentic_video_part,
+    extract_video_tail,
+    trim_video_prefix,
+    detect_seam_jump_cut,
+    detect_r2v_first_frame_lock,
+)
 from app.tools.omni_client import generate_omni_clip, build_omni_control_string
 from app.tools.stitcher import stitch_videos
 
@@ -194,10 +202,60 @@ async def run_adk_agent(
     return response_text.strip()
 
 
+def split_voice_transcript_across_shots(
+    voice_transcript: Optional[str],
+    num_shots: int,
+) -> List[Optional[str]]:
+    """Segments a multi-sentence voiceover transcript across N 10s shots so speech never overflows Shot 1."""
+    if num_shots <= 0:
+        return []
+    if not voice_transcript or not voice_transcript.strip():
+        return [None] * num_shots
+    clean = voice_transcript.strip()
+    if num_shots == 1:
+        return [clean]
+
+    sentences = [
+        s.strip()
+        for s in re.split(r"(?<=[.!?。！？;；])\s+", clean)
+        if s and s.strip()
+    ]
+    if len(sentences) == 1:
+        words = clean.split()
+        if len(words) <= 12:
+            return [clean] + [None] * (num_shots - 1)
+        # Split a single long unpunctuated line evenly across shots at clause/word boundaries
+        chunk_size = max(1, (len(words) + num_shots - 1) // num_shots)
+        chunks = [
+            " ".join(words[i : i + chunk_size]).strip()
+            for i in range(0, len(words), chunk_size)
+        ]
+        while len(chunks) < num_shots:
+            chunks.append(None)  # type: ignore[arg-type]
+        return chunks[:num_shots]
+
+    if len(sentences) <= num_shots:
+        result: List[Optional[str]] = list(sentences)
+        while len(result) < num_shots:
+            result.append(None)
+        return result
+
+    # More sentences than shots: group proportionally across all N shots
+    grouped: List[Optional[str]] = []
+    for i in range(num_shots):
+        start = round(i * len(sentences) / num_shots)
+        end = round((i + 1) * len(sentences) / num_shots)
+        seg = " ".join(sentences[start:end]).strip()
+        grouped.append(seg if seg else None)
+    return grouped
+
+
 async def optimize_prompt(
     raw_prompt: str,
     voice_transcript: Optional[str] = None,
     feedback: Optional[str] = None,
+    is_extend_shot: bool = False,
+    is_r2v_shot: bool = False,
     session_service: Optional[InMemorySessionService] = None,
     session_id: Optional[str] = None,
     client: Optional[genai.Client] = None
@@ -210,12 +268,22 @@ async def optimize_prompt(
     feedback_context = f"\nQuality Rater Feedback to address: '{feedback}'" if feedback else ""
     transcript_context = (
         f"\nExact Spoken Dialogue Transcript: '{voice_transcript}'.\n"
-        "STRICT DIALOGUE RULE: If spoken dialogue is provided, ensure the speech is paced so all words are fully spoken before the 10-second shot concludes. Do NOT truncate dialogue or add unscripted filler lines."
+        "STRICT DIALOGUE RULE: Keep spoken delivery natural and concise so all words finish cleanly before second 8 of the 10-second shot while preserving background ambient sound."
         if voice_transcript else ""
+    )
+    extend_context = (
+        "\nCRITICAL VIDEO-EXTEND SEAM RULE: This shot directly extends the final frame of the preceding clip. "
+        "Maintain the exact starting environment, lighting, and subject pose from the previous shot and progress via one unbroken single-take camera movement (smooth dolly, tracking, pan, or push-in) with ZERO scene cuts or location teleports."
+        if is_extend_shot else ""
+    )
+    r2v_context = (
+        "\nCRITICAL R2V SCENE-OPENING RULE: This shot uses Reference-to-Video (task='reference_to_video') with a studio-white subject/product reference image. "
+        "Open immediately on Frame 0 inside the rich target environment described in the shot—NEVER depict, mention, or transition/dissolve out of a white studio backdrop."
+        if is_r2v_shot else ""
     )
 
     full_prompt = (
-        f"Raw Shot Description: '{raw_prompt}'.{feedback_context}{transcript_context}\n"
+        f"Raw Shot Description: '{raw_prompt}'.{feedback_context}{transcript_context}{extend_context}{r2v_context}\n"
         "Generate an enhanced, highly-detailed cinematic prompt optimized for Gemini Omni Flash video generation. "
         "Keep it concise, under 60 words, focusing on lighting, continuous camera motion, visual clarity, and object persistence. "
         "STRICT SINGLE-SHOT RULE: The clip MUST be a single, continuous, uninterrupted camera take. Explicitly specify a single continuous camera motion (e.g. 'continuous single take', 'smooth tracking shot') and strictly forbid internal cuts, scene switches, jump cuts, or multi-angle edits."
@@ -223,6 +291,19 @@ async def optimize_prompt(
 
     try:
         optimized = await run_adk_agent(optimizer, full_prompt, session_service=session_service, session_id=session_id, client=client)
+        if optimized:
+            # Extract clean prompt from markdown blockquote, italics, or code block if present
+            quote_match = (
+                re.search(r'>\s*\*?"([^"]+)"\*?', optimized)
+                or re.search(r'>\s*\*([^*]+)\*', optimized)
+                or re.search(r'Optimized Visual Prompt\*\*:\s*`([^`]+)`', optimized)
+                or re.search(r'^\s*>\s*(.+)$', optimized, re.MULTILINE)
+            )
+            if quote_match:
+                optimized = quote_match.group(1).strip()
+            else:
+                optimized = re.sub(r"\*?\*?Transferring control back to[^\n]*", "", optimized).strip()
+                optimized = re.sub(r"Transferred control back to[^\n]*", "", optimized).strip()
         return optimized if optimized else raw_prompt
     except Exception:
         return raw_prompt
@@ -273,7 +354,8 @@ async def consolidate_rubric_with_llm(
     evaluation_criteria: Optional[str] = None,
     spoken_dialogue: Optional[str] = None,
     session_service: Optional[InMemorySessionService] = None,
-    session_id: Optional[str] = None
+    session_id: Optional[str] = None,
+    client: Optional[genai.Client] = None
 ) -> Tuple[List[str], str]:
     """Uses LLM to consolidate Orchestrator scene criteria with drift and dialogue cutoff parameters."""
     config = Config()
@@ -303,7 +385,7 @@ async def consolidate_rubric_with_llm(
     )
 
     try:
-        text = await run_adk_agent(rater, consolidation_prompt, session_service=session_service, session_id=session_id)
+        text = await run_adk_agent(rater, consolidation_prompt, session_service=session_service, session_id=session_id, client=client)
         json_match = re.search(r"\{.*\}", text, re.DOTALL)
         clean_text = json_match.group(0) if json_match else text
         data = json.loads(clean_text)
@@ -340,7 +422,8 @@ async def evaluate_clip_quality(
         evaluation_criteria=evaluation_criteria,
         spoken_dialogue=spoken_dialogue,
         session_service=session_service,
-        session_id=session_id
+        session_id=session_id,
+        client=client
     )
 
     if not os.path.exists(video_path) or os.path.getsize(video_path) == 0:
@@ -465,9 +548,21 @@ async def run_pre_production_async(
         return state
 
     if not state.storyboard:
+        transcript_ctx = (
+            f"\nVoice Transcript Spoken Lines: '{state.voice_transcript}'"
+            if state.voice_transcript else ""
+        )
+        extend_mode_ctx = (
+            "\nCONTINUOUS EXTENSION RULE (video_extend mode): Design all scenes as one unbroken continuous single-take camera journey where each scene smoothly continues from the exact ending pose and space of the previous scene without hard location cuts."
+            if state.mode == "video_extend" else ""
+        )
+        r2v_anchor_ctx = (
+            "\nREFERENCE-TO-VIDEO SCENE-1 RULE: A studio-white subject/product reference image is provided. Scene 1 (and all scenes) MUST open immediately on Frame 0 inside a rich physical environment—NEVER describe, open on, or transition/dissolve out of a white studio backdrop."
+            if state.reference_assets_b64 else ""
+        )
         screenplay_prompt = (
-            f"User request: '{state.original_intent}'. Mode: {state.mode}.\n"
-            f"Write a concise {state.num_shots}-scene screenplay breakdown describing visual motifs, camera directions, character actions, and dialogue distribution."
+            f"User request: '{state.original_intent}'. Mode: {state.mode}.{transcript_ctx}{extend_mode_ctx}{r2v_anchor_ctx}\n"
+            f"Write a concise {state.num_shots}-scene screenplay breakdown describing visual motifs, camera directions, character actions, and dialogue distribution (<= 12 spoken words per 10s scene)."
         )
         try:
             screenplay_text = await run_adk_agent(screenwriter, screenplay_prompt, client=client)
@@ -494,9 +589,10 @@ async def run_pre_production_async(
         try:
             storyboard_prompt = (
                 f"You are the StoryboarderAgent. Convert the following screenplay into a structured {state.num_shots}-scene video storyboard with custom quality evaluation criteria for each scene.\n\n"
-                f"SCREENPLAY:\n{screenplay_text}\n\n"
+                f"SCREENPLAY:\n{screenplay_text}{transcript_ctx}{extend_mode_ctx}{r2v_anchor_ctx}\n\n"
+                "CRITICAL TRANSCRIPT SEGMENTATION RULE: If a Voice Transcript is provided, split it chronologically across the scenes (<= 12 words per scene) in 'spoken_dialogue' so speech never cuts off at 10s boundaries.\n"
                 f"Return ONLY a JSON list of {state.num_shots} items, where each item has keys: "
-                "'scene_number' (int 1 to N), 'description' (str), 'camera_angle' (str), 'evaluation_criteria' (str)."
+                "'scene_number' (int 1 to N), 'description' (str), 'camera_angle' (str), 'spoken_dialogue' (str or null), 'evaluation_criteria' (str)."
             )
             text = await run_adk_agent(storyboarder, storyboard_prompt, client=client)
             if text.startswith("```"):
@@ -510,6 +606,7 @@ async def run_pre_production_async(
                     scene_number=item.get("scene_number", idx + 1),
                     description=item.get("description", f"Scene {idx + 1}"),
                     camera_angle=item.get("camera_angle", "medium"),
+                    spoken_dialogue=item.get("spoken_dialogue"),
                     evaluation_criteria=item.get("evaluation_criteria", "Check character identity lock, smooth motion, and object persistence.")
                 )
                 for idx, item in enumerate(raw_storyboard[:state.num_shots])
@@ -539,14 +636,16 @@ async def run_pre_production_async(
             "state": state.model_dump()
         })
 
+    has_sb_dialogue = any(bool(sb.spoken_dialogue and sb.spoken_dialogue.strip()) for sb in state.storyboard)
+    fallback_dialogues = split_voice_transcript_across_shots(state.voice_transcript, len(state.storyboard))
     state.shots = [
         VideoShot(
             shot_index=sb.scene_number,
             prompt=f"{sb.camera_angle} shot: {sb.description}",
-            spoken_dialogue=state.voice_transcript if sb.scene_number == 1 else None,
+            spoken_dialogue=sb.spoken_dialogue if has_sb_dialogue else fallback_dialogues[idx],
             evaluation_criteria=sb.evaluation_criteria
         )
-        for sb in state.storyboard
+        for idx, sb in enumerate(state.storyboard)
     ]
     return state
 
@@ -575,6 +674,10 @@ async def run_production_loop_async(
     os.makedirs(output_dir, exist_ok=True)
     generated_clip_paths = []
     prev_frame_b64: Optional[str] = None
+    prev_last_frame_b64: Optional[str] = None
+    prev_clip_path: Optional[str] = None
+    prev_video_tail_b64: Optional[str] = None
+    prev_video_tail_sec: float = 0.0
 
     for idx, shot in enumerate(state.shots):
         if is_stopped and is_stopped():
@@ -582,6 +685,15 @@ async def run_production_loop_async(
 
         clip_filename = os.path.join(output_dir, f"shot_{shot.shot_index}.mp4")
         frame_filename = os.path.join(output_dir, f"shot_{shot.shot_index}_last_frame.png")
+        is_extend_shot = state.mode == "video_extend" and prev_video_tail_b64 is not None
+        is_r2v_shot = bool(
+            state.reference_assets_b64
+            and (
+                (state.mode == "reference")
+                or (state.mode == "i2v_chaining" and not prev_frame_b64)
+                or (state.mode == "video_extend" and not prev_video_tail_b64)
+            )
+        )
 
         feedback: Optional[str] = None
         max_attempts = state.max_attempts or 2
@@ -596,6 +708,8 @@ async def run_production_loop_async(
                 raw_prompt=shot.prompt,
                 voice_transcript=shot.spoken_dialogue,
                 feedback=feedback,
+                is_extend_shot=is_extend_shot,
+                is_r2v_shot=is_r2v_shot,
                 client=client
             )
             state.log_event(
@@ -636,14 +750,24 @@ async def run_production_loop_async(
                 break
 
             # 3. Gemini Omni Flash Video Generation
+            use_refs = state.reference_assets_b64 if is_r2v_shot else None
+            shot_task = (
+                "extend"
+                if is_extend_shot
+                else ("reference_to_video" if is_r2v_shot else None)
+            )
             state.log_event(
                 agent="GeminiOmniFlash",
                 action="RENDER_CLIP",
                 details={
                     "shot_index": shot.shot_index,
                     "mode": state.mode,
+                    "task": shot_task or "image_to_video",
                     "prompt": optimized_shot_prompt,
-                    "has_input_image": prev_frame_b64 is not None
+                    "has_input_image": prev_frame_b64 is not None,
+                    "has_reference_anchor": is_r2v_shot,
+                    "has_input_video_tail": is_extend_shot,
+                    "input_tail_seconds": round(prev_video_tail_sec, 2) if is_extend_shot else 0.0,
                 }
             )
             if event_callback:
@@ -655,19 +779,97 @@ async def run_production_loop_async(
                     "state": state.model_dump()
                 })
 
-            video_bytes = generate_omni_clip(
-                prompt=optimized_shot_prompt,
-                input_image_b64=prev_frame_b64 if state.mode == "i2v_chaining" else None,
-                reference_images_b64=state.reference_assets_b64,
-                voice_transcript=shot.spoken_dialogue,
-                aspect_ratio=state.aspect_ratio,
-                resolution=state.resolution,
-                duration=state.duration,
-                client=client
-            )
+            active_tail_b64 = prev_video_tail_b64 if is_extend_shot else None
+            try:
+                video_bytes = generate_omni_clip(
+                    prompt=optimized_shot_prompt,
+                    input_image_b64=prev_frame_b64 if state.mode == "i2v_chaining" else None,
+                    input_video_b64=active_tail_b64,
+                    task=shot_task,
+                    reference_images_b64=use_refs,
+                    voice_transcript=shot.spoken_dialogue,
+                    aspect_ratio=state.aspect_ratio,
+                    resolution=state.resolution,
+                    duration=state.duration,
+                    client=client
+                )
+            except Exception as gen_err:
+                if (
+                    is_extend_shot
+                    and prev_clip_path
+                    and "speech_edit" in str(gen_err).lower()
+                ):
+                    silent_tail_b64, _ = extract_video_tail(
+                        prev_clip_path,
+                        tail_seconds=Config.VIDEO_EXTEND_INPUT_SECONDS,
+                        strip_audio=True,
+                    )
+                    video_bytes = generate_omni_clip(
+                        prompt=optimized_shot_prompt,
+                        input_video_b64=silent_tail_b64,
+                        task="extend",
+                        voice_transcript=shot.spoken_dialogue,
+                        aspect_ratio=state.aspect_ratio,
+                        resolution=state.resolution,
+                        duration=state.duration,
+                        client=client,
+                    )
+                else:
+                    raise
+
+            if is_extend_shot and prev_video_tail_sec > 0:
+                video_bytes = trim_video_prefix(
+                    video_bytes,
+                    trim_seconds=prev_video_tail_sec,
+                    expected_extension_seconds=float(state.duration),
+                    reference_last_frame_b64=prev_last_frame_b64,
+                )
 
             with open(clip_filename, "wb") as f:
                 f.write(video_bytes)
+
+            if is_r2v_shot and use_refs:
+                locked_to_ref, r2v_f0_mae = detect_r2v_first_frame_lock(
+                    use_refs[0], clip_filename, mae_threshold=12.0
+                )
+                state.log_event(
+                    agent="OpenCVVideoParser",
+                    action="VERIFY_R2V_SCENE_OPENING",
+                    details={
+                        "shot_index": shot.shot_index,
+                        "attempt": attempt + 1,
+                        "frame0_vs_ref_mae": r2v_f0_mae,
+                        "locked_to_ref_first_frame": locked_to_ref,
+                    },
+                )
+                if locked_to_ref and attempt < max_attempts - 1:
+                    feedback = (
+                        f"Frame 0 echoed the white-background reference image (MAE={r2v_f0_mae:.2f}). "
+                        "Open immediately inside the full target environment with dynamic camera framing—no studio white backdrop."
+                    )
+                    continue
+
+            if is_extend_shot and prev_last_frame_b64:
+                has_jump_cut, seam_mae, peak_mae = detect_seam_jump_cut(
+                    prev_last_frame_b64, clip_filename, max_mae=28.0, check_frames=5
+                )
+                state.log_event(
+                    agent="OpenCVVideoParser",
+                    action="VERIFY_SEAM_CONTINUITY",
+                    details={
+                        "shot_index": shot.shot_index,
+                        "attempt": attempt + 1,
+                        "seam_mae": seam_mae,
+                        "peak_early_mae": peak_mae,
+                        "has_jump_cut": has_jump_cut,
+                    },
+                )
+                if has_jump_cut and attempt < max_attempts - 1:
+                    feedback = (
+                        f"Hard jump-cut detected at extension boundary (peak MAE={peak_mae:.1f}). "
+                        "Continue seamlessly from the exact ending frame and environment in a single continuous camera take with zero scene cuts."
+                    )
+                    continue
 
             # 4. Quality Rater Agent Evaluation
             eval_result = await evaluate_clip_quality(
@@ -729,6 +931,33 @@ async def run_production_loop_async(
                 )
             except Exception:
                 prev_frame_b64 = None
+        elif state.mode == "video_extend":
+            prev_clip_path = clip_filename
+            try:
+                prev_last_frame_b64 = extract_last_frame(clip_filename, output_image_path=frame_filename)
+                shot.extracted_last_frame_b64 = prev_last_frame_b64
+            except Exception:
+                prev_last_frame_b64 = None
+            try:
+                prev_video_tail_b64, prev_video_tail_sec = extract_video_tail(
+                    clip_filename,
+                    tail_seconds=Config.VIDEO_EXTEND_INPUT_SECONDS,
+                    strip_audio=False,
+                )
+                state.log_event(
+                    agent="OpenCVVideoParser",
+                    action="EXTRACT_VIDEO_TAIL",
+                    details={
+                        "shot_index": shot.shot_index,
+                        "tail_seconds": round(prev_video_tail_sec, 2),
+                        "strip_audio": False,
+                        "task": "extend",
+                        "passed_to_next_shot": True,
+                    }
+                )
+            except Exception:
+                prev_video_tail_b64 = None
+                prev_video_tail_sec = 0.0
 
     valid_clips = [p for p in generated_clip_paths if os.path.exists(p) and os.path.getsize(p) > 0]
     if valid_clips:

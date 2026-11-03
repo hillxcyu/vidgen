@@ -17,3 +17,8 @@ def test_pipeline_state_logging():
     assert len(state.trajectory_logs) == 1
     assert state.trajectory_logs[0]["agent"] == "ScreenwriterAgent"
     assert state.trajectory_logs[0]["action"] == "EXPAND_SCRIPT"
+
+
+def test_pipeline_state_video_extend_mode():
+    state = PipelineState(original_intent="Retail footwear commercial", mode="video_extend")
+    assert state.mode == "video_extend"

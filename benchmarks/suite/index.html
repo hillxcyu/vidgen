@@ -1,0 +1,2848 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gemini Omni Flash 1.1 - Reference-to-Video (R2V) Adherence Suite (20 Scenarios, 4-Way Comparison)</title>
+  <style>
+    :root {
+      --bg: #0b0f19;
+      --card-bg: #151c2e;
+      --card-border: #232f48;
+      --text-main: #f1f5f9;
+      --text-muted: #94a3b8;
+      --accent-blue: #38bdf8;
+      --accent-emerald: #34d399;
+      --accent-purple: #c084fc;
+      --accent-amber: #fbbf24;
+      --badge-bg: #1e293b;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text-main);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      padding: 32px 24px;
+      line-height: 1.5;
+    }
+    .container { max-width: 1880px; margin: 0 auto; }
+    header {
+      margin-bottom: 28px;
+      border-bottom: 1px solid var(--card-border);
+      padding-bottom: 20px;
+    }
+    h1 { font-size: 28px; font-weight: 700; color: #fff; margin-bottom: 8px; }
+    .subtitle { color: var(--text-muted); font-size: 15px; }
+    
+    /* Aggregate KPI Cards */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 16px;
+      margin-bottom: 28px;
+    }
+    .kpi-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    }
+    .kpi-title { font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 8px; }
+    .kpi-scores {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .kpi-mode {
+      flex: 1;
+      background: #0f172a;
+      padding: 10px;
+      border-radius: 8px;
+      text-align: center;
+      border: 1px solid #1e293b;
+    }
+    .kpi-mode-label { font-size: 11px; color: var(--text-muted); }
+    .kpi-mode-val { font-size: 20px; font-weight: 700; margin-top: 4px; }
+    .val-a { color: var(--accent-purple); }
+    .val-b { color: var(--accent-blue); }
+    .val-c { color: var(--accent-emerald); }
+    .val-d { color: var(--accent-amber); }
+
+    /* Filters */
+    .filter-section {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 16px 20px;
+      margin-bottom: 28px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+      align-items: center;
+    }
+    .filter-group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .filter-label { font-size: 13px; font-weight: 600; color: var(--text-muted); }
+    .filter-btn {
+      background: #1e293b;
+      color: #cbd5e1;
+      border: 1px solid #334155;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .filter-btn:hover { background: #334155; color: #fff; }
+    .filter-btn.active {
+      background: var(--accent-blue);
+      color: #0b0f19;
+      font-weight: 600;
+      border-color: var(--accent-blue);
+    }
+
+    /* Case Card */
+    .case-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+      margin-bottom: 32px;
+      overflow: hidden;
+      box-shadow: 0 6px 16px rgba(0,0,0,0.3);
+    }
+    .case-header {
+      background: #182239;
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--card-border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .case-title { font-size: 17px; font-weight: 600; color: #fff; }
+    .case-tags { display: flex; gap: 8px; flex-wrap: wrap; }
+    .tag {
+      background: #0f172a;
+      border: 1px solid #334155;
+      font-size: 11px;
+      padding: 4px 10px;
+      border-radius: 6px;
+      color: var(--text-muted);
+    }
+    .tag-highlight { color: var(--accent-blue); border-color: rgba(56, 189, 248, 0.4); }
+
+    /* Test Case Layout */
+    .case-body {
+      display: grid;
+      grid-template-columns: 200px 1fr 1fr 1fr 1fr;
+      gap: 14px;
+      padding: 18px;
+    }
+    @media (max-width: 1600px) {
+      .case-body { grid-template-columns: 180px 1fr 1fr 1fr 1fr; }
+    }
+    @media (max-width: 1250px) {
+      .case-body { grid-template-columns: 1fr; }
+    }
+
+    /* Column Styles */
+    .col-ref {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .ref-img {
+      width: 100%;
+      aspect-ratio: 1/1;
+      object-fit: cover;
+      border-radius: 10px;
+      border: 1px solid var(--card-border);
+      background: #0f172a;
+    }
+    .col-video {
+      background: #0f172a;
+      border: 1px solid #1e293b;
+      border-radius: 10px;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .mode-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #1e293b;
+      padding-bottom: 8px;
+    }
+    .mode-badge {
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .badge-a { color: var(--accent-purple); }
+    .badge-b { color: var(--accent-blue); }
+    .badge-c { color: var(--accent-emerald); }
+    .badge-d { color: var(--accent-amber); }
+    .mode-latency { font-size: 11px; color: var(--text-muted); }
+
+    video {
+      width: 100%;
+      border-radius: 8px;
+      background: #000;
+      aspect-ratio: 16/9;
+      outline: none;
+    }
+
+    /* Scores & Critique */
+    .score-pills {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .score-pill {
+      background: #182239;
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 4px;
+      border: 1px solid #232f48;
+    }
+    .score-high { color: #4ade80; }
+    .score-med { color: #fbbf24; }
+    .score-low { color: #f87171; }
+
+    .critique-box {
+      font-size: 12px;
+      color: #94a3b8;
+      background: #141c2e;
+      padding: 10px;
+      border-radius: 6px;
+      border-left: 3px solid #334155;
+      font-style: italic;
+    }
+
+    /* Prompt Drawer */
+    details {
+      font-size: 11px;
+      margin-top: auto;
+    }
+    summary {
+      cursor: pointer;
+      color: var(--accent-blue);
+      font-weight: 600;
+      user-select: none;
+      outline: none;
+    }
+    summary:hover { text-decoration: underline; }
+    .prompt-text {
+      margin-top: 8px;
+      padding: 8px;
+      background: #090d16;
+      border: 1px solid #1e293b;
+      border-radius: 6px;
+      color: #cbd5e1;
+      font-family: monospace;
+      word-break: break-all;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Gemini Omni Flash 1.1 — Reference Adherence Benchmark</h1>
+      <p class="subtitle">
+        Comprehensive 20-Scenario Multi-Ethnic & Framing Suite | Comparing <strong>Mode A (Optimized MMC)</strong> vs <strong>Mode B (Simple Prompt)</strong> vs <strong>Mode C (Native Task Param - Simple)</strong> vs <strong>Mode D (Native Task Param - Cinematic)</strong>
+      </p>
+    </header>
+
+    <!-- KPI Aggregate Summary -->
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-title">Overall Adherence Score (Mean)</div>
+        <div class="kpi-scores">
+          <div class="kpi-mode"><div class="kpi-mode-label">Mode A (Opt)</div><div class="kpi-mode-val val-a">0.93</div></div>
+          <div class="kpi-mode"><div class="kpi-mode-label">Mode B (Simple)</div><div class="kpi-mode-val val-b">0.96</div></div>
+          <div class="kpi-mode"><div class="kpi-mode-label">Mode C (Task Smp)</div><div class="kpi-mode-val val-c">0.96</div></div>
+          <div class="kpi-mode"><div class="kpi-mode-label">Mode D (Task Cin)</div><div class="kpi-mode-val val-d">0.95</div></div>
+        </div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-title">Facial Similarity (Mean)</div>
+        <div class="kpi-scores">
+          <div class="kpi-mode"><div class="kpi-mode-label">Mode A (Opt)</div><div class="kpi-mode-val val-a">0.94</div></div>
+          <div class="kpi-mode"><div class="kpi-mode-label">Mode B (Simple)</div><div class="kpi-mode-val val-b">0.96</div></div>
+          <div class="kpi-mode"><div class="kpi-mode-label">Mode C (Task Smp)</div><div class="kpi-mode-val val-c">0.96</div></div>
+          <div class="kpi-mode"><div class="kpi-mode-label">Mode D (Task Cin)</div><div class="kpi-mode-val val-d">0.95</div></div>
+        </div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-title">Average Generation Latency</div>
+        <div class="kpi-scores">
+          <div class="kpi-mode"><div class="kpi-mode-label">Mode A (Opt)</div><div class="kpi-mode-val val-a">31.7s</div></div>
+          <div class="kpi-mode"><div class="kpi-mode-label">Mode B (Simple)</div><div class="kpi-mode-val val-b">30.8s</div></div>
+          <div class="kpi-mode"><div class="kpi-mode-label">Mode C (Task Smp)</div><div class="kpi-mode-val val-c">35.1s</div></div>
+          <div class="kpi-mode"><div class="kpi-mode-label">Mode D (Task Cin)</div><div class="kpi-mode-val val-d">36.9s</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="filter-section">
+      <div class="filter-group">
+        <span class="filter-label">Ethnicity:</span>
+        <button class="filter-btn active" onclick="filterData('ethnicity', 'all', this)">All (20)</button>
+        <button class="filter-btn" onclick="filterData('ethnicity', 'Black / African', this)">Black / African (3)</button>
+        <button class="filter-btn" onclick="filterData('ethnicity', 'Caucasian', this)">Caucasian (4)</button>
+        <button class="filter-btn" onclick="filterData('ethnicity', 'East Asian', this)">East Asian (3)</button>
+        <button class="filter-btn" onclick="filterData('ethnicity', 'Hispanic / Latino', this)">Hispanic / Latino (3)</button>
+        <button class="filter-btn" onclick="filterData('ethnicity', 'Indigenous / Native', this)">Indigenous / Native (1)</button>
+        <button class="filter-btn" onclick="filterData('ethnicity', 'Middle Eastern', this)">Middle Eastern (2)</button>
+        <button class="filter-btn" onclick="filterData('ethnicity', 'South Asian', this)">South Asian (3)</button>
+        <button class="filter-btn" onclick="filterData('ethnicity', 'Southeast Asian', this)">Southeast Asian (1)</button>
+      </div>
+      <div class="filter-group">
+        <span class="filter-label">Framing:</span>
+        <button class="filter-btn active" onclick="filterData('framing', 'all', this)">All</button>
+        <button class="filter-btn" onclick="filterData('framing', 'Full-Body', this)">Full-Body (7)</button>
+        <button class="filter-btn" onclick="filterData('framing', 'Headshot', this)">Headshot (6)</button>
+        <button class="filter-btn" onclick="filterData('framing', 'Medium', this)">Medium (4)</button>
+        <button class="filter-btn" onclick="filterData('framing', 'Three-Quarter', this)">Three-Quarter (3)</button>
+      </div>
+    </div>
+
+    <!-- Case Cards Gallery -->
+    <div id="gallery">
+
+      <div class="case-card" data-ethnicity="East Asian" data-framing="Headshot">
+        <div class="case-header">
+          <div class="case-title">#01. East Asian Male (20s) - Alpine Skiing</div>
+          <div class="case-tags">
+            <span class="tag tag-highlight">East Asian</span>
+            <span class="tag">Headshot / Close-up</span>
+            <span class="tag">Skiing in Hakuba</span>
+          </div>
+        </div>
+        <div class="case-body">
+          <!-- Col 0: Canonical Reference Portrait -->
+          <div class="col-ref">
+            <div style="font-size: 12px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">
+              Canonical Reference
+            </div>
+            <img src="ref_01.png" alt="Reference #1" class="ref-img">
+            <div style="font-size: 11px; color: var(--text-muted);">
+              20-year-old East Asian male
+            </div>
+          </div>
+
+          <!-- Col 1: Mode A (Pipeline-Optimized MMC) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-a">Mode A: Optimized MMC</span>
+              <span class="mode-latency">0.0s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_opt_01.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-med">0.85</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.92</b></span>
+              <span class="score-pill">Overall: <b class="score-med">0.89</b></span>
+            </div>
+            <div class="critique-box">
+              The subject's identity and facial features are preserved well across dynamic action angles against the alpine backdrop. The red-and-black ski jacket and beanie show excellent consistency with the reference portrait, accompanied by fluid, realistic skiing mechanics.
+            </div>
+            <details>
+              <summary>View Prompt</summary>
+              <div class="prompt-text">[# References <IMAGE_REF_0>[Character A]image_0.png] [aspect_ratio=16:9] [resolution=720p] [duration=5s] Character A, continuous single take, dynamic cinematic tracking shot following the character skiing gracefully down a powdery slope on Hakuba Happo-One ridge, crisp alpine morning sunlight reflecting off the snow, dramatic Japanese Northern Alps in the background, sharp cinematic focus, photorealistic.</div>
+            </details>
+          </div>
+
+          <!-- Col 2: Mode B (Simple Prompt) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-b">Mode B: Simple Prompt</span>
+              <span class="mode-latency">0.0s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_smp_01.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.95</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.96</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.95</b></span>
+            </div>
+            <div class="critique-box">
+              The AI video demonstrates exceptional identity retention across varying camera angles, seamlessly integrating realistic ski goggles during high-speed downhill sequences. Outfit details and the physical dynamics of carving on snow in an alpine environment are portrayed with remarkable fidelity.
+            </div>
+            <details>
+              <summary>View Prompt</summary>
+              <div class="prompt-text">[aspect_ratio=16:9] [resolution=720p] [duration=5s] Character A (reference image) skiing in Hakuba</div>
+            </details>
+          </div>
+
+          <!-- Col 3: Mode C (Native Task Parameter - Simple) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-c">Mode C: Task (Simple)</span>
+              <span class="mode-latency">46.3s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_tsk_01.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.96</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.98</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.96</b></span>
+            </div>
+            <div class="critique-box">
+              The generated video demonstrates exceptional identity retention and near-flawless outfit consistency, correctly maintaining the specific Arc'teryx ski jacket, beanie, and accessories across all shots. The skiing action sequences exhibit natural body mechanics, realistic snow carving physics, and seamless transitions between static portraits and dynamic motion.
+            </div>
+            <details>
+              <summary>View Prompt & Config</summary>
+              <div class="prompt-text">Prompt: Character A (reference image) skiing in Hakuba
+
+Config: {
+  "video_config": {
+    "task": "reference_to_video",
+    "aspect_ratio": "16:9",
+    "resolution": "720p",
+    "duration": 5
+  }
+}</div>
+            </details>
+          </div>
+
+          <!-- Col 4: Mode D (Native Task Parameter - Cinematic) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-d">Mode D: Task (Cinematic)</span>
+              <span class="mode-latency">35.5s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_cin_tsk_01.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.90</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.96</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.93</b></span>
+            </div>
+            <div class="critique-box">
+              The video demonstrates exceptional fidelity to the reference portrait, perfectly matching the subject's facial identity, beanie, and two-tone red and black technical jacket. The skiing motion and dynamic snow spray physics appear fluid and highly authentic across all keyframes.
+            </div>
+            <details>
+              <summary>View Prompt & Config</summary>
+              <div class="prompt-text">Prompt: Character A, continuous single take, dynamic cinematic tracking shot following the character skiing gracefully down a powdery slope on Hakuba Happo-One ridge, crisp alpine morning sunlight reflecting off the snow, dramatic Japanese Northern Alps in the background, sharp cinematic focus, photorealistic.
+
+Config: {
+  "video_config": {
+    "task": "reference_to_video",
+    "aspect_ratio": "16:9",
+    "resolution": "720p",
+    "duration": 5
+  }
+}</div>
+            </details>
+          </div>
+        </div>
+      </div>
+
+      <div class="case-card" data-ethnicity="Black / African" data-framing="Full-Body">
+        <div class="case-header">
+          <div class="case-title">#02. Black Female (20s) - Track Sprinting</div>
+          <div class="case-tags">
+            <span class="tag tag-highlight">Black / African</span>
+            <span class="tag">Full-Body Action Shot</span>
+            <span class="tag">Sprinting on coastal track</span>
+          </div>
+        </div>
+        <div class="case-body">
+          <!-- Col 0: Canonical Reference Portrait -->
+          <div class="col-ref">
+            <div style="font-size: 12px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">
+              Canonical Reference
+            </div>
+            <img src="ref_02.png" alt="Reference #2" class="ref-img">
+            <div style="font-size: 11px; color: var(--text-muted);">
+              20-year-old Black female athlete
+            </div>
+          </div>
+
+          <!-- Col 1: Mode A (Pipeline-Optimized MMC) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-a">Mode A: Optimized MMC</span>
+              <span class="mode-latency">43.3s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_opt_02.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-med">0.88</b></span>
+              <span class="score-pill">Outfit: <b class="score-low">0.35</b></span>
+              <span class="score-pill">Overall: <b class="score-low">0.72</b></span>
+            </div>
+            <div class="critique-box">
+              The subject's facial features, afro hairstyle with headband, and athletic build closely match the reference identity while exhibiting fluid, realistic sprinting dynamics along the coastal track. However, the outfit diverges significantly from the reference, swapping the high-visibility yellow windbreaker and full-length leggings for a running crop top and shorts.
+            </div>
+            <details>
+              <summary>View Prompt</summary>
+              <div class="prompt-text">[# References <IMAGE_REF_0>[Character A]image_0.png] [aspect_ratio=16:9] [resolution=720p] [duration=5s] Character A, low-angle dynamic cinematic tracking shot racing alongside the character as she sprints explosively down a red running track next to the ocean, athletic stride, glistening skin in golden afternoon light, shallow depth of field, photorealistic 8k.</div>
+            </details>
+          </div>
+
+          <!-- Col 2: Mode B (Simple Prompt) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-b">Mode B: Simple Prompt</span>
+              <span class="mode-latency">31.1s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_smp_02.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.93</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.96</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.94</b></span>
+            </div>
+            <div class="critique-box">
+              The subject's facial features, afro hairstyle with headband, and athletic build closely match the canonical reference portrait across multiple camera angles. The neon running jacket, dark leggings, and running footwear maintain exceptional consistency with realistic sprinting biomechanics and camera motion.
+            </div>
+            <details>
+              <summary>View Prompt</summary>
+              <div class="prompt-text">[aspect_ratio=16:9] [resolution=720p] [duration=5s] Character A (reference image) sprinting on an outdoor running track</div>
+            </details>
+          </div>
+
+          <!-- Col 3: Mode C (Native Task Parameter - Simple) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-c">Mode C: Task (Simple)</span>
+              <span class="mode-latency">33.3s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_tsk_02.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.95</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.98</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.95</b></span>
+            </div>
+            <div class="critique-box">
+              The generated video demonstrates exceptional identity preservation, maintaining the athlete's exact facial structure, afro hairstyle with headband, and distinctive neon windbreaker outfit throughout all dynamic phases. The athletic motion sequence naturally captures a realistic sprint progression from the starting block crouch to a full sprint on the blue track.
+            </div>
+            <details>
+              <summary>View Prompt & Config</summary>
+              <div class="prompt-text">Prompt: Character A (reference image) sprinting on an outdoor running track
+
+Config: {
+  "video_config": {
+    "task": "reference_to_video",
+    "aspect_ratio": "16:9",
+    "resolution": "720p",
+    "duration": 5
+  }
+}</div>
+            </details>
+          </div>
+
+          <!-- Col 4: Mode D (Native Task Parameter - Cinematic) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-d">Mode D: Task (Cinematic)</span>
+              <span class="mode-latency">32.5s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_cin_tsk_02.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-med">0.88</b></span>
+              <span class="score-pill">Outfit: <b class="score-low">0.58</b></span>
+              <span class="score-pill">Overall: <b class="score-med">0.80</b></span>
+            </div>
+            <div class="critique-box">
+              The subject's facial features, hairstyle with headband, and athletic build closely match the reference model, and the sprinting biomechanics are exceptionally realistic. However, the outfit diverges significantly from the reference image, replacing the neon yellow jacket and full-length tights with a light tank top and running shorts.
+            </div>
+            <details>
+              <summary>View Prompt & Config</summary>
+              <div class="prompt-text">Prompt: Character A, low-angle dynamic cinematic tracking shot racing alongside the character as she sprints explosively down a red running track next to the ocean, athletic stride, glistening skin in golden afternoon light, shallow depth of field, photorealistic 8k.
+
+Config: {
+  "video_config": {
+    "task": "reference_to_video",
+    "aspect_ratio": "16:9",
+    "resolution": "720p",
+    "duration": 5
+  }
+}</div>
+            </details>
+          </div>
+        </div>
+      </div>
+
+      <div class="case-card" data-ethnicity="Caucasian" data-framing="Medium">
+        <div class="case-header">
+          <div class="case-title">#03. Caucasian Male (30s) - Parisian Cafe</div>
+          <div class="case-tags">
+            <span class="tag tag-highlight">Caucasian</span>
+            <span class="tag">Bust / Medium Portrait</span>
+            <span class="tag">Drinking coffee in Paris cafe</span>
+          </div>
+        </div>
+        <div class="case-body">
+          <!-- Col 0: Canonical Reference Portrait -->
+          <div class="col-ref">
+            <div style="font-size: 12px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">
+              Canonical Reference
+            </div>
+            <img src="ref_03.png" alt="Reference #3" class="ref-img">
+            <div style="font-size: 11px; color: var(--text-muted);">
+              35-year-old Caucasian male
+            </div>
+          </div>
+
+          <!-- Col 1: Mode A (Pipeline-Optimized MMC) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-a">Mode A: Optimized MMC</span>
+              <span class="mode-latency">28.8s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_opt_03.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.95</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.98</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.96</b></span>
+            </div>
+            <div class="critique-box">
+              The generated sequence preserves the subject's facial geometry, hairstyle, and beard with exceptional fidelity to the reference. The cable-knit sweater texture and the natural motion of lifting and savoring the espresso in a Parisian cafe setting are executed convincingly.
+            </div>
+            <details>
+              <summary>View Prompt</summary>
+              <div class="prompt-text">[# References <IMAGE_REF_0>[Character A]image_0.png] [aspect_ratio=16:9] [resolution=720p] [duration=5s] Character A, slow medium dolly push-in shot of the character sitting by a sunlit window table in an elegant Parisian bistro, gently raising an espresso cup and taking a warm sip as morning street life blurs softly outside, cinematic warm palette.</div>
+            </details>
+          </div>
+
+          <!-- Col 2: Mode B (Simple Prompt) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-b">Mode B: Simple Prompt</span>
+              <span class="mode-latency">42.5s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_smp_03.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.97</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.98</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.97</b></span>
+            </div>
+            <div class="critique-box">
+              The video maintains exceptional identity and facial consistency with the reference image throughout all keyframes. The outfit and cafe setting are impeccably preserved, while the action of drinking coffee unfolds with natural, fluid realism.
+            </div>
+            <details>
+              <summary>View Prompt</summary>
+              <div class="prompt-text">[aspect_ratio=16:9] [resolution=720p] [duration=5s] Character A (reference image) drinking coffee in a Parisian cafe</div>
+            </details>
+          </div>
+
+          <!-- Col 3: Mode C (Native Task Parameter - Simple) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-c">Mode C: Task (Simple)</span>
+              <span class="mode-latency">33.1s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_tsk_03.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.98</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.99</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.98</b></span>
+            </div>
+            <div class="critique-box">
+              The video maintains near-flawless facial identity, beard grooming, and exact knitwear texture consistency matching the reference portrait throughout the entire sequence. The coffee-drinking and conversational motion flows naturally with believable physical interactions and expressive facial dynamics.
+            </div>
+            <details>
+              <summary>View Prompt & Config</summary>
+              <div class="prompt-text">Prompt: Character A (reference image) drinking coffee in a Parisian cafe
+
+Config: {
+  "video_config": {
+    "task": "reference_to_video",
+    "aspect_ratio": "16:9",
+    "resolution": "720p",
+    "duration": 5
+  }
+}</div>
+            </details>
+          </div>
+
+          <!-- Col 4: Mode D (Native Task Parameter - Cinematic) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-d">Mode D: Task (Cinematic)</span>
+              <span class="mode-latency">53.1s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_cin_tsk_03.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.98</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.99</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.98</b></span>
+            </div>
+            <div class="critique-box">
+              The subject's facial features, grooming, and cable-knit sweater maintain near-flawless fidelity to the reference portrait throughout the scene. The motion of drinking coffee and looking out the window is remarkably fluid, natural, and physically consistent.
+            </div>
+            <details>
+              <summary>View Prompt & Config</summary>
+              <div class="prompt-text">Prompt: Character A, slow medium dolly push-in shot of the character sitting by a sunlit window table in an elegant Parisian bistro, gently raising an espresso cup and taking a warm sip as morning street life blurs softly outside, cinematic warm palette.
+
+Config: {
+  "video_config": {
+    "task": "reference_to_video",
+    "aspect_ratio": "16:9",
+    "resolution": "720p",
+    "duration": 5
+  }
+}</div>
+            </details>
+          </div>
+        </div>
+      </div>
+
+      <div class="case-card" data-ethnicity="South Asian" data-framing="Headshot">
+        <div class="case-header">
+          <div class="case-title">#04. South Asian Female (20s) - Mumbai Market</div>
+          <div class="case-tags">
+            <span class="tag tag-highlight">South Asian</span>
+            <span class="tag">Headshot / Close-up</span>
+            <span class="tag">Walking in Mumbai market</span>
+          </div>
+        </div>
+        <div class="case-body">
+          <!-- Col 0: Canonical Reference Portrait -->
+          <div class="col-ref">
+            <div style="font-size: 12px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">
+              Canonical Reference
+            </div>
+            <img src="ref_04.png" alt="Reference #4" class="ref-img">
+            <div style="font-size: 11px; color: var(--text-muted);">
+              24-year-old South Asian female
+            </div>
+          </div>
+
+          <!-- Col 1: Mode A (Pipeline-Optimized MMC) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-a">Mode A: Optimized MMC</span>
+              <span class="mode-latency">30.0s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_opt_04.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.92</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.90</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.91</b></span>
+            </div>
+            <div class="critique-box">
+              The generated video maintains high facial fidelity to the reference portrait, preserving facial geometry, skin tone, and warm expression. The emerald green traditional attire with gold embroidery remains coherent throughout her natural, fluid walk through the bustling market.
+            </div>
+            <details>
+              <summary>View Prompt</summary>
+              <div class="prompt-text">[# References <IMAGE_REF_0>[Character A]image_0.png] [aspect_ratio=16:9] [resolution=720p] [duration=5s] Character A, vibrant shallow depth-of-field tracking shot gliding backward in front of the character as she walks happily through a bustling Mumbai flower and spice market, golden hour backlight catching the silk fabric, dynamic festive ambiance, cinematic photorealism.</div>
+            </details>
+          </div>
+
+          <!-- Col 2: Mode B (Simple Prompt) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-b">Mode B: Simple Prompt</span>
+              <span class="mode-latency">42.7s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_smp_04.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.98</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.96</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.96</b></span>
+            </div>
+            <div class="critique-box">
+              The AI video demonstrates exceptional identity retention with consistent facial features, expression, and jewelry across all keyframes. The green and gold embroidered attire remains impeccably consistent while natural head turns and walking motion through the vibrant market are rendered convincingly.
+            </div>
+            <details>
+              <summary>View Prompt</summary>
+              <div class="prompt-text">[aspect_ratio=16:9] [resolution=720p] [duration=5s] Character A (reference image) walking through a colorful Mumbai market</div>
+            </details>
+          </div>
+
+          <!-- Col 3: Mode C (Native Task Parameter - Simple) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-c">Mode C: Task (Simple)</span>
+              <span class="mode-latency">34.4s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_tsk_04.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.95</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.96</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.94</b></span>
+            </div>
+            <div class="critique-box">
+              The subject exhibits outstanding facial identity preservation and consistent expressions matching the reference image across all frames. The intricate green and gold embroidered attire, jewelry, and dynamic walking motion through the vibrant market environment are rendered with excellent fidelity and realism.
+            </div>
+            <details>
+              <summary>View Prompt & Config</summary>
+              <div class="prompt-text">Prompt: Character A (reference image) walking through a colorful Mumbai market
+
+Config: {
+  "video_config": {
+    "task": "reference_to_video",
+    "aspect_ratio": "16:9",
+    "resolution": "720p",
+    "duration": 5
+  }
+}</div>
+            </details>
+          </div>
+
+          <!-- Col 4: Mode D (Native Task Parameter - Cinematic) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-d">Mode D: Task (Cinematic)</span>
+              <span class="mode-latency">38.0s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_cin_tsk_04.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.96</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.96</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.96</b></span>
+            </div>
+            <div class="critique-box">
+              The AI video exhibits remarkable fidelity to the reference portrait, maintaining consistent facial geometry, skin tone, and styling throughout all frames. The subject's motion through the bustling Mumbai flower market feels fluid, organic, and beautifully integrated with realistic environment interactions.
+            </div>
+            <details>
+              <summary>View Prompt & Config</summary>
+              <div class="prompt-text">Prompt: Character A, vibrant shallow depth-of-field tracking shot gliding backward in front of the character as she walks happily through a bustling Mumbai flower and spice market, golden hour backlight catching the silk fabric, dynamic festive ambiance, cinematic photorealism.
+
+Config: {
+  "video_config": {
+    "task": "reference_to_video",
+    "aspect_ratio": "16:9",
+    "resolution": "720p",
+    "duration": 5
+  }
+}</div>
+            </details>
+          </div>
+        </div>
+      </div>
+
+      <div class="case-card" data-ethnicity="Hispanic / Latino" data-framing="Full-Body">
+        <div class="case-header">
+          <div class="case-title">#05. Hispanic Male (40s) - Patagonia Trekking</div>
+          <div class="case-tags">
+            <span class="tag tag-highlight">Hispanic / Latino</span>
+            <span class="tag">Full-Body Action Shot</span>
+            <span class="tag">Hiking in Patagonia mountains</span>
+          </div>
+        </div>
+        <div class="case-body">
+          <!-- Col 0: Canonical Reference Portrait -->
+          <div class="col-ref">
+            <div style="font-size: 12px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">
+              Canonical Reference
+            </div>
+            <img src="ref_05.png" alt="Reference #5" class="ref-img">
+            <div style="font-size: 11px; color: var(--text-muted);">
+              42-year-old Hispanic male
+            </div>
+          </div>
+
+          <!-- Col 1: Mode A (Pipeline-Optimized MMC) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-a">Mode A: Optimized MMC</span>
+              <span class="mode-latency">29.6s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_opt_05.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.94</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.97</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.95</b></span>
+            </div>
+            <div class="critique-box">
+              The video maintains outstanding identity and wardrobe consistency, accurately retaining the subject's facial features, plaid flannel, trekking poles, and backpack across all angles. The hiking gait, pole usage, and traversal through the Patagonian mountain terrain exhibit natural and physically plausible motion.
+            </div>
+            <details>
+              <summary>View Prompt</summary>
+              <div class="prompt-text">[# References <IMAGE_REF_0>[Character A]image_0.png] [aspect_ratio=16:9] [resolution=720p] [duration=5s] Character A, majestic wide-angle cinematic drone shot rising and tracking alongside the character as he strides purposefully along a rugged Patagonian ridge line, dramatic granite peaks and turquoise glacial lakes unfolding in the panoramic distance, cinematic epic travel documentary style.</div>
+            </details>
+          </div>
+
+          <!-- Col 2: Mode B (Simple Prompt) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-b">Mode B: Simple Prompt</span>
+              <span class="mode-latency">28.0s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_smp_05.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.95</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.98</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.95</b></span>
+            </div>
+            <div class="critique-box">
+              The video maintains exceptional subject identity, facial structure, and detailed wardrobe consistency across varying camera perspectives. The hiking gait, use of trekking poles, and environmental integration into the rugged mountain trail are natural and realistic.
+            </div>
+            <details>
+              <summary>View Prompt</summary>
+              <div class="prompt-text">[aspect_ratio=16:9] [resolution=720p] [duration=5s] Character A (reference image) hiking across a mountain ridge in Patagonia</div>
+            </details>
+          </div>
+
+          <!-- Col 3: Mode C (Native Task Parameter - Simple) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-c">Mode C: Task (Simple)</span>
+              <span class="mode-latency">30.9s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_tsk_05.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.95</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.98</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.96</b></span>
+            </div>
+            <div class="critique-box">
+              The video maintains exceptional fidelity to the reference image, flawlessly preserving the subject's facial identity, plaid shirt, backpack, and hiking gear across diverse angles. The walking dynamics, terrain interaction, and use of trekking poles are natural, fluid, and physically believable.
+            </div>
+            <details>
+              <summary>View Prompt & Config</summary>
+              <div class="prompt-text">Prompt: Character A (reference image) hiking across a mountain ridge in Patagonia
+
+Config: {
+  "video_config": {
+    "task": "reference_to_video",
+    "aspect_ratio": "16:9",
+    "resolution": "720p",
+    "duration": 5
+  }
+}</div>
+            </details>
+          </div>
+
+          <!-- Col 4: Mode D (Native Task Parameter - Cinematic) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-d">Mode D: Task (Cinematic)</span>
+              <span class="mode-latency">35.7s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_cin_tsk_05.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.90</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.95</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.93</b></span>
+            </div>
+            <div class="critique-box">
+              The generated video demonstrates exceptional fidelity to the reference image, accurately preserving the subject's facial features, age, and ethnicity in closer shots. The hiking apparel, large blue backpack, and dual trekking poles remain remarkably consistent across dynamic camera angles and natural movement through the rugged Patagonia terrain.
+            </div>
+            <details>
+              <summary>View Prompt & Config</summary>
+              <div class="prompt-text">Prompt: Character A, majestic wide-angle cinematic drone shot rising and tracking alongside the character as he strides purposefully along a rugged Patagonian ridge line, dramatic granite peaks and turquoise glacial lakes unfolding in the panoramic distance, cinematic epic travel documentary style.
+
+Config: {
+  "video_config": {
+    "task": "reference_to_video",
+    "aspect_ratio": "16:9",
+    "resolution": "720p",
+    "duration": 5
+  }
+}</div>
+            </details>
+          </div>
+        </div>
+      </div>
+
+      <div class="case-card" data-ethnicity="East Asian" data-framing="Three-Quarter">
+        <div class="case-header">
+          <div class="case-title">#06. East Asian Female (30s) - Rainy Shibuya</div>
+          <div class="case-tags">
+            <span class="tag tag-highlight">East Asian</span>
+            <span class="tag">Three-Quarter Shot</span>
+            <span class="tag">Walking in rainy Shibuya</span>
+          </div>
+        </div>
+        <div class="case-body">
+          <!-- Col 0: Canonical Reference Portrait -->
+          <div class="col-ref">
+            <div style="font-size: 12px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">
+              Canonical Reference
+            </div>
+            <img src="ref_06.png" alt="Reference #6" class="ref-img">
+            <div style="font-size: 11px; color: var(--text-muted);">
+              30-year-old East Asian female
+            </div>
+          </div>
+
+          <!-- Col 1: Mode A (Pipeline-Optimized MMC) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-a">Mode A: Optimized MMC</span>
+              <span class="mode-latency">29.1s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_opt_06.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.95</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.96</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.94</b></span>
+            </div>
+            <div class="critique-box">
+              The subject maintains excellent facial and identity consistency with the reference image, preserving exact facial geometry, hairstyle, and earrings throughout the sequence. The grey trench coat matches the reference precisely, while the umbrella integration and rainy Shibuya setting feel completely natural and physically grounded.
+            </div>
+            <details>
+              <summary>View Prompt</summary>
+              <div class="prompt-text">[# References <IMAGE_REF_0>[Character A]image_0.png] [aspect_ratio=16:9] [resolution=720p] [duration=5s] Character A, cinematic slow-motion tracking shot following the character as she walks gracefully with a transparent umbrella through the iconic Shibuya crossing at night, neon billboards reflecting off rain-slicked asphalt, vibrant Tokyo city nightscape, anamorphic lens flare, photorealistic.</div>
+            </details>
+          </div>
+
+          <!-- Col 2: Mode B (Simple Prompt) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-b">Mode B: Simple Prompt</span>
+              <span class="mode-latency">29.2s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_smp_06.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.96</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.98</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.96</b></span>
+            </div>
+            <div class="critique-box">
+              The generated frames demonstrate near-flawless facial identity preservation and meticulous consistency across the grey trench coat, black inner top, and jewelry. The cinematic walking motion and environmental interaction with rainy Shibuya are exceptionally realistic and coherent.
+            </div>
+            <details>
+              <summary>View Prompt</summary>
+              <div class="prompt-text">[aspect_ratio=16:9] [resolution=720p] [duration=5s] Character A (reference image) walking through rainy Shibuya at night</div>
+            </details>
+          </div>
+
+          <!-- Col 3: Mode C (Native Task Parameter - Simple) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-c">Mode C: Task (Simple)</span>
+              <span class="mode-latency">41.0s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_tsk_06.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.96</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.97</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.96</b></span>
+            </div>
+            <div class="critique-box">
+              The video keyframes exhibit outstanding identity preservation, flawlessly matching the subject's facial structure, bob hairstyle, pendant necklace, and grey trench coat across diverse camera angles. Environmental integration into the rainy Shibuya setting is highly coherent with believable wet lighting and natural movement.
+            </div>
+            <details>
+              <summary>View Prompt & Config</summary>
+              <div class="prompt-text">Prompt: Character A (reference image) walking through rainy Shibuya at night
+
+Config: {
+  "video_config": {
+    "task": "reference_to_video",
+    "aspect_ratio": "16:9",
+    "resolution": "720p",
+    "duration": 5
+  }
+}</div>
+            </details>
+          </div>
+
+          <!-- Col 4: Mode D (Native Task Parameter - Cinematic) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-d">Mode D: Task (Cinematic)</span>
+              <span class="mode-latency">36.0s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_cin_tsk_06.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.98</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.96</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.96</b></span>
+            </div>
+            <div class="critique-box">
+              The subject's facial features, hairstyle, and jewelry match the reference portrait almost flawlessly across every angle. The wardrobe, rainy atmosphere, and walking motion across the Shibuya crossing exhibit exceptional consistency and cinematic realism.
+            </div>
+            <details>
+              <summary>View Prompt & Config</summary>
+              <div class="prompt-text">Prompt: Character A, cinematic slow-motion tracking shot following the character as she walks gracefully with a transparent umbrella through the iconic Shibuya crossing at night, neon billboards reflecting off rain-slicked asphalt, vibrant Tokyo city nightscape, anamorphic lens flare, photorealistic.
+
+Config: {
+  "video_config": {
+    "task": "reference_to_video",
+    "aspect_ratio": "16:9",
+    "resolution": "720p",
+    "duration": 5
+  }
+}</div>
+            </details>
+          </div>
+        </div>
+      </div>
+
+      <div class="case-card" data-ethnicity="Middle Eastern" data-framing="Headshot">
+        <div class="case-header">
+          <div class="case-title">#07. Middle Eastern Male (20s) - Dubai Marina</div>
+          <div class="case-tags">
+            <span class="tag tag-highlight">Middle Eastern</span>
+            <span class="tag">Headshot / Close-up</span>
+            <span class="tag">Strolling along Dubai marina</span>
+          </div>
+        </div>
+        <div class="case-body">
+          <!-- Col 0: Canonical Reference Portrait -->
+          <div class="col-ref">
+            <div style="font-size: 12px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">
+              Canonical Reference
+            </div>
+            <img src="ref_07.png" alt="Reference #7" class="ref-img">
+            <div style="font-size: 11px; color: var(--text-muted);">
+              26-year-old Middle Eastern male
+            </div>
+          </div>
+
+          <!-- Col 1: Mode A (Pipeline-Optimized MMC) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-a">Mode A: Optimized MMC</span>
+              <span class="mode-latency">41.0s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_opt_07.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.95</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.98</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.96</b></span>
+            </div>
+            <div class="critique-box">
+              The subject maintains exceptional facial and identity consistency throughout the clip, matching the reference portrait's features, grooming, and expression seamlessly. The strolling action, lighting interaction, and white linen shirt accurately fit the requested Dubai marina setting with high temporal and physical realism.
+            </div>
+            <details>
+              <summary>View Prompt</summary>
+              <div class="prompt-text">[# References <IMAGE_REF_0>[Character A]image_0.png] [aspect_ratio=16:9] [resolution=720p] [duration=5s] Character A, sun-drenched luxury tracking shot following the character as he walks casually along the Dubai marina boardwalk, glittering turquoise water and luxury yachts docked in background, towering futuristic skyscrapers under cloudless blue sky, crisp 4k commercial look.</div>
+            </details>
+          </div>
+
+          <!-- Col 2: Mode B (Simple Prompt) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-b">Mode B: Simple Prompt</span>
+              <span class="mode-latency">34.9s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_smp_07.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.98</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.98</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.97</b></span>
+            </div>
+            <div class="critique-box">
+              The AI video demonstrates exceptional identity retention, flawlessly matching the subject's facial features, beard grooming, and hairstyle from various perspectives. The white linen styling remains consistent throughout, and the strolling motion naturally integrates with the Dubai Marina setting.
+            </div>
+            <details>
+              <summary>View Prompt</summary>
+              <div class="prompt-text">[aspect_ratio=16:9] [resolution=720p] [duration=5s] Character A (reference image) strolling along Dubai marina promenade</div>
+            </details>
+          </div>
+
+          <!-- Col 3: Mode C (Native Task Parameter - Simple) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-c">Mode C: Task (Simple)</span>
+              <span class="mode-latency">29.1s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_tsk_07.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.98</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.99</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.97</b></span>
+            </div>
+            <div class="critique-box">
+              The subject's facial geometry, beard styling, and hair match the reference portrait exceptionally well across varying camera distances and angles. The white linen shirt and the realistic strolling motion throughout the Dubai Marina environment perfectly fulfill the prompt requirements with high photorealism.
+            </div>
+            <details>
+              <summary>View Prompt & Config</summary>
+              <div class="prompt-text">Prompt: Character A (reference image) strolling along Dubai marina promenade
+
+Config: {
+  "video_config": {
+    "task": "reference_to_video",
+    "aspect_ratio": "16:9",
+    "resolution": "720p",
+    "duration": 5
+  }
+}</div>
+            </details>
+          </div>
+
+          <!-- Col 4: Mode D (Native Task Parameter - Cinematic) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-d">Mode D: Task (Cinematic)</span>
+              <span class="mode-latency">34.3s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_cin_tsk_07.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.97</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.96</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.96</b></span>
+            </div>
+            <div class="critique-box">
+              The generated video achieves an exceptional identity match, maintaining identical facial features, grooming, and hairstyle from the reference across various angles. The outfit and sunny Dubai Marina setting are rendered with high fidelity and natural, continuous motion.
+            </div>
+            <details>
+              <summary>View Prompt & Config</summary>
+              <div class="prompt-text">Prompt: Character A, sun-drenched luxury tracking shot following the character as he walks casually along the Dubai marina boardwalk, glittering turquoise water and luxury yachts docked in background, towering futuristic skyscrapers under cloudless blue sky, crisp 4k commercial look.
+
+Config: {
+  "video_config": {
+    "task": "reference_to_video",
+    "aspect_ratio": "16:9",
+    "resolution": "720p",
+    "duration": 5
+  }
+}</div>
+            </details>
+          </div>
+        </div>
+      </div>
+
+      <div class="case-card" data-ethnicity="Black / African" data-framing="Full-Body">
+        <div class="case-header">
+          <div class="case-title">#08. Black Male (30s) - Basketball Action</div>
+          <div class="case-tags">
+            <span class="tag tag-highlight">Black / African</span>
+            <span class="tag">Full-Body Action Shot</span>
+            <span class="tag">Playing basketball on court</span>
+          </div>
+        </div>
+        <div class="case-body">
+          <!-- Col 0: Canonical Reference Portrait -->
+          <div class="col-ref">
+            <div style="font-size: 12px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">
+              Canonical Reference
+            </div>
+            <img src="ref_08.png" alt="Reference #8" class="ref-img">
+            <div style="font-size: 11px; color: var(--text-muted);">
+              32-year-old athletic Black male
+            </div>
+          </div>
+
+          <!-- Col 1: Mode A (Pipeline-Optimized MMC) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-a">Mode A: Optimized MMC</span>
+              <span class="mode-latency">28.8s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_opt_08.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.95</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.98</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.96</b></span>
+            </div>
+            <div class="critique-box">
+              The generated video demonstrates exceptional adherence to the reference subject's facial features, hairstyle, and specific basketball uniform throughout the sequence. The motion seamlessly flows from a dynamic dribble drive to an authentic, high-flying slam dunk with natural athletic physics.
+            </div>
+            <details>
+              <summary>View Prompt</summary>
+              <div class="prompt-text">[# References <IMAGE_REF_0>[Character A]image_0.png] [aspect_ratio=16:9] [resolution=720p] [duration=5s] Character A, dynamic low-angle slow-motion action shot following the character as he drives past the defender, elevates smoothly toward the basketball rim, and slams down an emphatic two-handed dunk, chain-link fence and sunset sky in background, cinematic sports reel style.</div>
+            </details>
+          </div>
+
+          <!-- Col 2: Mode B (Simple Prompt) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-b">Mode B: Simple Prompt</span>
+              <span class="mode-latency">27.4s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_smp_08.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.95</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.98</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.96</b></span>
+            </div>
+            <div class="critique-box">
+              The subject's identity, braided hairstyle, and specific red #24 jersey with compression gear are preserved flawlessly across all keyframes. The basketball action sequence from the initial dribble to the drive and final dunk exhibits outstanding fluid motion and physical realism.
+            </div>
+            <details>
+              <summary>View Prompt</summary>
+              <div class="prompt-text">[aspect_ratio=16:9] [resolution=720p] [duration=5s] Character A (reference image) playing basketball on an outdoor court</div>
+            </details>
+          </div>
+
+          <!-- Col 3: Mode C (Native Task Parameter - Simple) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-c">Mode C: Task (Simple)</span>
+              <span class="mode-latency">32.3s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_tsk_08.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.96</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.98</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.96</b></span>
+            </div>
+            <div class="critique-box">
+              The subject's facial features, braided hairstyle, and facial structure remain exceptionally faithful to the reference image across both wide and close-up angles. The basketball jersey, athletic gear, and shooting sequence physics are rendered with remarkable continuity and realism.
+            </div>
+            <details>
+              <summary>View Prompt & Config</summary>
+              <div class="prompt-text">Prompt: Character A (reference image) playing basketball on an outdoor court
+
+Config: {
+  "video_config": {
+    "task": "reference_to_video",
+    "aspect_ratio": "16:9",
+    "resolution": "720p",
+    "duration": 5
+  }
+}</div>
+            </details>
+          </div>
+
+          <!-- Col 4: Mode D (Native Task Parameter - Cinematic) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-d">Mode D: Task (Cinematic)</span>
+              <span class="mode-latency">34.9s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_cin_tsk_08.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.96</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.98</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.96</b></span>
+            </div>
+            <div class="critique-box">
+              The subject's facial features, athletic build, and hairstyle are preserved with exceptional fidelity across the entire sequence. The basketball uniform, footwear, and compression gear match the reference down to fine details while executing a physically realistic, dynamic drive and dunk sequence.
+            </div>
+            <details>
+              <summary>View Prompt & Config</summary>
+              <div class="prompt-text">Prompt: Character A, dynamic low-angle slow-motion action shot following the character as he drives past the defender, elevates smoothly toward the basketball rim, and slams down an emphatic two-handed dunk, chain-link fence and sunset sky in background, cinematic sports reel style.
+
+Config: {
+  "video_config": {
+    "task": "reference_to_video",
+    "aspect_ratio": "16:9",
+    "resolution": "720p",
+    "duration": 5
+  }
+}</div>
+            </details>
+          </div>
+        </div>
+      </div>
+
+      <div class="case-card" data-ethnicity="Southeast Asian" data-framing="Medium">
+        <div class="case-header">
+          <div class="case-title">#09. Southeast Asian Female (20s) - Amsterdam Cycling</div>
+          <div class="case-tags">
+            <span class="tag tag-highlight">Southeast Asian</span>
+            <span class="tag">Bust / Medium Portrait</span>
+            <span class="tag">Cycling along Amsterdam canal</span>
+          </div>
+        </div>
+        <div class="case-body">
+          <!-- Col 0: Canonical Reference Portrait -->
+          <div class="col-ref">
+            <div style="font-size: 12px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">
+              Canonical Reference
+            </div>
+            <img src="ref_09.png" alt="Reference #9" class="ref-img">
+            <div style="font-size: 11px; color: var(--text-muted);">
+              25-year-old Southeast Asian female
+            </div>
+          </div>
+
+          <!-- Col 1: Mode A (Pipeline-Optimized MMC) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-a">Mode A: Optimized MMC</span>
+              <span class="mode-latency">28.2s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_opt_09.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.95</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.98</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.96</b></span>
+            </div>
+            <div class="critique-box">
+              The subject's facial features, ethnicity, and expressive smile maintain exceptional consistency with the canonical reference portrait across all keyframes. The yellow raincoat, patterned scarf, and black helmet are reproduced with remarkable fidelity while she performs a natural, realistic cycling motion along the Amsterdam canal.
+            </div>
+            <details>
+              <summary>View Prompt</summary>
+              <div class="prompt-text">[# References <IMAGE_REF_0>[Character A]image_0.png] [aspect_ratio=16:9] [resolution=720p] [duration=5s] Character A, smooth bicycle-mounted tracking camera facing backward at the character as she pedals merrily along a tree-lined brick canal in Amsterdam, historic 17th-century canal houses and stone bridges gliding past, soft diffused European light, photorealistic travel vlog style.</div>
+            </details>
+          </div>
+
+          <!-- Col 2: Mode B (Simple Prompt) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-b">Mode B: Simple Prompt</span>
+              <span class="mode-latency">36.1s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_smp_09.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.95</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.97</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.95</b></span>
+            </div>
+            <div class="critique-box">
+              The generated video demonstrates exceptional adherence to the reference image, flawlessly preserving the subject's facial features, smile, and ethnicity across all frames. The outfit and gear—including the yellow raincoat, patterned scarf, and black helmet—remain remarkably consistent while depicting natural and realistic cycling motion along the canal.
+            </div>
+            <details>
+              <summary>View Prompt</summary>
+              <div class="prompt-text">[aspect_ratio=16:9] [resolution=720p] [duration=5s] Character A (reference image) riding a bicycle along an Amsterdam canal</div>
+            </details>
+          </div>
+
+          <!-- Col 3: Mode C (Native Task Parameter - Simple) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-c">Mode C: Task (Simple)</span>
+              <span class="mode-latency">30.7s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_tsk_09.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.96</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.98</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.96</b></span>
+            </div>
+            <div class="critique-box">
+              The AI-generated video demonstrates exceptional adherence to the reference image, maintaining identical facial features, expressions, and ethnic characteristics. The yellow raincoat, patterned scarf, black helmet, and Amsterdam canal cycling scenario are rendered with outstanding continuity and natural physical realism.
+            </div>
+            <details>
+              <summary>View Prompt & Config</summary>
+              <div class="prompt-text">Prompt: Character A (reference image) riding a bicycle along an Amsterdam canal
+
+Config: {
+  "video_config": {
+    "task": "reference_to_video",
+    "aspect_ratio": "16:9",
+    "resolution": "720p",
+    "duration": 5
+  }
+}</div>
+            </details>
+          </div>
+
+          <!-- Col 4: Mode D (Native Task Parameter - Cinematic) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-d">Mode D: Task (Cinematic)</span>
+              <span class="mode-latency">35.6s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_cin_tsk_09.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.96</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.98</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.96</b></span>
+            </div>
+            <div class="critique-box">
+              The AI video exhibits outstanding character consistency, faithfully matching the subject's facial geometry, smile, and ethnic identity across all keyframes. The yellow raincoat, patterned scarf, and black helmet replicate the reference portrait flawlessly, while the cycling and waving motions along the Amsterdam canal appear fluid and physically natural.
+            </div>
+            <details>
+              <summary>View Prompt & Config</summary>
+              <div class="prompt-text">Prompt: Character A, smooth bicycle-mounted tracking camera facing backward at the character as she pedals merrily along a tree-lined brick canal in Amsterdam, historic 17th-century canal houses and stone bridges gliding past, soft diffused European light, photorealistic travel vlog style.
+
+Config: {
+  "video_config": {
+    "task": "reference_to_video",
+    "aspect_ratio": "16:9",
+    "resolution": "720p",
+    "duration": 5
+  }
+}</div>
+            </details>
+          </div>
+        </div>
+      </div>
+
+      <div class="case-card" data-ethnicity="Caucasian" data-framing="Headshot">
+        <div class="case-header">
+          <div class="case-title">#10. Caucasian Female (60s) - Botanical Reading</div>
+          <div class="case-tags">
+            <span class="tag tag-highlight">Caucasian</span>
+            <span class="tag">Headshot / Close-up</span>
+            <span class="tag">Reading in botanical garden</span>
+          </div>
+        </div>
+        <div class="case-body">
+          <!-- Col 0: Canonical Reference Portrait -->
+          <div class="col-ref">
+            <div style="font-size: 12px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">
+              Canonical Reference
+            </div>
+            <img src="ref_10.png" alt="Reference #10" class="ref-img">
+            <div style="font-size: 11px; color: var(--text-muted);">
+              65-year-old Caucasian female
+            </div>
+          </div>
+
+          <!-- Col 1: Mode A (Pipeline-Optimized MMC) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-a">Mode A: Optimized MMC</span>
+              <span class="mode-latency">0.0s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_opt_10.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.98</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.99</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.97</b></span>
+            </div>
+            <div class="critique-box">
+              The generated video demonstrates near-flawless facial identity preservation and precise reproduction of the subject's hair, glasses, and green linen shirt. The target action of reading and looking up inside the botanical garden is executed with exceptionally natural motion and lighting continuity.
+            </div>
+            <details>
+              <summary>View Prompt</summary>
+              <div class="prompt-text">[# References <IMAGE_REF_0>[Character A]image_0.png] [aspect_ratio=16:9] [resolution=720p] [duration=5s] Character A, serene cinematic close-up with soft floating dust motes as the character turns a page of an antique hardcover book, glancing up with a warm peaceful smile surrounded by blooming purple orchids and lush tropical ferns in a Victorian glasshouse, warm cinematic golden lighting.</div>
+            </details>
+          </div>
+
+          <!-- Col 2: Mode B (Simple Prompt) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-b">Mode B: Simple Prompt</span>
+              <span class="mode-latency">0.0s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_smp_10.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.98</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.99</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.98</b></span>
+            </div>
+            <div class="critique-box">
+              The generated video demonstrates near-flawless adherence to the reference image, preserving the subject's exact facial features, hairstyle, glasses, and subtle jewelry across all frames. The reading interaction and page-turning motion feel natural and authentically integrate with the lush botanical garden environment.
+            </div>
+            <details>
+              <summary>View Prompt</summary>
+              <div class="prompt-text">[aspect_ratio=16:9] [resolution=720p] [duration=5s] Character A (reference image) reading a book in a botanical garden greenhouse</div>
+            </details>
+          </div>
+
+          <!-- Col 3: Mode C (Native Task Parameter - Simple) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-c">Mode C: Task (Simple)</span>
+              <span class="mode-latency">0.0s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_tsk_10.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.98</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.99</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.98</b></span>
+            </div>
+            <div class="critique-box">
+              The generated video demonstrates exceptional identity retention, matching the subject's facial features, hairstyle, glasses, and olive-green linen attire flawlessly. The reading action unfolds naturally across cinematic angles while maintaining perfect continuity within the greenhouse setting.
+            </div>
+            <details>
+              <summary>View Prompt & Config</summary>
+              <div class="prompt-text">Prompt: Character A (reference image) reading a book in a botanical garden greenhouse
+
+Config: {
+  "video_config": {
+    "task": "reference_to_video",
+    "aspect_ratio": "16:9",
+    "resolution": "720p",
+    "duration": 5
+  }
+}</div>
+            </details>
+          </div>
+
+          <!-- Col 4: Mode D (Native Task Parameter - Cinematic) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-d">Mode D: Task (Cinematic)</span>
+              <span class="mode-latency">30.7s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_cin_tsk_10.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.98</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.98</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.97</b></span>
+            </div>
+            <div class="critique-box">
+              The subject exhibits near-perfect identity retention, with identical facial geometry, hairstyle, wire-rimmed glasses, and matching olive linen attire. The action of reading and turning the pages of an antique book in the greenhouse is smoothly executed with highly realistic hand anatomy and natural lighting.
+            </div>
+            <details>
+              <summary>View Prompt & Config</summary>
+              <div class="prompt-text">Prompt: Character A, serene cinematic close-up with soft floating dust motes as the character turns a page of an antique hardcover book, glancing up with a warm peaceful smile surrounded by blooming purple orchids and lush tropical ferns in a Victorian glasshouse, warm cinematic golden lighting.
+
+Config: {
+  "video_config": {
+    "task": "reference_to_video",
+    "aspect_ratio": "16:9",
+    "resolution": "720p",
+    "duration": 5
+  }
+}</div>
+            </details>
+          </div>
+        </div>
+      </div>
+
+      <div class="case-card" data-ethnicity="South Asian" data-framing="Full-Body">
+        <div class="case-header">
+          <div class="case-title">#11. South Asian Male (30s) - Grass Tennis</div>
+          <div class="case-tags">
+            <span class="tag tag-highlight">South Asian</span>
+            <span class="tag">Full-Body Action Shot</span>
+            <span class="tag">Playing tennis on grass court</span>
+          </div>
+        </div>
+        <div class="case-body">
+          <!-- Col 0: Canonical Reference Portrait -->
+          <div class="col-ref">
+            <div style="font-size: 12px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">
+              Canonical Reference
+            </div>
+            <img src="ref_11.png" alt="Reference #11" class="ref-img">
+            <div style="font-size: 11px; color: var(--text-muted);">
+              34-year-old South Asian male
+            </div>
+          </div>
+
+          <!-- Col 1: Mode A (Pipeline-Optimized MMC) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-a">Mode A: Optimized MMC</span>
+              <span class="mode-latency">30.0s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_opt_11.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.95</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.96</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.95</b></span>
+            </div>
+            <div class="critique-box">
+              The video maintains exceptional subject identity, facial structure, and outfit fidelity across all frames. The tennis footwork, swing mechanics, and court environment exhibit natural physics and high visual realism.
+            </div>
+            <details>
+              <summary>View Prompt</summary>
+              <div class="prompt-text">[# References <IMAGE_REF_0>[Character A]image_0.png] [aspect_ratio=16:9] [resolution=720p] [duration=5s] Character A, courtside high-speed tracking shot following the character as he sprints across the lush grass court, sets his footing with athletic precision, and strikes a blistering forehand winner down the line, chalk dust kicking up from baseline, broadcast sports cinematography.</div>
+            </details>
+          </div>
+
+          <!-- Col 2: Mode B (Simple Prompt) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-b">Mode B: Simple Prompt</span>
+              <span class="mode-latency">26.7s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_smp_11.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.95</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.96</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.94</b></span>
+            </div>
+            <div class="critique-box">
+              The video maintains exceptional fidelity to the reference portrait, preserving facial geometry, beard styling, and full athletic apparel seamlessly throughout the clip. The athletic movement mechanics on the grass court are fluid, coherent, and physically plausible.
+            </div>
+            <details>
+              <summary>View Prompt</summary>
+              <div class="prompt-text">[aspect_ratio=16:9] [resolution=720p] [duration=5s] Character A (reference image) playing a tennis match on a grass court</div>
+            </details>
+          </div>
+
+          <!-- Col 3: Mode C (Native Task Parameter - Simple) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-c">Mode C: Task (Simple)</span>
+              <span class="mode-latency">47.2s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_tsk_11.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.95</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.98</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.94</b></span>
+            </div>
+            <div class="critique-box">
+              The generated video demonstrates exceptional facial similarity and flawless outfit consistency matching the reference portrait. The tennis motion and grass-court atmosphere are authentic and well-rendered across varying camera compositions.
+            </div>
+            <details>
+              <summary>View Prompt & Config</summary>
+              <div class="prompt-text">Prompt: Character A (reference image) playing a tennis match on a grass court
+
+Config: {
+  "video_config": {
+    "task": "reference_to_video",
+    "aspect_ratio": "16:9",
+    "resolution": "720p",
+    "duration": 5
+  }
+}</div>
+            </details>
+          </div>
+
+          <!-- Col 4: Mode D (Native Task Parameter - Cinematic) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-d">Mode D: Task (Cinematic)</span>
+              <span class="mode-latency">35.9s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_cin_tsk_11.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.95</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.96</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.94</b></span>
+            </div>
+            <div class="critique-box">
+              The generated video demonstrates exceptional identity retention, perfectly matching the facial features, beard styling, and athletic build of the reference subject. The Wimbledon-style tennis apparel, equipment, and dynamic grass court gameplay motion remain highly coherent and realistic throughout all keyframes.
+            </div>
+            <details>
+              <summary>View Prompt & Config</summary>
+              <div class="prompt-text">Prompt: Character A, courtside high-speed tracking shot following the character as he sprints across the lush grass court, sets his footing with athletic precision, and strikes a blistering forehand winner down the line, chalk dust kicking up from baseline, broadcast sports cinematography.
+
+Config: {
+  "video_config": {
+    "task": "reference_to_video",
+    "aspect_ratio": "16:9",
+    "resolution": "720p",
+    "duration": 5
+  }
+}</div>
+            </details>
+          </div>
+        </div>
+      </div>
+
+      <div class="case-card" data-ethnicity="Hispanic / Latino" data-framing="Three-Quarter">
+        <div class="case-header">
+          <div class="case-title">#12. Hispanic Female (20s) - Oaxaca Street Festival</div>
+          <div class="case-tags">
+            <span class="tag tag-highlight">Hispanic / Latino</span>
+            <span class="tag">Three-Quarter Shot</span>
+            <span class="tag">Dancing at street festival</span>
+          </div>
+        </div>
+        <div class="case-body">
+          <!-- Col 0: Canonical Reference Portrait -->
+          <div class="col-ref">
+            <div style="font-size: 12px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">
+              Canonical Reference
+            </div>
+            <img src="ref_12.png" alt="Reference #12" class="ref-img">
+            <div style="font-size: 11px; color: var(--text-muted);">
+              23-year-old Hispanic female
+            </div>
+          </div>
+
+          <!-- Col 1: Mode A (Pipeline-Optimized MMC) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-a">Mode A: Optimized MMC</span>
+              <span class="mode-latency">30.4s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_opt_12.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.95</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.98</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.96</b></span>
+            </div>
+            <div class="critique-box">
+              The video demonstrates exceptional consistency with the reference image, flawlessly preserving the subject's facial features, vibrant embroidered dress, distressed denim jacket, and colorful hair accessories. The spinning dance movement is fluid, natural, and integrates seamlessly with the lively street festival environment.
+            </div>
+            <details>
+              <summary>View Prompt</summary>
+              <div class="prompt-text">[# References <IMAGE_REF_0>[Character A]image_0.png] [aspect_ratio=16:9] [resolution=720p] [duration=5s] Character A, swirling 360-degree celebratory orbit camera circling the character as she dances joyfully in a cobblestone plaza, multicolored festival confetti floating through golden evening air, traditional musicians and warm string lights creating a magical festive aura, cinematic.</div>
+            </details>
+          </div>
+
+          <!-- Col 2: Mode B (Simple Prompt) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-b">Mode B: Simple Prompt</span>
+              <span class="mode-latency">27.7s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_smp_12.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.96</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.98</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.96</b></span>
+            </div>
+            <div class="critique-box">
+              The generated video shows exceptional adherence to the reference image, preserving the subject's distinct facial features, joyful expression, and intricate embroidered outfit with near-perfect fidelity. The dancing motion and ribbon physics are rendered naturally against a lively, authentic festival background.
+            </div>
+            <details>
+              <summary>View Prompt</summary>
+              <div class="prompt-text">[aspect_ratio=16:9] [resolution=720p] [duration=5s] Character A (reference image) dancing at a street festival in Oaxaca</div>
+            </details>
+          </div>
+
+          <!-- Col 3: Mode C (Native Task Parameter - Simple) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-c">Mode C: Task (Simple)</span>
+              <span class="mode-latency">47.1s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_tsk_12.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.95</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.96</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.95</b></span>
+            </div>
+            <div class="critique-box">
+              The subject exhibits exceptional identity preservation across all frames, perfectly maintaining her facial structure, radiant expression, and hair styling. The embroidered dress, denim jacket, and colorful hair ribbon details match the canonical reference with impressive precision during the natural street festival dance motion.
+            </div>
+            <details>
+              <summary>View Prompt & Config</summary>
+              <div class="prompt-text">Prompt: Character A (reference image) dancing at a street festival in Oaxaca
+
+Config: {
+  "video_config": {
+    "task": "reference_to_video",
+    "aspect_ratio": "16:9",
+    "resolution": "720p",
+    "duration": 5
+  }
+}</div>
+            </details>
+          </div>
+
+          <!-- Col 4: Mode D (Native Task Parameter - Cinematic) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-d">Mode D: Task (Cinematic)</span>
+              <span class="mode-latency">35.0s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_cin_tsk_12.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.96</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.97</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.96</b></span>
+            </div>
+            <div class="critique-box">
+              The video demonstrates exceptional fidelity to the reference portrait, accurately preserving facial identity, joyful expression, and the intricate embroidered dress with hair ribbons. The dancing movement, rotation, and interaction with the vibrant street festival environment feel remarkably fluid and natural.
+            </div>
+            <details>
+              <summary>View Prompt & Config</summary>
+              <div class="prompt-text">Prompt: Character A, swirling 360-degree celebratory orbit camera circling the character as she dances joyfully in a cobblestone plaza, multicolored festival confetti floating through golden evening air, traditional musicians and warm string lights creating a magical festive aura, cinematic.
+
+Config: {
+  "video_config": {
+    "task": "reference_to_video",
+    "aspect_ratio": "16:9",
+    "resolution": "720p",
+    "duration": 5
+  }
+}</div>
+            </details>
+          </div>
+        </div>
+      </div>
+
+      <div class="case-card" data-ethnicity="Indigenous / Native" data-framing="Medium">
+        <div class="case-header">
+          <div class="case-title">#13. Indigenous Male (30s) - Banff Overlook</div>
+          <div class="case-tags">
+            <span class="tag tag-highlight">Indigenous / Native</span>
+            <span class="tag">Bust / Medium Portrait</span>
+            <span class="tag">Standing on mountain overlook</span>
+          </div>
+        </div>
+        <div class="case-body">
+          <!-- Col 0: Canonical Reference Portrait -->
+          <div class="col-ref">
+            <div style="font-size: 12px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">
+              Canonical Reference
+            </div>
+            <img src="ref_13.png" alt="Reference #13" class="ref-img">
+            <div style="font-size: 11px; color: var(--text-muted);">
+              36-year-old Indigenous North American male
+            </div>
+          </div>
+
+          <!-- Col 1: Mode A (Pipeline-Optimized MMC) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-a">Mode A: Optimized MMC</span>
+              <span class="mode-latency">27.9s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_opt_13.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.98</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.98</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.97</b></span>
+            </div>
+            <div class="critique-box">
+              The generated video demonstrates exceptional identity retention and perfect wardrobe consistency across a smooth cinematic camera pull-back. The wind physics on the subject's hair and the expansive mountain overlook environment integrate seamlessly with the reference portrait.
+            </div>
+            <details>
+              <summary>View Prompt</summary>
+              <div class="prompt-text">[# References <IMAGE_REF_0>[Character A]image_0.png] [aspect_ratio=16:9] [resolution=720p] [duration=5s] Character A, epic slow push-in cinematic shot facing the character standing tall at the edge of a rocky cliff overlook, wind softly rustling his hair as the camera pulls slightly back to reveal the breathtaking turquoise waters of Lake Louise and snow-dusted pine valleys below, National Geographic documentary aesthetic.</div>
+            </details>
+          </div>
+
+          <!-- Col 2: Mode B (Simple Prompt) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-b">Mode B: Simple Prompt</span>
+              <span class="mode-latency">30.4s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_smp_13.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.98</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.98</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.98</b></span>
+            </div>
+            <div class="critique-box">
+              The video maintains near-perfect identity adherence to the reference portrait, preserving facial geometry, hairstyle, and micro-details flawlessly across dynamic camera angles. Outfit elements and environmental lighting remain completely consistent, complemented by natural and believable motion.
+            </div>
+            <details>
+              <summary>View Prompt</summary>
+              <div class="prompt-text">[aspect_ratio=16:9] [resolution=720p] [duration=5s] Character A (reference image) standing on a mountain cliff overlook in Banff</div>
+            </details>
+          </div>
+
+          <!-- Col 3: Mode C (Native Task Parameter - Simple) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-c">Mode C: Task (Simple)</span>
+              <span class="mode-latency">33.0s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_tsk_13.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.98</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.99</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.98</b></span>
+            </div>
+            <div class="critique-box">
+              The AI video exhibits near-perfect identity preservation, maintaining exact facial bone structure, skin texture, and hairstyle across varying camera angles. The shearling leather jacket, lighting, and environmental physics like wind-blown hair integrate seamlessly into the realistic mountain landscape.
+            </div>
+            <details>
+              <summary>View Prompt & Config</summary>
+              <div class="prompt-text">Prompt: Character A (reference image) standing on a mountain cliff overlook in Banff
+
+Config: {
+  "video_config": {
+    "task": "reference_to_video",
+    "aspect_ratio": "16:9",
+    "resolution": "720p",
+    "duration": 5
+  }
+}</div>
+            </details>
+          </div>
+
+          <!-- Col 4: Mode D (Native Task Parameter - Cinematic) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-d">Mode D: Task (Cinematic)</span>
+              <span class="mode-latency">34.4s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_cin_tsk_13.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.98</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.98</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.97</b></span>
+            </div>
+            <div class="critique-box">
+              The video maintains exceptional identity, hair, and wardrobe consistency with the canonical reference across the entire sequence. The dramatic camera pull-out to reveal the full scenic overlook is smoothly executed with realistic lighting and environmental coherence.
+            </div>
+            <details>
+              <summary>View Prompt & Config</summary>
+              <div class="prompt-text">Prompt: Character A, epic slow push-in cinematic shot facing the character standing tall at the edge of a rocky cliff overlook, wind softly rustling his hair as the camera pulls slightly back to reveal the breathtaking turquoise waters of Lake Louise and snow-dusted pine valleys below, National Geographic documentary aesthetic.
+
+Config: {
+  "video_config": {
+    "task": "reference_to_video",
+    "aspect_ratio": "16:9",
+    "resolution": "720p",
+    "duration": 5
+  }
+}</div>
+            </details>
+          </div>
+        </div>
+      </div>
+
+      <div class="case-card" data-ethnicity="Black / African" data-framing="Headshot">
+        <div class="case-header">
+          <div class="case-title">#14. Black Female (40s) - Keynote Stage</div>
+          <div class="case-tags">
+            <span class="tag tag-highlight">Black / African</span>
+            <span class="tag">Headshot / Close-up</span>
+            <span class="tag">Giving a keynote speech on stage</span>
+          </div>
+        </div>
+        <div class="case-body">
+          <!-- Col 0: Canonical Reference Portrait -->
+          <div class="col-ref">
+            <div style="font-size: 12px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">
+              Canonical Reference
+            </div>
+            <img src="ref_14.png" alt="Reference #14" class="ref-img">
+            <div style="font-size: 11px; color: var(--text-muted);">
+              45-year-old Black female leader
+            </div>
+          </div>
+
+          <!-- Col 1: Mode A (Pipeline-Optimized MMC) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-a">Mode A: Optimized MMC</span>
+              <span class="mode-latency">0.0s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_opt_14.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.95</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.98</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.96</b></span>
+            </div>
+            <div class="critique-box">
+              The subject maintains exceptional identity and facial consistency with the reference portrait across all keyframes. The royal blue power suit, accessories, and keynote presentation gestures realistically capture the intended leader scenario.
+            </div>
+            <details>
+              <summary>View Prompt</summary>
+              <div class="prompt-text">[# References <IMAGE_REF_0>[Character A]image_0.png] [aspect_ratio=16:9] [resolution=720p] [duration=5s] Character A, cinematic slow camera push-in as the character delivers an inspiring keynote address on an auditorium stage, gesturing with authority, presentation screen and warm stage lighting in background, photorealistic.</div>
+            </details>
+          </div>
+
+          <!-- Col 2: Mode B (Simple Prompt) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-b">Mode B: Simple Prompt</span>
+              <span class="mode-latency">0.0s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_smp_14.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.98</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.99</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.98</b></span>
+            </div>
+            <div class="critique-box">
+              The generated video maintains near-perfect identity, facial structure, and hairstyle consistency with the canonical reference portrait. The royal blue blazer, accessories, and keynote speaking gestures demonstrate exceptional physical realism and environmental continuity.
+            </div>
+            <details>
+              <summary>View Prompt</summary>
+              <div class="prompt-text">[aspect_ratio=16:9] [resolution=720p] [duration=5s] Character A (reference image) delivering a keynote speech on stage</div>
+            </details>
+          </div>
+
+          <!-- Col 3: Mode C (Native Task Parameter - Simple) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-c">Mode C: Task (Simple)</span>
+              <span class="mode-latency">0.0s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_tsk_14.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.98</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.99</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.98</b></span>
+            </div>
+            <div class="critique-box">
+              The generated video demonstrates exceptional adherence to the reference portrait, preserving exact facial geometry, hairstyle, and the earpiece headset across multiple angles. The royal blue blazer outfit, stage environment, and dynamic keynote speaking motions remain flawlessly coherent throughout all shots.
+            </div>
+            <details>
+              <summary>View Prompt & Config</summary>
+              <div class="prompt-text">Prompt: Character A (reference image) delivering a keynote speech on stage
+
+Config: {
+  "video_config": {
+    "task": "reference_to_video",
+    "aspect_ratio": "16:9",
+    "resolution": "720p",
+    "duration": 5
+  }
+}</div>
+            </details>
+          </div>
+
+          <!-- Col 4: Mode D (Native Task Parameter - Cinematic) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-d">Mode D: Task (Cinematic)</span>
+              <span class="mode-latency">32.1s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_cin_tsk_14.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.98</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.99</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.98</b></span>
+            </div>
+            <div class="critique-box">
+              The generated video demonstrates exceptional fidelity to the reference portrait, maintaining consistent facial identity, hair texture, and precise wardrobe and audio gear details throughout. The speaking articulations and dynamic hand gestures are highly natural and perfectly suit the keynote scenario.
+            </div>
+            <details>
+              <summary>View Prompt & Config</summary>
+              <div class="prompt-text">Prompt: Character A, cinematic slow camera push-in as the character delivers an inspiring keynote address on an auditorium stage, gesturing with authority, presentation screen and warm stage lighting in background, photorealistic.
+
+Config: {
+  "video_config": {
+    "task": "reference_to_video",
+    "aspect_ratio": "16:9",
+    "resolution": "720p",
+    "duration": 5
+  }
+}</div>
+            </details>
+          </div>
+        </div>
+      </div>
+
+      <div class="case-card" data-ethnicity="Caucasian" data-framing="Full-Body">
+        <div class="case-header">
+          <div class="case-title">#15. Caucasian Male (20s) - Hawaii Surfing</div>
+          <div class="case-tags">
+            <span class="tag tag-highlight">Caucasian</span>
+            <span class="tag">Full-Body Action Shot</span>
+            <span class="tag">Walking into ocean with surfboard</span>
+          </div>
+        </div>
+        <div class="case-body">
+          <!-- Col 0: Canonical Reference Portrait -->
+          <div class="col-ref">
+            <div style="font-size: 12px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">
+              Canonical Reference
+            </div>
+            <img src="ref_15.png" alt="Reference #15" class="ref-img">
+            <div style="font-size: 11px; color: var(--text-muted);">
+              24-year-old Caucasian male surfer
+            </div>
+          </div>
+
+          <!-- Col 1: Mode A (Pipeline-Optimized MMC) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-a">Mode A: Optimized MMC</span>
+              <span class="mode-latency">29.5s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_opt_15.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-low">0.72</b></span>
+              <span class="score-pill">Outfit: <b class="score-med">0.78</b></span>
+              <span class="score-pill">Overall: <b class="score-med">0.81</b></span>
+            </div>
+            <div class="critique-box">
+              The video captures very natural movement and realistic water physics as the surfer transitions from walking into paddling out. However, the wetsuit top has changed from a sleeveless vest to a full long-sleeve rashguard, and predominantly rear-facing angles make direct facial verification difficult.
+            </div>
+            <details>
+              <summary>View Prompt</summary>
+              <div class="prompt-text">[# References <IMAGE_REF_0>[Character A]image_0.png] [aspect_ratio=16:9] [resolution=720p] [duration=5s] Character A, cinematic slow-motion tracking shot following the character from behind and side as he walks barefoot across wet sand into the crashing ocean whitewash, paddling out through breaking turquoise waves under a glowing golden Hawaiian sunset, photorealistic surf film style.</div>
+            </details>
+          </div>
+
+          <!-- Col 2: Mode B (Simple Prompt) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-b">Mode B: Simple Prompt</span>
+              <span class="mode-latency">27.6s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_smp_15.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.90</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.96</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.94</b></span>
+            </div>
+            <div class="critique-box">
+              The subject maintains excellent identity, hair styling, and outfit consistency matching the reference wetsuit vest, boardshorts, and board. The walking motion into the ocean surf is highly realistic with believable foam interaction and natural posture.
+            </div>
+            <details>
+              <summary>View Prompt</summary>
+              <div class="prompt-text">[aspect_ratio=16:9] [resolution=720p] [duration=5s] Character A (reference image) walking into the ocean surf with a surfboard in Hawaii</div>
+            </details>
+          </div>
+
+          <!-- Col 3: Mode C (Native Task Parameter - Simple) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-c">Mode C: Task (Simple)</span>
+              <span class="mode-latency">33.9s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_tsk_15.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.95</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.98</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.96</b></span>
+            </div>
+            <div class="critique-box">
+              The video maintains outstanding identity and gear fidelity, accurately replicating the subject's facial features, wetsuit vest, striped boardshorts, and surfboard details. The chronological progression seamlessly and naturally transitions from walking on the sand to wading waist-deep into the ocean.
+            </div>
+            <details>
+              <summary>View Prompt & Config</summary>
+              <div class="prompt-text">Prompt: Character A (reference image) walking into the ocean surf with a surfboard in Hawaii
+
+Config: {
+  "video_config": {
+    "task": "reference_to_video",
+    "aspect_ratio": "16:9",
+    "resolution": "720p",
+    "duration": 5
+  }
+}</div>
+            </details>
+          </div>
+
+          <!-- Col 4: Mode D (Native Task Parameter - Cinematic) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-d">Mode D: Task (Cinematic)</span>
+              <span class="mode-latency">46.7s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_cin_tsk_15.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.90</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.92</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.92</b></span>
+            </div>
+            <div class="critique-box">
+              The video maintains outstanding identity and wardrobe fidelity, accurately replicating the subject's distinct hairstyle, board shorts with orange stripes, and surfboard. The progression from walking along the shoreline into paddling out through the ocean waves exhibits natural physics and believable motion.
+            </div>
+            <details>
+              <summary>View Prompt & Config</summary>
+              <div class="prompt-text">Prompt: Character A, cinematic slow-motion tracking shot following the character from behind and side as he walks barefoot across wet sand into the crashing ocean whitewash, paddling out through breaking turquoise waves under a glowing golden Hawaiian sunset, photorealistic surf film style.
+
+Config: {
+  "video_config": {
+    "task": "reference_to_video",
+    "aspect_ratio": "16:9",
+    "resolution": "720p",
+    "duration": 5
+  }
+}</div>
+            </details>
+          </div>
+        </div>
+      </div>
+
+      <div class="case-card" data-ethnicity="East Asian" data-framing="Medium">
+        <div class="case-header">
+          <div class="case-title">#16. East Asian Male (50s) - Kyoto Tea Ceremony</div>
+          <div class="case-tags">
+            <span class="tag tag-highlight">East Asian</span>
+            <span class="tag">Bust / Medium Portrait</span>
+            <span class="tag">Preparing matcha tea in Kyoto</span>
+          </div>
+        </div>
+        <div class="case-body">
+          <!-- Col 0: Canonical Reference Portrait -->
+          <div class="col-ref">
+            <div style="font-size: 12px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">
+              Canonical Reference
+            </div>
+            <img src="ref_16.png" alt="Reference #16" class="ref-img">
+            <div style="font-size: 11px; color: var(--text-muted);">
+              55-year-old East Asian male tea master
+            </div>
+          </div>
+
+          <!-- Col 1: Mode A (Pipeline-Optimized MMC) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-a">Mode A: Optimized MMC</span>
+              <span class="mode-latency">37.3s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_opt_16.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.99</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">1.00</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.99</b></span>
+            </div>
+            <div class="critique-box">
+              The video demonstrates outstanding fidelity to the reference portrait, perfectly preserving the subject's facial features, hairstyle, and traditional navy attire. The matcha preparation sequence displays remarkably realistic hand physics, tool interaction, and natural tea master posture throughout.
+            </div>
+            <details>
+              <summary>View Prompt</summary>
+              <div class="prompt-text">[# References <IMAGE_REF_0>[Character A]image_0.png] [aspect_ratio=16:9] [resolution=720p] [duration=5s] Character A, tranquil zen-like cinematic medium shot tracking the character's focused hands and serene face as he delicately whisks vibrant green matcha powder in a black ceramic chawan bowl with a bamboo chasen, gentle steam rising, soft bamboo garden light, contemplative masterpiece cinematography.</div>
+            </details>
+          </div>
+
+          <!-- Col 2: Mode B (Simple Prompt) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-b">Mode B: Simple Prompt</span>
+              <span class="mode-latency">27.7s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_smp_16.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.98</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.99</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.98</b></span>
+            </div>
+            <div class="critique-box">
+              The subject's facial features, hairstyle, and traditional navy samue attire match the canonical reference with flawless precision. The sequential actions depict an authentically detailed and physically realistic matcha tea preparation process using traditional utensils.
+            </div>
+            <details>
+              <summary>View Prompt</summary>
+              <div class="prompt-text">[aspect_ratio=16:9] [resolution=720p] [duration=5s] Character A (reference image) preparing matcha green tea in a Kyoto tea house</div>
+            </details>
+          </div>
+
+          <!-- Col 3: Mode C (Native Task Parameter - Simple) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-c">Mode C: Task (Simple)</span>
+              <span class="mode-latency">30.6s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_tsk_16.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.98</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.99</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.98</b></span>
+            </div>
+            <div class="critique-box">
+              The video maintains flawless identity and wardrobe consistency with the reference subject in the identical traditional Japanese setting. The procedural actions of scooping matcha and whisking tea are rendered with authentic technique, natural hand articulation, and pristine physical realism.
+            </div>
+            <details>
+              <summary>View Prompt & Config</summary>
+              <div class="prompt-text">Prompt: Character A (reference image) preparing matcha green tea in a Kyoto tea house
+
+Config: {
+  "video_config": {
+    "task": "reference_to_video",
+    "aspect_ratio": "16:9",
+    "resolution": "720p",
+    "duration": 5
+  }
+}</div>
+            </details>
+          </div>
+
+          <!-- Col 4: Mode D (Native Task Parameter - Cinematic) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-d">Mode D: Task (Cinematic)</span>
+              <span class="mode-latency">33.6s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_cin_tsk_16.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.98</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.99</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.98</b></span>
+            </div>
+            <div class="critique-box">
+              The generated video demonstrates near-flawless facial identity preservation and exact continuity of the subject's navy samue attire and traditional setting. The actions flow naturally through the authentic steps of preparing and presenting matcha with believable physics and subtle details like rising steam.
+            </div>
+            <details>
+              <summary>View Prompt & Config</summary>
+              <div class="prompt-text">Prompt: Character A, tranquil zen-like cinematic medium shot tracking the character's focused hands and serene face as he delicately whisks vibrant green matcha powder in a black ceramic chawan bowl with a bamboo chasen, gentle steam rising, soft bamboo garden light, contemplative masterpiece cinematography.
+
+Config: {
+  "video_config": {
+    "task": "reference_to_video",
+    "aspect_ratio": "16:9",
+    "resolution": "720p",
+    "duration": 5
+  }
+}</div>
+            </details>
+          </div>
+        </div>
+      </div>
+
+      <div class="case-card" data-ethnicity="Middle Eastern" data-framing="Three-Quarter">
+        <div class="case-header">
+          <div class="case-title">#17. Middle Eastern Female (30s) - Petra Ruins</div>
+          <div class="case-tags">
+            <span class="tag tag-highlight">Middle Eastern</span>
+            <span class="tag">Three-Quarter Shot</span>
+            <span class="tag">Exploring ancient ruins of Petra</span>
+          </div>
+        </div>
+        <div class="case-body">
+          <!-- Col 0: Canonical Reference Portrait -->
+          <div class="col-ref">
+            <div style="font-size: 12px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">
+              Canonical Reference
+            </div>
+            <img src="ref_17.png" alt="Reference #17" class="ref-img">
+            <div style="font-size: 11px; color: var(--text-muted);">
+              32-year-old Middle Eastern female archaeologist
+            </div>
+          </div>
+
+          <!-- Col 1: Mode A (Pipeline-Optimized MMC) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-a">Mode A: Optimized MMC</span>
+              <span class="mode-latency">26.8s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_opt_17.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.95</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.90</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.93</b></span>
+            </div>
+            <div class="critique-box">
+              The AI video exhibits remarkable facial and stylistic consistency, perfectly replicating the archaeologist's features, expression, and core apparel from the reference portrait. While the crossbody leather satchel is omitted in the video sequence, the cinematic walk through the Siq towards the Treasury is exceptionally natural and cohesive.
+            </div>
+            <details>
+              <summary>View Prompt</summary>
+              <div class="prompt-text">[# References <IMAGE_REF_0>[Character A]image_0.png] [aspect_ratio=16:9] [resolution=720p] [duration=5s] Character A, breathtaking cinematic crane reveal descending from the towering rose-red canyon walls of the Siq to follow the character as she emerges onto the sunlit plaza directly before the colossal ancient Treasury facade of Petra, dust particles glowing in sunlight, cinematic epic adventure.</div>
+            </details>
+          </div>
+
+          <!-- Col 2: Mode B (Simple Prompt) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-b">Mode B: Simple Prompt</span>
+              <span class="mode-latency">28.0s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_smp_17.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.98</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.98</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.97</b></span>
+            </div>
+            <div class="critique-box">
+              The generated sequence demonstrates near-flawless facial identity and costume adherence to the reference portrait across every keyframe. Her natural locomotion and expressive gaze transitions within the authentic Petra canyon setting provide outstanding visual realism.
+            </div>
+            <details>
+              <summary>View Prompt</summary>
+              <div class="prompt-text">[aspect_ratio=16:9] [resolution=720p] [duration=5s] Character A (reference image) walking through the ancient ruins of Petra</div>
+            </details>
+          </div>
+
+          <!-- Col 3: Mode C (Native Task Parameter - Simple) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-c">Mode C: Task (Simple)</span>
+              <span class="mode-latency">32.1s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_tsk_17.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.98</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.97</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.97</b></span>
+            </div>
+            <div class="critique-box">
+              The generated sequence demonstrates near-flawless facial identity preservation and consistent expressions matching the canonical reference. The archaeologist outfit, leather satchel, and environmental interaction throughout the Petra ruins exhibit exceptional visual fidelity and natural movement.
+            </div>
+            <details>
+              <summary>View Prompt & Config</summary>
+              <div class="prompt-text">Prompt: Character A (reference image) walking through the ancient ruins of Petra
+
+Config: {
+  "video_config": {
+    "task": "reference_to_video",
+    "aspect_ratio": "16:9",
+    "resolution": "720p",
+    "duration": 5
+  }
+}</div>
+            </details>
+          </div>
+
+          <!-- Col 4: Mode D (Native Task Parameter - Cinematic) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-d">Mode D: Task (Cinematic)</span>
+              <span class="mode-latency">37.8s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_cin_tsk_17.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-med">0.88</b></span>
+              <span class="score-pill">Outfit: <b class="score-med">0.82</b></span>
+              <span class="score-pill">Overall: <b class="score-med">0.87</b></span>
+            </div>
+            <div class="critique-box">
+              The subject's facial features, hairstyle, and outfit styling match the reference portrait well across the sequence. The motion through the Siq into the Treasury plaza is realistic and cinematic, with only the missing leather crossbody bag deviating from the reference gear.
+            </div>
+            <details>
+              <summary>View Prompt & Config</summary>
+              <div class="prompt-text">Prompt: Character A, breathtaking cinematic crane reveal descending from the towering rose-red canyon walls of the Siq to follow the character as she emerges onto the sunlit plaza directly before the colossal ancient Treasury facade of Petra, dust particles glowing in sunlight, cinematic epic adventure.
+
+Config: {
+  "video_config": {
+    "task": "reference_to_video",
+    "aspect_ratio": "16:9",
+    "resolution": "720p",
+    "duration": 5
+  }
+}</div>
+            </details>
+          </div>
+        </div>
+      </div>
+
+      <div class="case-card" data-ethnicity="South Asian" data-framing="Full-Body">
+        <div class="case-header">
+          <div class="case-title">#18. South Asian Female (40s) - Himalayan Sunrise Yoga</div>
+          <div class="case-tags">
+            <span class="tag tag-highlight">South Asian</span>
+            <span class="tag">Full-Body Action Shot</span>
+            <span class="tag">Performing yoga at sunrise</span>
+          </div>
+        </div>
+        <div class="case-body">
+          <!-- Col 0: Canonical Reference Portrait -->
+          <div class="col-ref">
+            <div style="font-size: 12px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">
+              Canonical Reference
+            </div>
+            <img src="ref_18.png" alt="Reference #18" class="ref-img">
+            <div style="font-size: 11px; color: var(--text-muted);">
+              40-year-old South Asian female yogi
+            </div>
+          </div>
+
+          <!-- Col 1: Mode A (Pipeline-Optimized MMC) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-a">Mode A: Optimized MMC</span>
+              <span class="mode-latency">31.8s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_opt_18.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.97</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.98</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.97</b></span>
+            </div>
+            <div class="critique-box">
+              The video demonstrates outstanding fidelity to the reference portrait, maintaining perfect facial identity, ethnicity, and hairstyle throughout the sequence. The yoga apparel, scenic Himalayan sunrise backdrop, and dynamic transitions between yoga postures are realistically executed with natural anatomy and fluid motion.
+            </div>
+            <details>
+              <summary>View Prompt</summary>
+              <div class="prompt-text">[# References <IMAGE_REF_0>[Character A]image_0.png] [aspect_ratio=16:9] [resolution=720p] [duration=5s] Character A, graceful slow 180-degree panning profile shot following the character as she transitions fluidly from warrior pose into a serene standing balance pose on a cliffside wooden deck, morning mountain mist drifting below as golden sunlight illuminates snow-capped Himalayan peaks, peaceful transcendent cinematography.</div>
+            </details>
+          </div>
+
+          <!-- Col 2: Mode B (Simple Prompt) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-b">Mode B: Simple Prompt</span>
+              <span class="mode-latency">28.6s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_smp_18.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.98</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">1.00</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.98</b></span>
+            </div>
+            <div class="critique-box">
+              The generated video demonstrates exceptional fidelity to the reference image, preserving the subject's exact facial features, ethnicity, hairstyle, and outfit details across all keyframes. The sun salutation movement flows naturally with anatomically precise yoga transitions and perfectly consistent sunrise environment lighting.
+            </div>
+            <details>
+              <summary>View Prompt</summary>
+              <div class="prompt-text">[aspect_ratio=16:9] [resolution=720p] [duration=5s] Character A (reference image) performing yoga at sunrise in the mountains</div>
+            </details>
+          </div>
+
+          <!-- Col 3: Mode C (Native Task Parameter - Simple) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-c">Mode C: Task (Simple)</span>
+              <span class="mode-latency">33.0s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_tsk_18.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.97</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.99</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.97</b></span>
+            </div>
+            <div class="critique-box">
+              The video demonstrates outstanding fidelity to the reference image, preserving the subject's facial features, ethnic identity, and exact outfit across all frames. The Sun Salutation sequence flows naturally with anatomically plausible kinematics and seamless sunrise lighting consistency.
+            </div>
+            <details>
+              <summary>View Prompt & Config</summary>
+              <div class="prompt-text">Prompt: Character A (reference image) performing yoga at sunrise in the mountains
+
+Config: {
+  "video_config": {
+    "task": "reference_to_video",
+    "aspect_ratio": "16:9",
+    "resolution": "720p",
+    "duration": 5
+  }
+}</div>
+            </details>
+          </div>
+
+          <!-- Col 4: Mode D (Native Task Parameter - Cinematic) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-d">Mode D: Task (Cinematic)</span>
+              <span class="mode-latency">37.2s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_cin_tsk_18.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.94</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.98</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.96</b></span>
+            </div>
+            <div class="critique-box">
+              The generated video demonstrates exceptional adherence to the reference subject's identity, hairstyle, and specific workout attire across all keyframes. The yoga flow sequence progresses smoothly through realistic, anatomically accurate poses in a scenic mountain sunrise setting perfectly matching the reference environment.
+            </div>
+            <details>
+              <summary>View Prompt & Config</summary>
+              <div class="prompt-text">Prompt: Character A, graceful slow 180-degree panning profile shot following the character as she transitions fluidly from warrior pose into a serene standing balance pose on a cliffside wooden deck, morning mountain mist drifting below as golden sunlight illuminates snow-capped Himalayan peaks, peaceful transcendent cinematography.
+
+Config: {
+  "video_config": {
+    "task": "reference_to_video",
+    "aspect_ratio": "16:9",
+    "resolution": "720p",
+    "duration": 5
+  }
+}</div>
+            </details>
+          </div>
+        </div>
+      </div>
+
+      <div class="case-card" data-ethnicity="Hispanic / Latino" data-framing="Headshot">
+        <div class="case-header">
+          <div class="case-title">#19. Hispanic Male (20s) - Vintage Havana</div>
+          <div class="case-tags">
+            <span class="tag tag-highlight">Hispanic / Latino</span>
+            <span class="tag">Headshot / Close-up</span>
+            <span class="tag">With vintage motorcycle in Havana</span>
+          </div>
+        </div>
+        <div class="case-body">
+          <!-- Col 0: Canonical Reference Portrait -->
+          <div class="col-ref">
+            <div style="font-size: 12px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">
+              Canonical Reference
+            </div>
+            <img src="ref_19.png" alt="Reference #19" class="ref-img">
+            <div style="font-size: 11px; color: var(--text-muted);">
+              27-year-old Hispanic male
+            </div>
+          </div>
+
+          <!-- Col 1: Mode A (Pipeline-Optimized MMC) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-a">Mode A: Optimized MMC</span>
+              <span class="mode-latency">28.4s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_opt_19.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.98</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.99</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.98</b></span>
+            </div>
+            <div class="critique-box">
+              The generated video demonstrates near-flawless adherence to the reference image, flawlessly preserving the subject's facial identity, tattoos, jewelry, and leather jacket. The head motion and gaze transitions are fluid, natural, and maintain stable physical realism throughout the scene.
+            </div>
+            <details>
+              <summary>View Prompt</summary>
+              <div class="prompt-text">[# References <IMAGE_REF_0>[Character A]image_0.png] [aspect_ratio=16:9] [resolution=720p] [duration=5s] Character A, warm pastel-toned cinematic street tracking shot gliding past colorful weathered colonial buildings in Havana, tracking the character as he leans confidently against a classic motorcycle, nodding warmly to passersby as vintage turquoise cars cruise slowly past on the cobblestone avenue, nostalgic cinematic vibe.</div>
+            </details>
+          </div>
+
+          <!-- Col 2: Mode B (Simple Prompt) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-b">Mode B: Simple Prompt</span>
+              <span class="mode-latency">26.4s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_smp_19.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.98</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.98</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.97</b></span>
+            </div>
+            <div class="critique-box">
+              The video maintains exceptional fidelity to the reference portrait, preserving facial geometry, expression, and distinct details like hand tattoos flawlessly. The transition from leaning over the motorcycle handlebars to standing upright is natural and physically grounded within the Havana street setting.
+            </div>
+            <details>
+              <summary>View Prompt</summary>
+              <div class="prompt-text">[aspect_ratio=16:9] [resolution=720p] [duration=5s] Character A (reference image) standing next to a vintage motorcycle in Havana</div>
+            </details>
+          </div>
+
+          <!-- Col 3: Mode C (Native Task Parameter - Simple) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-c">Mode C: Task (Simple)</span>
+              <span class="mode-latency">32.4s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_tsk_19.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.98</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.97</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.97</b></span>
+            </div>
+            <div class="critique-box">
+              The subject exhibits near-flawless facial identity match, preserving hair texture, facial structure, and expression seamlessly across various camera angles. The vintage leather jacket, white t-shirt, and vintage motorcycle are exceptionally consistent with the reference portrait and target Havana environment.
+            </div>
+            <details>
+              <summary>View Prompt & Config</summary>
+              <div class="prompt-text">Prompt: Character A (reference image) standing next to a vintage motorcycle in Havana
+
+Config: {
+  "video_config": {
+    "task": "reference_to_video",
+    "aspect_ratio": "16:9",
+    "resolution": "720p",
+    "duration": 5
+  }
+}</div>
+            </details>
+          </div>
+
+          <!-- Col 4: Mode D (Native Task Parameter - Cinematic) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-d">Mode D: Task (Cinematic)</span>
+              <span class="mode-latency">30.4s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_cin_tsk_19.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.98</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.98</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.97</b></span>
+            </div>
+            <div class="critique-box">
+              The video maintains near-flawless facial identity, hairstyle, and wardrobe consistency with the reference image down to the tattoos, jewelry, and worn leather jacket. The micro-expressions and natural head turns while leaning on the vintage motorcycle create a fluid, highly realistic scene.
+            </div>
+            <details>
+              <summary>View Prompt & Config</summary>
+              <div class="prompt-text">Prompt: Character A, warm pastel-toned cinematic street tracking shot gliding past colorful weathered colonial buildings in Havana, tracking the character as he leans confidently against a classic motorcycle, nodding warmly to passersby as vintage turquoise cars cruise slowly past on the cobblestone avenue, nostalgic cinematic vibe.
+
+Config: {
+  "video_config": {
+    "task": "reference_to_video",
+    "aspect_ratio": "16:9",
+    "resolution": "720p",
+    "duration": 5
+  }
+}</div>
+            </details>
+          </div>
+        </div>
+      </div>
+
+      <div class="case-card" data-ethnicity="Caucasian" data-framing="Full-Body">
+        <div class="case-header">
+          <div class="case-title">#20. Scandinavian Female (20s) - Lapland Husky Sled</div>
+          <div class="case-tags">
+            <span class="tag tag-highlight">Caucasian</span>
+            <span class="tag">Full-Body Action Shot</span>
+            <span class="tag">Walking dogs in snowy Lapland</span>
+          </div>
+        </div>
+        <div class="case-body">
+          <!-- Col 0: Canonical Reference Portrait -->
+          <div class="col-ref">
+            <div style="font-size: 12px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">
+              Canonical Reference
+            </div>
+            <img src="ref_20.png" alt="Reference #20" class="ref-img">
+            <div style="font-size: 11px; color: var(--text-muted);">
+              25-year-old Scandinavian female
+            </div>
+          </div>
+
+          <!-- Col 1: Mode A (Pipeline-Optimized MMC) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-a">Mode A: Optimized MMC</span>
+              <span class="mode-latency">37.5s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_opt_20.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.95</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.96</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.94</b></span>
+            </div>
+            <div class="critique-box">
+              The video maintains exceptional identity and outfit consistency, accurately reproducing the subject's braided hair, patterned knit sweater, winter gear, and both distinct huskies. The dynamic running motion through the snowy Lapland forest is fluid and natural with convincing atmospheric coherence.
+            </div>
+            <details>
+              <summary>View Prompt</summary>
+              <div class="prompt-text">[# References <IMAGE_REF_0>[Character A]image_0.png] [aspect_ratio=16:9] [resolution=720p] [duration=5s] Character A, majestic wide-angle cinematic tracking shot following the character and her two energetic husky dogs as they jog through a pristine snow-covered pine forest in Lapland, fresh powder puffing beneath their footsteps under a soft twilight sky with faint emerald aurora borealis ribbons dancing overhead, fairy-tale winter realism.</div>
+            </details>
+          </div>
+
+          <!-- Col 2: Mode B (Simple Prompt) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-b">Mode B: Simple Prompt</span>
+              <span class="mode-latency">28.8s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_smp_20.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.95</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.98</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.96</b></span>
+            </div>
+            <div class="critique-box">
+              The generated video demonstrates exceptional continuity with the reference, flawlessly preserving the subject's facial features, braided hairstyle, and specific Nordic knitwear. The walking dynamics, interaction with the huskies, and realistic footsteps in deep snow maintain complete visual and physical plausibility throughout.
+            </div>
+            <details>
+              <summary>View Prompt</summary>
+              <div class="prompt-text">[aspect_ratio=16:9] [resolution=720p] [duration=5s] Character A (reference image) walking with sled dogs through a snowy pine forest in Lapland</div>
+            </details>
+          </div>
+
+          <!-- Col 3: Mode C (Native Task Parameter - Simple) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-c">Mode C: Task (Simple)</span>
+              <span class="mode-latency">32.4s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_tsk_20.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.96</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.98</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.96</b></span>
+            </div>
+            <div class="critique-box">
+              The generated video demonstrates exceptional fidelity to the reference portrait, preserving exact facial features, braided hairstyle, and knitwear patterns across multiple dynamic camera angles. Motion realism and environmental interaction—from the realistic footprints in the snow to the natural gait of the huskies—are seamlessly executed.
+            </div>
+            <details>
+              <summary>View Prompt & Config</summary>
+              <div class="prompt-text">Prompt: Character A (reference image) walking with sled dogs through a snowy pine forest in Lapland
+
+Config: {
+  "video_config": {
+    "task": "reference_to_video",
+    "aspect_ratio": "16:9",
+    "resolution": "720p",
+    "duration": 5
+  }
+}</div>
+            </details>
+          </div>
+
+          <!-- Col 4: Mode D (Native Task Parameter - Cinematic) -->
+          <div class="col-video">
+            <div class="mode-header">
+              <span class="mode-badge badge-d">Mode D: Task (Cinematic)</span>
+              <span class="mode-latency">48.3s</span>
+            </div>
+            <video controls playsinline preload="metadata" src="video_cin_tsk_20.mp4"></video>
+            <div class="score-pills">
+              <span class="score-pill">Face: <b class="score-high">0.96</b></span>
+              <span class="score-pill">Outfit: <b class="score-high">0.98</b></span>
+              <span class="score-pill">Overall: <b class="score-high">0.96</b></span>
+            </div>
+            <div class="critique-box">
+              The subject's facial features, braided hairstyle, and traditional knit attire maintain exceptional consistency with the reference image across all camera angles. Motion of both the subject and the two huskies is fluid and physically plausible within the snowy Lapland environment.
+            </div>
+            <details>
+              <summary>View Prompt & Config</summary>
+              <div class="prompt-text">Prompt: Character A, majestic wide-angle cinematic tracking shot following the character and her two energetic husky dogs as they jog through a pristine snow-covered pine forest in Lapland, fresh powder puffing beneath their footsteps under a soft twilight sky with faint emerald aurora borealis ribbons dancing overhead, fairy-tale winter realism.
+
+Config: {
+  "video_config": {
+    "task": "reference_to_video",
+    "aspect_ratio": "16:9",
+    "resolution": "720p",
+    "duration": 5
+  }
+}</div>
+            </details>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    let activeFilters = { ethnicity: 'all', framing: 'all' };
+
+    function filterData(type, val, btn) {
+      activeFilters[type] = val;
+      const group = btn.parentElement;
+      group.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+
+      document.querySelectorAll('.case-card').forEach(card => {
+        const eth = card.getAttribute('data-ethnicity');
+        const frm = card.getAttribute('data-framing');
+
+        const matchEth = (activeFilters.ethnicity === 'all' || activeFilters.ethnicity === eth);
+        const matchFrm = (activeFilters.framing === 'all' || activeFilters.framing === frm);
+
+        if (matchEth && matchFrm) {
+          card.style.display = 'block';
+        } else {
+          card.style.display = 'none';
+        }
+      });
+    }
+  </script>
+</body>
+</html>

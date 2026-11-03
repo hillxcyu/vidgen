@@ -1,68 +1,28 @@
-# `PLAN.md`
+# PLAN.md — Add Mode A (`reference` R2V) 30s Showcase Examples & Upgrade 11-Slide Bilingual GTM Decks (Slides 7–11)
 
-## 📋 Metadata
-*   **Project / Task:** Reference Adherence Benchmark: Pipeline-Optimized vs. Simple Prompt on Gemini Omni Flash 1.1
-*   **Timestamp:** 2026-09-02T06:35:00Z
-*   **Author:** Hill YU (xcyu@)
-*   **Status:** AWAITING_REVIEW
+## [2026-11-03 15:53 UTC] Stage 1: Confirmed Final Plan (11-Slide Deck Architecture)
 
----
-
-## 🎯 Objective
-Investigate and benchmark character reference adherence in `gemini-omni-1.1-flash-preview` (R2V / Image-to-Video with Reference conditioning). Specifically, compare:
-1. **Pipeline-Optimized Prompt**: Full multi-agent cinematic description with standard MMC tags (`[# References <IMAGE_REF_0>[Character A]image_0.png] [aspect_ratio=16:9] [resolution=720p] [duration=5s] Character A, ...`).
-2. **Simple Prompt**: Direct, unadorned prompt (`xcyu (reference image) skiing in Hakuba`) with the reference image attached in the payload.
-
-Results will be compiled into an interactive side-by-side HTML comparison report and deployed to `https://x20web.corp.google.com/~xcyu/reports/r2v_omini_flash_1_1/` using the `x20-upload` skill.
-
----
-
-## 📐 Architecture & Execution Plan
-
-### Step 1: Generate Canonical Character Reference Image
-*   **Model:** `gemini-3.1-flash-image` (Nano Banana 2) on Vertex AI (`project: vital-octagon-19612`, `location: global`).
-*   **Prompt:** Realistic portrait of a 20-year-old Asian male, sharp facial features, neutral lighting, looking directly at camera, alpine/winter gear.
-*   **Output:** Save to `reference_xcyu.png` and encode to base64.
-
-### Step 2: Generate Video A (Pipeline-Optimized Prompt)
-*   **Model:** `gemini-omni-1.1-flash-preview`.
-*   **Prompt Generation:** Run the pipeline's Screenwriter / Prompt Optimizer or format the canonical cinematic shot prompt:
-    *   *Prompt Text:* `"Character A, Continuous single take, dynamic cinematic tracking shot following the character skiing on Hakuba Happo-One ridge, crisp alpine morning light, Japanese Northern Alps in the background, sharp cinematic depth of field, high quality, photorealistic."`
-    *   *Full Omni Control String:* `[# References <IMAGE_REF_0>[Character A]image_0.png] [aspect_ratio=16:9] [resolution=720p] [duration=5s] Character A, Continuous single take...`
-*   **Input Payload:** Text prompt + 1 attached reference image.
-*   **Output:** Save to `video_pipeline_optimized.mp4`.
-
-### Step 3: Generate Video B (Simple Prompt)
-*   **Model:** `gemini-omni-1.1-flash-preview`.
-*   **Prompt Text:** `"xcyu (reference image) skiing in Hakuba"`
-*   **Full Omni Payload:**
-    *   *Prompt Text:* `[aspect_ratio=16:9] [resolution=720p] [duration=5s] xcyu (reference image) skiing in Hakuba` (also testing direct `<IMAGE_REF_0>[xcyu]image_0.png` binding).
-    *   *Images:* 1 attached reference image.
-*   **Output:** Save to `video_simple_prompt.mp4`.
-
-### Step 4: Quality & Reference Adherence Evaluation
-*   Run the newly integrated **Agentic Video Understanding** (`media_processing="agentic"` on `gemini-3.7-flash`) to audit both videos:
-    *   Subject Identity Consistency against reference image.
-    *   Motion Dynamics & Skiing Realism.
-    *   Prompt Adherence.
-
-### Step 5: Build Interactive HTML Comparison Report
-*   Self-contained, modern web design:
-    *   Header: Model metadata, timestamp, experiment goals.
-    *   Reference Asset Card: Displays the generated 20yo Asian male reference image with its exact generation prompt.
-    *   Side-by-Side Video Players: Synchronized playback controls for Video A (Optimized) vs. Video B (Simple).
-    *   Verbatim Prompt Display: Exact raw control strings and payloads sent to Omni Flash.
-    *   Metric & Observation Breakdown: Quantitative scores + qualitative analysis of character resemblance, facial stability, and skiing motion.
-*   Save as `index.html`.
-
-### Step 6: Deploy to x20 Web Hosting
-*   **Target Directory:** `/google/data/rw/users/xc/xcyu/www/reports/r2v_omini_flash_1_1/`
-*   Copy `index.html`, `reference_xcyu.png`, `video_pipeline_optimized.mp4`, and `video_simple_prompt.mp4`.
-*   Apply permissions: `chmod -R a+rX /google/data/rw/users/xc/xcyu/www/reports/r2v_omini_flash_1_1/`.
-*   Verify via `curl` and provide live link: `https://x20web.corp.google.com/~xcyu/reports/r2v_omini_flash_1_1/`.
+### Confirmed Scope & Slide Architecture
+- **11-Slide Bilingual Deck Structure (`EN` & `ZH-CN`):**
+  - **Slides 1–6:** Cover, Act I (8-Second Wall), Challenges vs. Solutions, Section Break, ADK 2.0 6-Agent Architecture, and Methodology & Benchmark Proof (updated to reflect **9 × 30s** showcase runs across all 3 continuity modes).
+  - **Slide 7 (NEW) — Mode A (`mode="reference"`, Shared `#FFFFFF` Canonical R2V) 30s Retail Showcase:** 3 cards (`UC1 Terracotta Alpine Down Jacket`, `UC2 AeroPulse Cobalt Carbon Runner`, `UC3 LuminaDrop Golden Serum`) with `2×2` storyboard strips (`#FFFFFF Anchor` + `Shot 1 R2V` + `Shot 2 R2V` + `Shot 3 R2V`) demonstrating editorial multi-location hard cuts with `0%` `#FFFFFF` lock and `0.95` SKU consistency across all 3 shots.
+  - **Slide 8 — Mode B (`mode="i2v_chaining"`, Shot 1 R2V + `<FIRST_FRAME>` I2V) 30s Retail Showcase:** 3 cards with pixel-locked cut MAE metrics (`1.91–3.95`).
+  - **Slide 9 — Mode C (`mode="video_extend"`, Shot 1 R2V + `5.0s` Audio-Intact `task="extend"`) 30s Retail Showcase:** 3 cards with seam-locked single-take A/V metrics (`cut_MAE 2.62–7.83`).
+  - **Slide 10 (Unified Hub + Comparison + Hybrid Combinations):**
+    1. **Fast-Access All-9 Examples Matrix (`3 SKUs × 3 Modes`):** Clickable one-click MP4 buttons for all **9 × 30s retail campaigns** (`UC1 / UC2 / UC3` × `🎨 Mode A R2V | ⚡ Mode B I2V | 🎞️ Mode C Extend`) + Live Web Studio launcher in one place.
+    2. **Side-by-Side 3-Method Engineering Comparison Table (`Mode A` vs. `Mode B` vs. `Mode C`):** Conditioning inputs, transition physics, parallel vs. sequential execution, primary sweet spot, and drift/API constraints.
+    3. **Hybrid Multi-Mode Combination Patterns Banner/Card:** How directors combine `Mode A + Mode B + Mode C + Dual-Anchor` per shot within a single 30s–60s+ commercial (e.g., *Act-Break Re-Anchoring*: `Mode A R2V` → `Mode C 5s Extend` unbroken 20s take → `Mode A R2V` hard-cut location jump to re-lock `#FFFFFF` SKU fidelity → `Dual-Anchor` surgical mid-spot re-shoot).
+  - **Slide 11 — GTM Execution Playbook:** Buyer persona qualification matrix & 2-week customer pilot path (benchmarking all 3 modes + hybrid choreography).
 
 ---
 
-## ❓ Clarifications & Confirmation
-1. For Video B (Simple prompt), would you like the prompt text to literally be `[aspect_ratio=16:9] [resolution=720p] [duration=5s] xcyu (reference image) skiing in Hakuba` or pure plain text without any bracket tokens? (We recommend keeping the format tokens `[aspect_ratio=16:9] [resolution=720p] [duration=5s]` so the video resolution matches 720p 16:9, while keeping the user prompt completely minimal).
-2. Please confirm to proceed to Stage 2 (`DEFINE.md`) and Stage 3 (`ACTION.md`).
+### Execution Phases
+1. **Phase 1 — Generate 3 × 30s Mode A (`mode="reference"`) Retail Showcase Runs & Sync 9-Run Manifest**
+   - Build `scratch/retail_showcase/run_retail_cases_r2v_mode_a.py` to generate `retail_uc1_apparel_r2v_30s`, `retail_uc2_footwear_r2v_30s`, and `retail_uc3_beauty_r2v_30s` where **all 3 shots (`0–10s`, `10–20s`, `20–30s`)** run native `task="reference_to_video"` with `[anchor_b64]` across distinct multi-location retail sets, verified via `detect_r2v_first_frame_lock()` (`white_px <= 25%`, `MAE >= 12.0`).
+   - Stitch each 30s master with `80ms` `xfade` + equal-power `acrossfade`, upload to `gs://vital-octagon-19612-vidgen-showcase/showcase/`, and pin all **9 showcase runs** (`3 Mode C` + `3 Mode B` + `3 Mode A`) in `output/saved_runs.json` and GCS `saved_runs.json`.
+2. **Phase 2 — Web Studio Badge Polish & Cloud Run Redeployment (`vidgen-frontend`)**
+   - Ensure distinct color-coded Showcase Drawer badges for all 3 modes (`🎨 Mode A: R2V`, `⚡ Mode B: I2V`, `🎞️ Mode C: Video Extend`) in `app/templates/index.html` and `src/templates/index.html`, run `uv run pytest tests/unit tests/integration`, and deploy `vidgen-frontend` on Cloud Run (`vital-octagon-19612`, `asia-east1`) with the 9-run seed manifest.
+3. **Phase 3 — Mode A Composites, 11-Slide Bilingual Deck Build & Active Vision Audit (`audit_v11/`)**
+   - Generate bilingual `2×2` Mode A storyboard strips (`uc{1,2,3}_r2v_strip_{en,zh}.png`) and sync to GCS.
+   - Rebuild both **EN (`1b5jlgCWk3Q2LFr5tDYAZZps6Pw_N2_EaIfbAwk9M_3A`)** and **ZH-CN (`12zy4XxPt7sllLsNF3nMIroPRhZSvCGsdEW3UwKnAdj0`)** to the cohesive 11-slide layout (`v11_` element IDs, updated `01 / 11 .. 11 / 11` footers and tripartite speaker notes).
+   - Export PDFs/PNGs (`audit_v11/`) and visually inspect Slides 7, 8, 9, 10, and 11 in both EN and ZH-CN to guarantee zero text overflow, crisp alignment, and working links.

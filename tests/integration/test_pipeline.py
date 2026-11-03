@@ -89,3 +89,52 @@ def test_pipeline_stop_callback():
 
         final_state = run_pipeline(state, output_dir=tmpdir, client=mock_client, event_callback=event_cb, is_stopped=stop_check)
         assert len(final_state.shots) <= 3
+
+
+def test_pipeline_e2e_video_extend_hybrid_r2v_shot1():
+    import base64 as _b64
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        mock_client = _make_mock_client()
+        # Create a colored non-white synthetic MP4 so detect_r2v_first_frame_lock sees MAE >= 12 vs #FFFFFF anchor
+        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp:
+            p = tmp.name
+        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+        out = cv2.VideoWriter(p, fourcc, 10.0, (64, 64))
+        for _ in range(60):  # 6s clip so 5s tail extraction works cleanly
+            out.write(np.full((64, 64, 3), 40, dtype=np.uint8))
+        out.release()
+        with open(p, "rb") as f:
+            mp4_bytes = f.read()
+        os.remove(p)
+
+        mock_interaction = MagicMock()
+        mock_interaction.output = mp4_bytes
+        mock_client.interactions.create.return_value = mock_interaction
+
+        white_img = np.full((64, 64, 3), 255, dtype=np.uint8)
+        _, png_buf = cv2.imencode(".png", white_img)
+        white_b64 = _b64.b64encode(png_buf.tobytes()).decode("utf-8")
+
+        state = PipelineState(
+            original_intent="A retail showcase walk in a sunlit cafe",
+            num_shots=2,
+            mode="video_extend",
+            reference_assets_b64=[white_b64],
+            duration=10,
+        )
+        final_state = run_pipeline(state, output_dir=tmpdir, client=mock_client)
+        assert len(final_state.shots) == 2
+        assert final_state.stitched_video_path is not None
+
+        calls = mock_client.interactions.create.call_args_list
+        assert len(calls) >= 2
+        # Shot 1 MUST use native task="reference_to_video" with image input
+        shot1_kwargs = calls[0].kwargs
+        assert shot1_kwargs["generation_config"] == {"video_config": {"task": "reference_to_video"}}
+        assert [pt["type"] for pt in shot1_kwargs["input"]] == ["text", "image"]
+        # Final call (Shot 2) MUST use task="extend" with video input ONLY (zero reference images)
+        shot2_kwargs = calls[-1].kwargs
+        assert shot2_kwargs["generation_config"] == {"video_config": {"task": "extend"}}
+        assert [pt["type"] for pt in shot2_kwargs["input"]] == ["text", "video"]
+

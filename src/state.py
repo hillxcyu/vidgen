@@ -21,7 +21,7 @@ class StoryboardEntry(BaseModel):
 class PipelineState(BaseModel):
     original_intent: str
     num_shots: int = Field(default=3, ge=1, le=10)
-    mode: Literal["reference", "i2v_chaining"] = "i2v_chaining"
+    mode: Literal["reference", "i2v_chaining", "video_extend"] = "i2v_chaining"
     aspect_ratio: str = "16:9"
     resolution: str = "720p"
     duration: int = 10

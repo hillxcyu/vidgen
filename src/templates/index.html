@@ -150,12 +150,13 @@
         }
         .mode-box {
             display: flex;
-            gap: 12px;
+            flex-wrap: wrap;
+            gap: 10px;
             margin-bottom: 14px;
         }
         label.mode-option {
-            flex: 1;
-            padding: 14px 16px;
+            flex: 1 1 155px;
+            padding: 12px 14px;
             border-radius: 10px;
             border: 1px solid var(--border-color);
             background: #090d16;
@@ -486,6 +487,13 @@
                             <div style="font-size: 11px; color: var(--muted-text);">OpenCV terminal frame extraction for unbroken motion continuity</div>
                         </div>
                     </label>
+                    <label class="mode-option" id="mode-extend">
+                        <input type="radio" name="mode" value="video_extend" onchange="window.selectMode('video_extend')">
+                        <div>
+                            <strong>🎞️ Omni 1.5 Video Extend</strong>
+                            <div style="font-size: 11px; color: var(--muted-text);">5s temporal video tail lookback with <code>task="extend"</code> for physics continuity</div>
+                        </div>
+                    </label>
                     <label class="mode-option" id="mode-ref">
                         <input type="radio" name="mode" value="reference" onchange="window.selectMode('reference')">
                         <div>
@@ -766,8 +774,8 @@
             var clean = str.replace(/\[#[\s\S]*?\]/gi, "");
             // Remove [aspect_ratio=...], [resolution=...], [duration=...], etc.
             clean = clean.replace(/\[(aspect_ratio|resolution|duration|mode|camera_angle)=[^\]]*\]/gi, "");
-            // Remove any remaining MMC image/audio tags like <FIRST_FRAME> or <IMAGE_REF_x>
-            clean = clean.replace(/<(FIRST_FRAME|IMAGE_REF_\d+|AUDIO_REF_\d+)>[^\s]*/gi, "");
+            // Remove any remaining MMC image/video/audio tags like <FIRST_FRAME>, <VIDEO_0> or <IMAGE_REF_x>
+            clean = clean.replace(/<(FIRST_FRAME|LAST_FRAME|VIDEO_\d+|IMAGE_REF_\d+|AUDIO_REF_\d+)>[^\s]*/gi, "");
             return clean.replace(/\s+/g, " ").trim();
         }
 
@@ -1105,7 +1113,15 @@
         };
 
         function formatMediaUrl(url, path, defaultFileName) {
-            if (url && url.length > 0) return url;
+            if (url && url.length > 0) {
+                if (url.indexOf("https://storage.googleapis.com/") === 0) {
+                    return "/api/gcs/" + url.substring("https://storage.googleapis.com/".length);
+                }
+                if (url.indexOf("https://storage.cloud.google.com/") === 0) {
+                    return "/api/gcs/" + url.substring("https://storage.cloud.google.com/".length);
+                }
+                return url;
+            }
             if (path && path.length > 0) {
                 var cleanPath = path.replace(/^\/+/, "");
                 return "/" + cleanPath;
@@ -1135,10 +1151,15 @@
                     var card = document.createElement("div");
                     card.className = "showcase-card";
                     var syncBadge = run.gcs_synced ? '<span class="badge badge-success">☁️ GCS Synced</span>' : '<span class="badge badge-info">💾 Local</span>';
+                    var modeBadge = run.mode === "video_extend"
+                        ? '<span class="badge badge-info" style="background: rgba(168, 85, 247, 0.2); color: #d8b4fe; border: 1px solid rgba(168, 85, 247, 0.4);">🎞️ Mode C: Video Extend</span>'
+                        : (run.mode === "reference"
+                            ? '<span class="badge badge-info" style="background: rgba(66, 133, 244, 0.2); color: #93c5fd; border: 1px solid rgba(66, 133, 244, 0.45);">🎨 Mode A: Shared R2V</span>'
+                            : '<span class="badge badge-info" style="background: rgba(52, 168, 83, 0.2); color: #86efac; border: 1px solid rgba(52, 168, 83, 0.45);">⚡ Mode B: I2V Chaining</span>');
                     var videoSrc = formatMediaUrl(run.stitched_video_url, run.stitched_video_path, "output_stitched.mp4");
                     
                     card.innerHTML = '<h4>' + run.original_intent + '</h4>' +
-                        '<div class="meta"><span>' + run.pinned_at + '</span> <span>' + run.num_shots + ' Shots</span> ' + syncBadge + '</div>' +
+                        '<div class="meta"><span>' + run.pinned_at + '</span> <span>' + run.num_shots + ' Shots</span> ' + modeBadge + ' ' + syncBadge + '</div>' +
                         (videoSrc ? '<video controls preload="metadata" src="' + videoSrc + '"></video>' : '') +
                         '<div class="showcase-actions">' +
                         '<button type="button" class="btn-secondary" style="font-size: 11px; padding: 6px 12px;" onclick="window.replayShowcaseRun(\'' + run.run_id + '\')">▶️ Load Showcase</button>' +

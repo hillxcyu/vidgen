@@ -137,6 +137,8 @@ async def optimize_prompt(
     raw_prompt: str,
     voice_transcript: Optional[str] = None,
     feedback: Optional[str] = None,
+    is_extend_shot: bool = False,
+    is_r2v_shot: bool = False,
     session_service: Optional[InMemorySessionService] = None,
     session_id: Optional[str] = None,
     client: Optional[genai.Client] = None
@@ -152,9 +154,19 @@ async def optimize_prompt(
         "STRICT RULE: If spoken dialogue is provided, state the EXACT spoken words to speak without adding extra greetings, unscripted intro lines, or filler words."
         if voice_transcript else ""
     )
+    extend_context = (
+        "\nCRITICAL VIDEO-EXTEND SEAM RULE: This shot directly extends the final frame of the preceding clip. "
+        "Maintain the exact starting environment, lighting, and subject pose from the previous shot and progress via one unbroken single-take camera movement with ZERO scene cuts or location teleports."
+        if is_extend_shot else ""
+    )
+    r2v_context = (
+        "\nCRITICAL R2V SCENE-OPENING RULE: This shot uses Reference-to-Video (task='reference_to_video') with a studio-white subject/product reference image. "
+        "Open immediately on Frame 0 inside the rich target environment described in the shot—NEVER depict, mention, or transition/dissolve out of a white studio backdrop."
+        if is_r2v_shot else ""
+    )
 
     full_prompt = (
-        f"Raw Shot Description: '{raw_prompt}'.{feedback_context}{transcript_context}\n"
+        f"Raw Shot Description: '{raw_prompt}'.{feedback_context}{transcript_context}{extend_context}{r2v_context}\n"
         "Generate an enhanced, highly-detailed cinematic prompt optimized for Gemini Omni Flash video generation. "
         "Keep it concise, under 60 words, focusing on lighting, continuous camera motion, visual clarity, and object persistence. "
         "STRICT SINGLE-SHOT RULE: The clip MUST be a single, continuous, uninterrupted camera take. Explicitly specify a single continuous camera motion (e.g. 'continuous single take', 'smooth tracking shot') and strictly forbid internal cuts, scene switches, jump cuts, or multi-angle edits. "
@@ -511,7 +523,17 @@ def run_production_loop(state: PipelineState, output_dir: str = "/tmp/vidgen_out
             state.attempt_counter += 1
 
             # 1. Prompt Optimizer Agent (runs via ADK Runner)
-            optimized_shot_prompt = asyncio.run(optimize_prompt(shot.prompt, feedback=feedback, client=client))
+            is_r2v_shot = bool(
+                state.reference_assets_b64
+                and (
+                    state.mode == "reference"
+                    or (state.mode == "i2v_chaining" and not prev_frame_b64)
+                    or (state.mode == "video_extend" and idx == 0)
+                )
+            )
+            optimized_shot_prompt = asyncio.run(
+                optimize_prompt(shot.prompt, feedback=feedback, is_r2v_shot=is_r2v_shot, client=client)
+            )
             state.log_event(
                 agent="PromptOptimizerAgent",
                 action="OPTIMIZE_PROMPT",
@@ -540,10 +562,21 @@ def run_production_loop(state: PipelineState, output_dir: str = "/tmp/vidgen_out
                 optimized_shot_prompt = shot.prompt
 
             from src.tools.omni_client import build_omni_control_string
+            use_refs = (
+                state.reference_assets_b64
+                if (
+                    state.mode == "reference"
+                    or (state.mode == "i2v_chaining" and not prev_frame_b64)
+                    or (state.mode == "video_extend" and idx == 0)
+                )
+                else None
+            )
+            shot_task = "reference_to_video" if use_refs else None
             control_str = build_omni_control_string(
                 prompt=optimized_shot_prompt,
                 input_image_b64=prev_frame_b64 if state.mode == "i2v_chaining" else None,
-                reference_images_b64=state.reference_assets_b64 if state.mode == "reference" else None,
+                task=shot_task,
+                reference_images_b64=use_refs,
                 aspect_ratio=state.aspect_ratio,
                 resolution=state.resolution,
                 duration=state.duration
@@ -559,8 +592,10 @@ def run_production_loop(state: PipelineState, output_dir: str = "/tmp/vidgen_out
                 details={
                     "shot_index": shot.shot_index,
                     "mode": state.mode,
+                    "task": shot_task or "image_to_video",
                     "prompt": optimized_shot_prompt,
-                    "has_input_image": prev_frame_b64 is not None
+                    "has_input_image": prev_frame_b64 is not None,
+                    "has_reference_anchor": bool(use_refs),
                 }
             )
 
@@ -568,6 +603,8 @@ def run_production_loop(state: PipelineState, output_dir: str = "/tmp/vidgen_out
                 video_bytes = generate_omni_clip(
                     prompt=optimized_shot_prompt,
                     input_image_b64=prev_frame_b64,
+                    task=shot_task,
+                    reference_images_b64=use_refs,
                     aspect_ratio=state.aspect_ratio,
                     resolution=state.resolution,
                     duration=state.duration,
@@ -576,6 +613,7 @@ def run_production_loop(state: PipelineState, output_dir: str = "/tmp/vidgen_out
             else:
                 video_bytes = generate_omni_clip(
                     prompt=optimized_shot_prompt,
+                    task=shot_task,
                     reference_images_b64=state.reference_assets_b64,
                     aspect_ratio=state.aspect_ratio,
                     resolution=state.resolution,

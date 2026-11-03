@@ -1,0 +1,1550 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gemini Omni Flash 1.1: Studio White vs Contextual Background Benchmark</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #090d16;
+      --card-bg: #111827;
+      --card-border: #1f2937;
+      --text: #f3f4f6;
+      --text-dim: #9ca3af;
+      --primary: #38bdf8;
+      --accent: #818cf8;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --studio: #ec4899;
+      --context: #3b82f6;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      padding: 32px 24px;
+    }
+    .container { max-width: 1720px; margin: 0 auto; }
+    
+    .header {
+      background: linear-gradient(135deg, #1e1b4b 0%, #0f172a 100%);
+      border: 1px solid #312e81;
+      border-radius: 16px;
+      padding: 32px;
+      margin-bottom: 28px;
+    }
+    .header h1 { font-size: 28px; font-weight: 800; color: #fff; margin-bottom: 8px; }
+    .header p { color: #cbd5e1; font-size: 15px; max-width: 1100px; }
+    .header .meta-bar {
+      margin-top: 16px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      font-size: 13px;
+      color: #94a3b8;
+    }
+    .meta-bar span { background: rgba(255,255,255,0.06); padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); }
+
+    /* KPI Grid */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+      gap: 18px;
+      margin-bottom: 28px;
+    }
+    .kpi-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+      padding: 20px;
+    }
+    .kpi-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); margin-bottom: 12px; }
+    .kpi-compare {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .kpi-box {
+      background: rgba(255,255,255,0.03);
+      padding: 12px;
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.05);
+    }
+    .kpi-box .lbl { font-size: 11px; color: var(--text-dim); }
+    .kpi-box .val { font-size: 22px; font-weight: 800; margin-top: 2px; }
+    .kpi-deltas {
+      font-size: 12px;
+      color: var(--text-dim);
+      border-top: 1px solid rgba(255,255,255,0.06);
+      padding-top: 10px;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    /* Filters */
+    .filter-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 24px;
+      align-items: center;
+    }
+    .filter-btn {
+      background: #1e293b;
+      color: #94a3b8;
+      border: 1px solid #334155;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .filter-btn:hover, .filter-btn.active {
+      background: #38bdf8;
+      color: #090d16;
+      border-color: #38bdf8;
+      font-weight: 700;
+    }
+
+    /* Case Card */
+    .case-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 24px;
+      margin-bottom: 28px;
+    }
+    .case-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 18px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      padding-bottom: 14px;
+    }
+    .case-title { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .case-id { background: #2563eb; color: #fff; font-size: 12px; font-weight: 800; padding: 3px 8px; border-radius: 6px; }
+    .case-title h3 { font-size: 18px; font-weight: 700; }
+    .framing-badge { background: #374151; color: #e5e7eb; font-size: 11px; padding: 3px 8px; border-radius: 4px; }
+    .demog-tag { background: #1e293b; color: #94a3b8; font-size: 11px; padding: 3px 8px; border-radius: 4px; }
+    .case-action { font-size: 13px; color: #94a3b8; }
+
+    /* Ref Row */
+    .ref-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 20px;
+      background: #0f172a;
+      padding: 14px;
+      border-radius: 12px;
+      border: 1px solid #1e293b;
+    }
+    .ref-box { text-align: center; }
+    .ref-label { font-size: 12px; font-weight: 700; color: #60a5fa; margin-bottom: 8px; }
+    .ref-label.studio-label { color: #f472b6; }
+    .ref-box img {
+      max-height: 200px;
+      width: auto;
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.1);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    }
+
+    /* Video Grid */
+    .videos-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+    }
+    @media (max-width: 1200px) {
+      .videos-grid { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 768px) {
+      .videos-grid { grid-template-columns: 1fr; }
+      .ref-row { grid-template-columns: 1fr; }
+    }
+
+    .video-col {
+      background: #0f172a;
+      border: 1px solid #1e293b;
+      border-radius: 12px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+    }
+    .video-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .badge {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    .badge-context-smp { background: #1e3a8a; color: #93c5fd; }
+    .badge-studio-smp { background: #831843; color: #fbcfe8; }
+    .badge-context-cin { background: #14532d; color: #86efac; }
+    .badge-studio-cin { background: #713f12; color: #fde047; }
+    .score-main { font-size: 14px; font-weight: 800; color: #fbbf24; }
+
+    .video-wrapper {
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      background: #000;
+      border-radius: 8px;
+      overflow: hidden;
+      margin-bottom: 8px;
+    }
+    .video-wrapper video { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+    .score-pills {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-bottom: 8px;
+    }
+    .pill {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.08);
+      font-size: 11px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: #cbd5e1;
+    }
+
+    .details-drawer { margin-top: auto; }
+    .details-drawer summary {
+      font-size: 11px;
+      color: #64748b;
+      cursor: pointer;
+      font-weight: 600;
+      padding: 4px 0;
+    }
+    .details-drawer summary:hover { color: #94a3b8; }
+    .drawer-content {
+      margin-top: 6px;
+      font-size: 11px;
+      background: #090d16;
+      padding: 8px;
+      border-radius: 6px;
+      border: 1px solid #1e293b;
+    }
+    .prompt-box { margin-bottom: 6px; color: #94a3b8; font-family: 'JetBrains Mono', monospace; font-size: 10px; word-break: break-word; }
+    .critique-box { color: #cbd5e1; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Gemini Omni Flash 1.1: Studio White vs Contextual Background Benchmark</h1>
+      <p>
+        Systematic investigation into whether isolating a reference character against a solid white studio backdrop
+        affects video generation quality, character identity, wardrobe retention, and scene relighting realism in Gemini Omni Flash 1.1.
+      </p>
+      <div class="meta-bar">
+        <span>Model: <strong>gemini-omni-1.1-flash-preview</strong></span>
+        <span>Reference Model: <strong>gemini-3.1-flash-image</strong></span>
+        <span>Evaluator: <strong>gemini-3.7-flash</strong></span>
+        <span>API Schema: <strong>generation_config.video_config.task + response_format</strong></span>
+        <span>Scenarios: <strong>10 Cases (40 Video Clips)</strong></span>
+      </div>
+    </div>
+
+    <!-- KPI Summary Grid -->
+    <div class="kpi-grid">
+      <!-- Simple Prompt Comparison -->
+      <div class="kpi-card">
+        <div class="kpi-title">Simple Prompts: Contextual vs Studio White</div>
+        <div class="kpi-compare">
+          <div class="kpi-box">
+            <div class="lbl">Contextual Ref</div>
+            <div class="val" style="color: #60a5fa;">0.954</div>
+          </div>
+          <div class="kpi-box">
+            <div class="lbl">Studio White Ref</div>
+            <div class="val" style="color: #f472b6;">0.942</div>
+          </div>
+        </div>
+        <div class="kpi-deltas">
+          <span>Overall: <span style="color: #ef4444; font-weight: 700;">-1.2%</span></span>
+          <span>Face: <span style="color: #ef4444; font-weight: 700;">-2.5%</span></span>
+          <span>Outfit: <span style="color: #ef4444; font-weight: 700;">-1.5%</span></span>
+          <span>Relight: <span style="color: #94a3b8; font-weight: 700;">-0.4%</span></span>
+        </div>
+      </div>
+
+      <!-- Cinematic Prompt Comparison -->
+      <div class="kpi-card">
+        <div class="kpi-title">Cinematic Prompts: Contextual vs Studio White</div>
+        <div class="kpi-compare">
+          <div class="kpi-box">
+            <div class="lbl">Contextual Ref</div>
+            <div class="val" style="color: #4ade80;">0.936</div>
+          </div>
+          <div class="kpi-box">
+            <div class="lbl">Studio White Ref</div>
+            <div class="val" style="color: #facc15;">0.938</div>
+          </div>
+        </div>
+        <div class="kpi-deltas">
+          <span>Overall: <span style="color: #94a3b8; font-weight: 700;">+0.2%</span></span>
+          <span>Face: <span style="color: #ef4444; font-weight: 700;">-1.3%</span></span>
+          <span>Outfit: <span style="color: #10b981; font-weight: 700;">+3.8%</span></span>
+          <span>Relight: <span style="color: #ef4444; font-weight: 700;">-1.1%</span></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Filter Buttons -->
+    <div class="filter-bar">
+      <span style="font-size: 12px; font-weight: 700; color: #64748b;">FRAMING:</span>
+      <button class="filter-btn active" onclick="filterCases('all', this)">All (10)</button>
+      <button class="filter-btn" onclick="filterCases('Headshot', this)">Headshot</button>
+      <button class="filter-btn" onclick="filterCases('Medium', this)">Bust / Medium</button>
+      <button class="filter-btn" onclick="filterCases('Three-Quarter', this)">Three-Quarter</button>
+      <button class="filter-btn" onclick="filterCases('Full-Body', this)">Full-Body</button>
+    </div>
+
+    <!-- Cases Gallery -->
+    <div id="cases-container">
+      
+        <div class="case-card" data-framing="Headshot" data-ethnicity="East Asian">
+          <div class="case-header">
+            <div class="case-title">
+              <span class="case-id">#01</span>
+              <h3>East Asian Male (20s) - Alpine Skiing</h3>
+              <span class="framing-badge">Headshot</span>
+              <span class="demog-tag">East Asian</span>
+            </div>
+            <div class="case-action">Target Action: <strong>Skiing in Hakuba</strong></div>
+          </div>
+
+          <!-- Paired References Row -->
+          <div class="ref-row">
+            <div class="ref-box">
+              <div class="ref-label">Contextual Reference (Original)</div>
+              <img src="ref_context_01.png" alt="Contextual Reference" loading="lazy">
+            </div>
+            <div class="ref-box">
+              <div class="ref-label studio-label">Studio White Reference (Seamless)</div>
+              <img src="ref_studio_01.png" alt="Studio White Reference" loading="lazy">
+            </div>
+          </div>
+
+          <!-- 4-Way Video Comparison Matrix -->
+          <div class="videos-grid">
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-context-smp">Contextual Ref · Simple</span>
+                <span class="score-main">★ 0.94</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_context_smp_01.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.94</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.96</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.95</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A (reference image) skiing in Hakuba</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> Outstanding fidelity to the reference portrait. The character's facial structure, hair, and expressions are maintained with high consistency across varied shot distances and action angles. The red and black technical Arc'teryx ski jacket, beanie, and accessories are rendered with near-perfect continuity. The integration into the Hakuba mountain environment features realistic daylight snow reflections, natural shadows, and dynamic snow spray physics during skiing motion with zero matte lines or artifacts.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-studio-smp">Studio White Ref · Simple</span>
+                <span class="score-main">★ 0.90</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_studio_smp_01.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.90</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.86</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.94</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A (reference image) skiing in Hakuba</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> The video demonstrates exceptional identity retention and environmental transfer. The character's facial structure, hair/beanie placement, and ethnicity closely match the reference portrait. The red and black ski jacket is faithfully maintained from the reference, though the close-up in Keyframe 4 temporarily renders the ski pants as red instead of the consistent black seen across the wider shots. The white studio background from the reference had no adverse spill or cutout matte artifacts; the subject is convincingly relit with cold ambient snow bounce and crisp outdoor alpine lighting. Skiing motion and snow spray physics are highly believable.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-context-cin">Contextual Ref · Cinematic</span>
+                <span class="score-main">★ 0.94</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_context_cin_01.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.91</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.94</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.96</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A, continuous single take, dynamic cinematic tracking shot following the character skiing gracefully down a powdery slope on Hakuba Happo-One ridge, crisp alpine morning sunlight reflecting off the snow, dramatic Japanese Northern Alps in the background, sharp cinematic focus, photorealistic.</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> Excellent character consistency and motion execution. The subject's facial features, dark beanie, and red/black ski jacket are accurately preserved from the reference portrait throughout the dynamic action. The environmental relighting is exceptionally natural, capturing crisp morning alpine sunlight, authentic snow bounce light on the character's clothing and face, and accurate ground shadow projection without any artifacting or compositing fringing. The ski carving kinematics and snow spray dynamics are highly realistic.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-studio-cin">Studio White Ref · Cinematic</span>
+                <span class="score-main">★ 0.92</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_studio_cin_01.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.85</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.92</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.95</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A, continuous single take, dynamic cinematic tracking shot following the character skiing gracefully down a powdery slope on Hakuba Happo-One ridge, crisp alpine morning sunlight reflecting off the snow, dramatic Japanese Northern Alps in the background, sharp cinematic focus, photorealistic.</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> The video demonstrates exceptional character consistency and environment integration. Despite the reference image being set against a flat white studio backdrop, the model successfully transferred the subject into a high-glare alpine environment with no matte lines, edge bleeding, or studio light spill. Outdoor key light, bounce light from snow, and cast shadows are physically accurate. The jacket pattern and beanie closely match the reference, with plausible contextual additions like ski goggles and gloves. Skiing physics and powder spray dynamics are fluid and realistic.</div>
+                </div>
+              </details>
+            </div>
+            
+          </div>
+        </div>
+        
+
+        <div class="case-card" data-framing="Full-Body" data-ethnicity="Black / African">
+          <div class="case-header">
+            <div class="case-title">
+              <span class="case-id">#02</span>
+              <h3>Black Female (20s) - Track Sprinting</h3>
+              <span class="framing-badge">Full-Body</span>
+              <span class="demog-tag">Black / African</span>
+            </div>
+            <div class="case-action">Target Action: <strong>Sprinting on coastal track</strong></div>
+          </div>
+
+          <!-- Paired References Row -->
+          <div class="ref-row">
+            <div class="ref-box">
+              <div class="ref-label">Contextual Reference (Original)</div>
+              <img src="ref_context_02.png" alt="Contextual Reference" loading="lazy">
+            </div>
+            <div class="ref-box">
+              <div class="ref-label studio-label">Studio White Reference (Seamless)</div>
+              <img src="ref_studio_02.png" alt="Studio White Reference" loading="lazy">
+            </div>
+          </div>
+
+          <!-- 4-Way Video Comparison Matrix -->
+          <div class="videos-grid">
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-context-smp">Contextual Ref · Simple</span>
+                <span class="score-main">★ 0.95</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_context_smp_02.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.95</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.96</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.95</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A (reference image) sprinting on an outdoor running track</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> The video demonstrates outstanding character adherence and kinematic realism. The subject's facial features, afro hairstyle with headband, and earrings are preserved with high fidelity across multiple dynamic angles (starting stance, side profile sprint, close-up tracking, and frontal sprint). The neon running jacket, seam patterns, grey leggings, and running footwear remain fully consistent throughout. Because the reference was already set in a contextual outdoor track environment, the lighting and color integration are seamless without any artificial bleeding or matte artifacts.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-studio-smp">Studio White Ref · Simple</span>
+                <span class="score-main">★ 0.94</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_studio_smp_02.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.92</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.96</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.95</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A (reference image) sprinting on an outdoor running track</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> The video demonstrates outstanding fidelity to the reference image. The character's facial features, skin tone, and afro hairstyle are well preserved across both side-profile and frontal sprint angles. The outfit consistency is exceptional, precisely recreating the neon yellow-green hooded jacket, charcoal leggings, watch, and athletic footwear. Crucially, despite the reference image being set against an isolated seamless white studio background, the model completely relit the character with natural outdoor sunlight and believable track shadows without any edge haloing, cutout matte lines, or flat studio bleed.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-context-cin">Contextual Ref · Cinematic</span>
+                <span class="score-main">★ 0.80</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_context_cin_02.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.88</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.45</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.95</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A, low-angle dynamic cinematic tracking shot racing alongside the character as she sprints explosively down a red running track next to the ocean, athletic stride, glistening skin in golden afternoon light, shallow depth of field, photorealistic 8k.</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> Facial features, skin tone, athletic physique, and afro headband hairstyle match the reference portrait with strong fidelity. The video completely alters her wardrobe from the neon yellow jacket and full leggings to a cream tank top and running shorts, which fits the athletic sprint context but lowers outfit consistency. Relighting is exceptional, with warm golden hour sunlight naturally wrapping her skin and zero artifacts or background bleed from the original reference.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-studio-cin">Studio White Ref · Cinematic</span>
+                <span class="score-main">★ 0.93</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_studio_cin_02.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.92</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.95</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.94</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A, low-angle dynamic cinematic tracking shot racing alongside the character as she sprints explosively down a red running track next to the ocean, athletic stride, glistening skin in golden afternoon light, shallow depth of field, photorealistic 8k.</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> The video demonstrates outstanding character fidelity and seamless relighting. The subject's facial structure, natural afro hairstyle, and athletic physique match the reference portrait precisely while displaying appropriate exertion and focus. The neon yellow running jacket, black leggings, and running footwear are perfectly preserved. Despite the high-key white studio background of the source image, the subject is completely re-rendered into the golden-hour coastal environment without any white fringe, studio matte lines, or flat lighting artifacts. Warm sunlight and directional shadows wrap naturally around the subject, complementing the dynamic, believable sprinting kinematics.</div>
+                </div>
+              </details>
+            </div>
+            
+          </div>
+        </div>
+        
+
+        <div class="case-card" data-framing="Medium" data-ethnicity="Caucasian">
+          <div class="case-header">
+            <div class="case-title">
+              <span class="case-id">#03</span>
+              <h3>Caucasian Male (30s) - Parisian Cafe</h3>
+              <span class="framing-badge">Medium</span>
+              <span class="demog-tag">Caucasian</span>
+            </div>
+            <div class="case-action">Target Action: <strong>Drinking coffee in Paris cafe</strong></div>
+          </div>
+
+          <!-- Paired References Row -->
+          <div class="ref-row">
+            <div class="ref-box">
+              <div class="ref-label">Contextual Reference (Original)</div>
+              <img src="ref_context_03.png" alt="Contextual Reference" loading="lazy">
+            </div>
+            <div class="ref-box">
+              <div class="ref-label studio-label">Studio White Reference (Seamless)</div>
+              <img src="ref_studio_03.png" alt="Studio White Reference" loading="lazy">
+            </div>
+          </div>
+
+          <!-- 4-Way Video Comparison Matrix -->
+          <div class="videos-grid">
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-context-smp">Contextual Ref · Simple</span>
+                <span class="score-main">★ 0.97</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_context_smp_03.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.98</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.98</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.96</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A (reference image) drinking coffee in a Parisian cafe</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> Exceptional fidelity across all metrics. The subject's facial features, beard texture, hairstyle, and expressions are almost indistinguishable from the reference portrait. The cream cable-knit sweater and wedding ring are replicated with pinpoint accuracy. The character naturally interacts with the coffee cup, showcasing organic hand kinematics and realistic sensory expressions while sipping. The warm cafe environmental lighting blends flawlessly across the subject with zero matte lines, haloing, or lighting dissonance.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-studio-smp">Studio White Ref · Simple</span>
+                <span class="score-main">★ 0.96</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_studio_smp_03.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.96</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.98</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.95</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A (reference image) drinking coffee in a Parisian cafe</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> The video demonstrates outstanding fidelity to the reference portrait. Facial geometry, eye color, beard density, and hairstyle match the reference near-perfectly across all frames. The cream cable-knit sweater is reproduced with precise cable patterns and tactile weave texture. Environment relighting is exceptionally executed: despite the reference having a seamless white studio background, the video shows zero white haloing, edge clipping, or flat studio bleed. Instead, the character is naturally bathed in the warm, diffused Parisian daylight beneath the cafe awning with physically plausible shadows and reflections.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-context-cin">Contextual Ref · Cinematic</span>
+                <span class="score-main">★ 0.96</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_context_cin_03.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.96</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.98</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.95</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A, slow medium dolly push-in shot of the character sitting by a sunlit window table in an elegant Parisian bistro, gently raising an espresso cup and taking a warm sip as morning street life blurs softly outside, cinematic warm palette.</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> Exceptional identity preservation and seamless environmental integration. The subject's facial features, beard grooming, and expression match the reference portrait precisely. The cream cable-knit sweater and wedding band are accurately replicated in texture and styling. The relighting from the large Parisian bistro window is completely natural, casting soft directional morning highlights and warm shadows across the subject without any edge artifacting or background bleed.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-studio-cin">Studio White Ref · Cinematic</span>
+                <span class="score-main">★ 0.97</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_studio_cin_03.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.96</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.98</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.97</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A, slow medium dolly push-in shot of the character sitting by a sunlit window table in an elegant Parisian bistro, gently raising an espresso cup and taking a warm sip as morning street life blurs softly outside, cinematic warm palette.</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> The video demonstrates outstanding fidelity to the reference portrait. Facial structure, beard density, hair texture, and eye features are preserved with remarkable accuracy across all frames. The cream cable-knit sweater is meticulously replicated down to the knit pattern and neckline. Environment integration is flawless; despite the reference image having a seamless white studio background, there is zero haloing, edge cutout artifacts, or flat lighting bleed. The character is completely relit with natural, warm window daylight typical of a Parisian bistro setting, and the motion kinematics of lifting the espresso cup and sipping are smooth and realistic.</div>
+                </div>
+              </details>
+            </div>
+            
+          </div>
+        </div>
+        
+
+        <div class="case-card" data-framing="Headshot" data-ethnicity="South Asian">
+          <div class="case-header">
+            <div class="case-title">
+              <span class="case-id">#04</span>
+              <h3>South Asian Female (20s) - Mumbai Market</h3>
+              <span class="framing-badge">Headshot</span>
+              <span class="demog-tag">South Asian</span>
+            </div>
+            <div class="case-action">Target Action: <strong>Walking in Mumbai market</strong></div>
+          </div>
+
+          <!-- Paired References Row -->
+          <div class="ref-row">
+            <div class="ref-box">
+              <div class="ref-label">Contextual Reference (Original)</div>
+              <img src="ref_context_04.png" alt="Contextual Reference" loading="lazy">
+            </div>
+            <div class="ref-box">
+              <div class="ref-label studio-label">Studio White Reference (Seamless)</div>
+              <img src="ref_studio_04.png" alt="Studio White Reference" loading="lazy">
+            </div>
+          </div>
+
+          <!-- 4-Way Video Comparison Matrix -->
+          <div class="videos-grid">
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-context-smp">Contextual Ref · Simple</span>
+                <span class="score-main">★ 0.95</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_context_smp_04.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.95</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.96</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.96</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A (reference image) walking through a colorful Mumbai market</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> The video demonstrates exceptional identity and outfit consistency across all angles and expressions. The subject's facial features, hairstyle, and intricate green embroidered saree are accurately preserved from the reference image. Environmental lighting and depth of field in the busy Mumbai market scene integrate flawlessly onto the character with no artifacting, unnatural edge matting, or flat lighting bleed.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-studio-smp">Studio White Ref · Simple</span>
+                <span class="score-main">★ 0.95</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_studio_smp_04.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.95</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.94</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.96</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A (reference image) walking through a colorful Mumbai market</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> The video demonstrates exceptional character consistency and scene integration. The subject's facial geometry, light hazel eyes, distinctive smile, and wavy dark hair perfectly match the reference portrait. The emerald green traditional garment with intricate gold embroidery along the neckline and dupatta is maintained with high fidelity. Crucially, despite the reference portrait having a pure white studio background, the AI completely avoided any cutout haloing, matte lines, or flat lighting bleed; the character is naturally relit with warm, ambient outdoor daylight and realistic shadow play appropriate for a bustling Mumbai street market.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-context-cin">Contextual Ref · Cinematic</span>
+                <span class="score-main">★ 0.95</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_context_cin_04.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.95</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.96</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.96</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A, vibrant shallow depth-of-field tracking shot gliding backward in front of the character as she walks happily through a bustling Mumbai flower and spice market, golden hour backlight catching the silk fabric, dynamic festive ambiance, cinematic photorealism.</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> The video demonstrates exceptional character fidelity and environment integration. Facial features, expression, hair styling, and jewelry accurately preserve the identity from the reference image across all frames. The emerald green traditional attire with intricate gold embroidery is impeccably maintained. The golden hour backlighting catches the hair rim and silk fabric naturally, integrating the subject flawlessly into the vibrant market environment without any artificial edge halos or lighting disconnect.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-studio-cin">Studio White Ref · Cinematic</span>
+                <span class="score-main">★ 0.94</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_studio_cin_04.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.94</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.93</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.95</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A, vibrant shallow depth-of-field tracking shot gliding backward in front of the character as she walks happily through a bustling Mumbai flower and spice market, golden hour backlight catching the silk fabric, dynamic festive ambiance, cinematic photorealism.</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> The video demonstrates outstanding identity consistency and scene integration. The subject's facial features, eye color, hairstyle, and cheerful expression match the reference portrait with great fidelity. The emerald green saree with intricate gold embroidery is reproduced accurately. Despite the pure white studio background of the reference image, the video completely avoids any matte line artifacts, white fringing, or flat lighting spill; instead, it renders rich, warm golden-hour rim lighting, atmospheric volumetric bloom, and authentic color bounces from the vibrant flower and spice market.</div>
+                </div>
+              </details>
+            </div>
+            
+          </div>
+        </div>
+        
+
+        <div class="case-card" data-framing="Three-Quarter" data-ethnicity="East Asian">
+          <div class="case-header">
+            <div class="case-title">
+              <span class="case-id">#06</span>
+              <h3>East Asian Female (30s) - Rainy Shibuya</h3>
+              <span class="framing-badge">Three-Quarter</span>
+              <span class="demog-tag">East Asian</span>
+            </div>
+            <div class="case-action">Target Action: <strong>Walking in rainy Shibuya</strong></div>
+          </div>
+
+          <!-- Paired References Row -->
+          <div class="ref-row">
+            <div class="ref-box">
+              <div class="ref-label">Contextual Reference (Original)</div>
+              <img src="ref_context_06.png" alt="Contextual Reference" loading="lazy">
+            </div>
+            <div class="ref-box">
+              <div class="ref-label studio-label">Studio White Reference (Seamless)</div>
+              <img src="ref_studio_06.png" alt="Studio White Reference" loading="lazy">
+            </div>
+          </div>
+
+          <!-- 4-Way Video Comparison Matrix -->
+          <div class="videos-grid">
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-context-smp">Contextual Ref · Simple</span>
+                <span class="score-main">★ 0.95</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_context_smp_06.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.95</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.96</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.96</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A (reference image) walking through rainy Shibuya at night</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> The video demonstrates exceptional character fidelity and environment integration. The character's facial geometry, hair length and style, expression, and skin textures match the reference portrait precisely across multiple camera angles. The grey double-breasted trench coat, inner black top, and subtle pendant necklace are faithfully preserved with added realism from wet surface textures and rain droplets. Lighting integration into the rainy nighttime Shibuya environment is seamless, featuring vibrant neon ambient bounce, natural specular highlights on the wet pavement and coat, and zero matte artifacts or haloing.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-studio-smp">Studio White Ref · Simple</span>
+                <span class="score-main">★ 0.96</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_studio_smp_06.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.96</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.95</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.97</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A (reference image) walking through rainy Shibuya at night</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> The video demonstrates exceptional character fidelity and environment integration. The character's facial geometry, bob hairstyle, ear studs, and subtle expression match the reference portrait precisely. The grey trench coat, black inner garment, and delicate pendant necklace are accurately preserved. Despite the pure white studio background of the reference image, the relighting in the rainy Shibuya night scene is completely seamless, showing accurate diffuse ambient reflections from city neon lights, wet-surface sheen, and soft environmental shadows with zero white studio haloing or edge matte artifacts. Camera motion and walking kinematics are fluid and cinematic.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-context-cin">Contextual Ref · Cinematic</span>
+                <span class="score-main">★ 0.95</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_context_cin_06.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.95</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.96</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.96</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A, cinematic slow-motion tracking shot following the character as she walks gracefully with a transparent umbrella through the iconic Shibuya crossing at night, neon billboards reflecting off rain-slicked asphalt, vibrant Tokyo city nightscape, anamorphic lens flare, photorealistic.</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> The video generation exhibits exceptional identity preservation and seamless environmental integration. The subject's facial geometry, bob haircut, delicate pendant necklace, and small hoop earrings are reproduced with near-flawless fidelity across all angles. The dark grey trench coat matches the reference texture and cut perfectly. Relighting from the original foggy daytime street setting to a neon-drenched rainy Shibuya nightscape is executed masterfully with realistic ambient reflections, wet skin sheen, and authentic anamorphic lens flares, showing zero artifact bleed or matte fringing from the reference background.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-studio-cin">Studio White Ref · Cinematic</span>
+                <span class="score-main">★ 0.94</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_studio_cin_06.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.95</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.96</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.94</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A, cinematic slow-motion tracking shot following the character as she walks gracefully with a transparent umbrella through the iconic Shibuya crossing at night, neon billboards reflecting off rain-slicked asphalt, vibrant Tokyo city nightscape, anamorphic lens flare, photorealistic.</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> The video demonstrates outstanding character fidelity and seamless relighting. The subject's facial features, distinctive bob haircut, and makeup perfectly replicate the reference portrait across all keyframes. The wardrobe—including the textured grey trench coat, dark inner top, and delicate necklace—is faithfully maintained. Despite the reference having a seamless white studio background, the AI completely eradicated any studio lighting artifacts or white haloing, achieving realistic integration into the rainy night environment of Shibuya with accurate ambient neon reflections and wet surface highlights on the clear umbrella.</div>
+                </div>
+              </details>
+            </div>
+            
+          </div>
+        </div>
+        
+
+        <div class="case-card" data-framing="Full-Body" data-ethnicity="Black / African">
+          <div class="case-header">
+            <div class="case-title">
+              <span class="case-id">#08</span>
+              <h3>Black Male (30s) - Basketball Action</h3>
+              <span class="framing-badge">Full-Body</span>
+              <span class="demog-tag">Black / African</span>
+            </div>
+            <div class="case-action">Target Action: <strong>Playing basketball on court</strong></div>
+          </div>
+
+          <!-- Paired References Row -->
+          <div class="ref-row">
+            <div class="ref-box">
+              <div class="ref-label">Contextual Reference (Original)</div>
+              <img src="ref_context_08.png" alt="Contextual Reference" loading="lazy">
+            </div>
+            <div class="ref-box">
+              <div class="ref-label studio-label">Studio White Reference (Seamless)</div>
+              <img src="ref_studio_08.png" alt="Studio White Reference" loading="lazy">
+            </div>
+          </div>
+
+          <!-- 4-Way Video Comparison Matrix -->
+          <div class="videos-grid">
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-context-smp">Contextual Ref · Simple</span>
+                <span class="score-main">★ 0.97</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_context_smp_08.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.98</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.97</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.98</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A (reference image) playing basketball on an outdoor court</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> The video generation exhibits exceptional fidelity to the reference image. The character's facial structure, braided hairstyle, beard grooming, and intense athletic expression are impeccably preserved across close-up and dynamic action shots. The outfit—including the red 'CITY 24' jersey, black and red court shorts, compression tights, and white basketball sneakers—maintains near-perfect continuity. Since the reference image was set in a contextual outdoor environment matching the prompt, the scene relighting, sunset warm rim lights, and atmospheric depth blend flawlessly with zero edge artifacts or flat lighting bleed.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-studio-smp">Studio White Ref · Simple</span>
+                <span class="score-main">★ 0.95</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_studio_smp_08.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.94</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.96</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.95</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A (reference image) playing basketball on an outdoor court</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> The video demonstrates outstanding fidelity to the reference portrait across all key metrics. Facial identity, haircut, facial hair, and physique are meticulously preserved across complex athletic angles. The uniform—including the red 'ATHLETICS 24' jersey, black athletic shorts with red accents, white compression leggings, and shoes—remains exceptionally consistent throughout the sequence. The transfer from a seamless white studio background into an outdoor daylight basketball court is executed flawlessly without any matte artifacts, haloing, or studio lighting bleed; shadows and direct sunlight interact realistically with the subject and court surface. The dynamic basketball dribble and dunk kinematics are remarkably fluid and physically plausible.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-context-cin">Contextual Ref · Cinematic</span>
+                <span class="score-main">★ 0.96</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_context_cin_08.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.95</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.98</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.97</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A, dynamic low-angle slow-motion action shot following the character as he drives past the defender, elevates smoothly toward the basketball rim, and slams down an emphatic two-handed dunk, chain-link fence and sunset sky in background, cinematic sports reel style.</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> The video generation exhibits outstanding fidelity across all metrics. The character's facial structure, cornrow hairstyle, athletic physique, and expressive emotion are preserved accurately from the reference. The outfit—including the red 'CITY 24' jersey, striped shorts, compression tights, and footwear—remains entirely consistent across dynamic action angles. The golden hour sunset lighting seamlessly integrates the player into the outdoor court environment without any lighting bleed or artifacts, and the kinematics of the drive, elevation, dunk, and celebration are fluid and cinematic.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-studio-cin">Studio White Ref · Cinematic</span>
+                <span class="score-main">★ 0.94</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_studio_cin_08.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.94</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.96</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.94</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A, dynamic low-angle slow-motion action shot following the character as he drives past the defender, elevates smoothly toward the basketball rim, and slams down an emphatic two-handed dunk, chain-link fence and sunset sky in background, cinematic sports reel style.</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> The video demonstrates outstanding character and wardrobe fidelity relative to the reference image. Facial geometry, build, and skin tone remain remarkably consistent across the dynamic angles. The jersey ('ATHLETICS 24'), black shorts, and white under-layer compression tights perfectly match the reference. The model flawlessly transferred the subject from a flat white studio backdrop into an outdoor sunset court setting with warm directional rim lighting, believable shadow falloff, and zero edge haloing or matte bleeding.</div>
+                </div>
+              </details>
+            </div>
+            
+          </div>
+        </div>
+        
+
+        <div class="case-card" data-framing="Medium" data-ethnicity="Southeast Asian">
+          <div class="case-header">
+            <div class="case-title">
+              <span class="case-id">#09</span>
+              <h3>Southeast Asian Female (20s) - Amsterdam Cycling</h3>
+              <span class="framing-badge">Medium</span>
+              <span class="demog-tag">Southeast Asian</span>
+            </div>
+            <div class="case-action">Target Action: <strong>Cycling along Amsterdam canal</strong></div>
+          </div>
+
+          <!-- Paired References Row -->
+          <div class="ref-row">
+            <div class="ref-box">
+              <div class="ref-label">Contextual Reference (Original)</div>
+              <img src="ref_context_09.png" alt="Contextual Reference" loading="lazy">
+            </div>
+            <div class="ref-box">
+              <div class="ref-label studio-label">Studio White Reference (Seamless)</div>
+              <img src="ref_studio_09.png" alt="Studio White Reference" loading="lazy">
+            </div>
+          </div>
+
+          <!-- 4-Way Video Comparison Matrix -->
+          <div class="videos-grid">
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-context-smp">Contextual Ref · Simple</span>
+                <span class="score-main">★ 0.95</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_context_smp_09.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.95</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.96</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.95</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A (reference image) riding a bicycle along an Amsterdam canal</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> The video demonstrates outstanding character fidelity across multiple camera angles and focal lengths. The facial structure, warm smile, skin tone, and ethnic features match the reference portrait exceptionally well. Outfit consistency is near flawless, maintaining the exact yellow raincoat with sleeve patch, patterned knit scarf, and matte black helmet. Lighting seamlessly integrates with the overcast Amsterdam canal environment with natural shadows and soft diffuse daylight, completely free of any artificial compositing artifacts or cutout fringing.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-studio-smp">Studio White Ref · Simple</span>
+                <span class="score-main">★ 0.94</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_studio_smp_09.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.95</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.96</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.94</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A (reference image) riding a bicycle along an Amsterdam canal</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> Exceptional character fidelity and seamless relighting. The model successfully transferred the character's facial identity, signature yellow jacket, bike helmet, and striped scarf into the new setting without any studio backdrop bleed or white edge matting. The warm, natural outdoor afternoon lighting across Amsterdam's canal streets interacts realistically with her skin, hair, and clothing, exhibiting fluid and believable cycling kinematics.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-context-cin">Contextual Ref · Cinematic</span>
+                <span class="score-main">★ 0.96</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_context_cin_09.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.95</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.96</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.97</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A, smooth bicycle-mounted tracking camera facing backward at the character as she pedals merrily along a tree-lined brick canal in Amsterdam, historic 17th-century canal houses and stone bridges gliding past, soft diffused European light, photorealistic travel vlog style.</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> The video generation demonstrates exceptional fidelity to the reference character portrait. Facial features, expression, and ethnic identity are impeccably preserved across all keyframes. The outfit—including the distinctive black helmet, multi-colored fringed plaid scarf, and bright yellow raincoat—matches the reference portrait with great precision. The subject is seamlessly integrated into the Amsterdam canal setting with realistic diffused European daylighting, correct shadows, and no matting or cutout artifacts. The bicycle-mounted tracking kinematics and the subject's subtle head turns and pedaling motion are fluid and natural.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-studio-cin">Studio White Ref · Cinematic</span>
+                <span class="score-main">★ 0.93</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_studio_cin_09.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.92</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.95</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.94</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A, smooth bicycle-mounted tracking camera facing backward at the character as she pedals merrily along a tree-lined brick canal in Amsterdam, historic 17th-century canal houses and stone bridges gliding past, soft diffused European light, photorealistic travel vlog style.</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> The video demonstrates outstanding character consistency and environment integration. The subject's facial structure, smile, skin tone, and ethnic identity are preserved accurately from the reference image. The clothing—including the yellow outdoor jacket, striped scarf, and cycling helmet—is flawlessly transferred. Despite the source image having a plain white studio backdrop, the subject is beautifully relit with soft, natural outdoor European daylight, completely avoiding studio light spill, matte cutouts, or white rim halos.</div>
+                </div>
+              </details>
+            </div>
+            
+          </div>
+        </div>
+        
+
+        <div class="case-card" data-framing="Medium" data-ethnicity="Indigenous / Native">
+          <div class="case-header">
+            <div class="case-title">
+              <span class="case-id">#13</span>
+              <h3>Indigenous Male (30s) - Banff Overlook</h3>
+              <span class="framing-badge">Medium</span>
+              <span class="demog-tag">Indigenous / Native</span>
+            </div>
+            <div class="case-action">Target Action: <strong>Standing on mountain overlook</strong></div>
+          </div>
+
+          <!-- Paired References Row -->
+          <div class="ref-row">
+            <div class="ref-box">
+              <div class="ref-label">Contextual Reference (Original)</div>
+              <img src="ref_context_13.png" alt="Contextual Reference" loading="lazy">
+            </div>
+            <div class="ref-box">
+              <div class="ref-label studio-label">Studio White Reference (Seamless)</div>
+              <img src="ref_studio_13.png" alt="Studio White Reference" loading="lazy">
+            </div>
+          </div>
+
+          <!-- 4-Way Video Comparison Matrix -->
+          <div class="videos-grid">
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-context-smp">Contextual Ref · Simple</span>
+                <span class="score-main">★ 0.97</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_context_smp_13.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.98</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.97</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.96</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A (reference image) standing on a mountain cliff overlook in Banff</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> Exceptional fidelity across all keyframes. The subject's facial geometry, bone structure, facial hair pattern, hairstyle, and skin micro-textures are preserved flawlessly across multiple camera distances and angles, including extreme close-up. The shearling leather jacket and knitwear match the reference precisely down to collar buckle details and fabric weight. Environmental integration and relighting under the alpine daylight are seamless, with natural wind-blown hair physics and zero edge artifacts or haloing.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-studio-smp">Studio White Ref · Simple</span>
+                <span class="score-main">★ 0.95</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_studio_smp_13.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.96</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.97</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.95</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A (reference image) standing on a mountain cliff overlook in Banff</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> The video achieves an exceptional level of consistency with the reference portrait. The subject's facial features, bone structure, facial hair, hairstyle, and skin texture are preserved with remarkable fidelity across multiple camera angles and focal lengths. The outfit, including the shearling collar brown leather jacket and turquoise beaded necklace, is reproduced flawlessly. Despite the pure white studio background of the reference image, the model fully re-lit the character to match the cool, overcast natural daylight of the Canadian Rockies without any matte fringe, white haloing, or flat lighting artifacts.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-context-cin">Contextual Ref · Cinematic</span>
+                <span class="score-main">★ 0.96</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_context_cin_13.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.96</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.98</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.97</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A, epic slow push-in cinematic shot facing the character standing tall at the edge of a rocky cliff overlook, wind softly rustling his hair as the camera pulls slightly back to reveal the breathtaking turquoise waters of Lake Louise and snow-dusted pine valleys below, National Geographic documentary aesthetic.</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> The video demonstrates exceptional adherence to the reference character portrait. Facial geometry, hairstyle (man bun with loose strands), beard, and subtle contemplative expression are impeccably preserved across the close-up frames. The wardrobe (shearling-collared brown leather bomber jacket and knit sweater) is replicated with extreme fidelity. The environmental relighting and integration are flawless, seamlessly expanding the alpine context into a dramatic cinematic pull-back reveal of the turquoise lake and snowy valley with authentic natural daylighting and zero matte or cutout artifacts.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-studio-cin">Studio White Ref · Cinematic</span>
+                <span class="score-main">★ 0.96</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_studio_cin_13.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.95</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.98</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.96</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A, epic slow push-in cinematic shot facing the character standing tall at the edge of a rocky cliff overlook, wind softly rustling his hair as the camera pulls slightly back to reveal the breathtaking turquoise waters of Lake Louise and snow-dusted pine valleys below, National Geographic documentary aesthetic.</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> Outstanding identity preservation and environment integration. The subject's facial features, hairstyle with the low ponytail, and signature facial hair remain completely faithful across multiple camera angles. The outfit—including the shearling-lined leather jacket, dark undershirt, and turquoise pendant necklace—is maintained with high precision. Relighting is exceptionally realistic: despite the reference image having a seamless white studio backdrop, the video renders the character with authentic outdoor ambient daylight, natural mountain wind kinematics in his hair, and soft shadow falloff with zero studio haloing or matte fringing.</div>
+                </div>
+              </details>
+            </div>
+            
+          </div>
+        </div>
+        
+
+        <div class="case-card" data-framing="Full-Body" data-ethnicity="Caucasian">
+          <div class="case-header">
+            <div class="case-title">
+              <span class="case-id">#15</span>
+              <h3>Caucasian Male (20s) - Hawaii Surfing</h3>
+              <span class="framing-badge">Full-Body</span>
+              <span class="demog-tag">Caucasian</span>
+            </div>
+            <div class="case-action">Target Action: <strong>Walking into ocean with surfboard</strong></div>
+          </div>
+
+          <!-- Paired References Row -->
+          <div class="ref-row">
+            <div class="ref-box">
+              <div class="ref-label">Contextual Reference (Original)</div>
+              <img src="ref_context_15.png" alt="Contextual Reference" loading="lazy">
+            </div>
+            <div class="ref-box">
+              <div class="ref-label studio-label">Studio White Reference (Seamless)</div>
+              <img src="ref_studio_15.png" alt="Studio White Reference" loading="lazy">
+            </div>
+          </div>
+
+          <!-- 4-Way Video Comparison Matrix -->
+          <div class="videos-grid">
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-context-smp">Contextual Ref · Simple</span>
+                <span class="score-main">★ 0.95</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_context_smp_15.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.95</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.96</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.95</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A (reference image) walking into the ocean surf with a surfboard in Hawaii</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> Exceptional identity preservation and continuity across all keyframes. The character's facial features, blonde hair texture, stubble, and expressions align closely with the reference portrait. The outfit—including the sleeveless neoprene surf vest, striped boardshorts, puka shell necklace, and black sports watch—is reproduced with outstanding precision, alongside matching decals and fin details on the surfboard. Lighting integration into the Hawaiian beach/ocean environment is natural, featuring accurate direct sunlight, skin specular highlights, wet hair effects, and realistic water interaction without any matte artifacts or lighting bleed.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-studio-smp">Studio White Ref · Simple</span>
+                <span class="score-main">★ 0.92</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_studio_smp_15.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.85</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.92</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.96</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A (reference image) walking into the ocean surf with a surfboard in Hawaii</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> The video demonstrates outstanding character consistency and environment integration. Despite the reference image being shot against a high-key seamless white studio backdrop, the subject is flawlessly relit under intense, direct tropical sunlight with crisp cast shadows and natural sea-foam reflections. Outfit details (black wetsuit top, dark boardshorts, ankle leash, and white board) are faithfully preserved. Motion through the shorebreak is physically convincing with realistic water displacement and splashes.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-context-cin">Contextual Ref · Cinematic</span>
+                <span class="score-main">★ 0.92</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_context_cin_15.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.90</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.88</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.96</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A, cinematic slow-motion tracking shot following the character from behind and side as he walks barefoot across wet sand into the crashing ocean whitewash, paddling out through breaking turquoise waves under a glowing golden Hawaiian sunset, photorealistic surf film style.</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> The video demonstrates exceptional adherence to the reference character and target prompt. Facial structure, blonde wavy hair, and athletic build are accurately retained across profile views. The outfit closely matches the reference boardshorts' striped design, though the wetsuit top evolved short sleeves compared to the sleeveless cut in the reference image. Scene integration and golden-hour sunset relighting are exceptionally natural, with realistic water refractions, specular highlights on skin/wetsuit, and flawless physical kinematics as the character transitions from walking on wet sand to paddling out into breaking waves.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-studio-cin">Studio White Ref · Cinematic</span>
+                <span class="score-main">★ 0.91</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_studio_cin_15.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.87</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.86</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.96</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A, cinematic slow-motion tracking shot following the character from behind and side as he walks barefoot across wet sand into the crashing ocean whitewash, paddling out through breaking turquoise waves under a glowing golden Hawaiian sunset, photorealistic surf film style.</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> The video demonstrates outstanding environment integration and kinematic realism. The model successfully transitioned the character from an isolated white studio backdrop into a warm golden hour ocean setting without any background contamination, edge matting, or lighting bleed. The wet sand reflections, ocean foam dynamics, and sunset rim lighting on the character's body and surfboard are photorealistic. Identity features like hair color/style and athletic physique are preserved. The only minor deviation is in the outfit, where the sleeveless wetsuit top from the reference was rendered as a full long-sleeve wetsuit top in the video, though the boardshorts and surfboard accessories remain consistent.</div>
+                </div>
+              </details>
+            </div>
+            
+          </div>
+        </div>
+        
+
+        <div class="case-card" data-framing="Headshot" data-ethnicity="Hispanic / Latino">
+          <div class="case-header">
+            <div class="case-title">
+              <span class="case-id">#19</span>
+              <h3>Hispanic Male (20s) - Vintage Havana</h3>
+              <span class="framing-badge">Headshot</span>
+              <span class="demog-tag">Hispanic / Latino</span>
+            </div>
+            <div class="case-action">Target Action: <strong>With vintage motorcycle in Havana</strong></div>
+          </div>
+
+          <!-- Paired References Row -->
+          <div class="ref-row">
+            <div class="ref-box">
+              <div class="ref-label">Contextual Reference (Original)</div>
+              <img src="ref_context_19.png" alt="Contextual Reference" loading="lazy">
+            </div>
+            <div class="ref-box">
+              <div class="ref-label studio-label">Studio White Reference (Seamless)</div>
+              <img src="ref_studio_19.png" alt="Studio White Reference" loading="lazy">
+            </div>
+          </div>
+
+          <!-- 4-Way Video Comparison Matrix -->
+          <div class="videos-grid">
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-context-smp">Contextual Ref · Simple</span>
+                <span class="score-main">★ 0.94</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_context_smp_19.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.96</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.95</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.95</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A (reference image) standing next to a vintage motorcycle in Havana</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> Exceptional identity preservation and environmental consistency. The subject's facial features, curly dark hair, facial hair, and cheerful demeanor match the reference portrait with high fidelity. The outfit—distressed brown leather flight jacket over a crisp white crewneck t-shirt—is reproduced accurately across all angles. The contextual lighting of the historic Havana street integrates seamlessly across both close-up and wide framing shots without edge artifacts, cutout matte lines, or flat lighting bleed.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-studio-smp">Studio White Ref · Simple</span>
+                <span class="score-main">★ 0.95</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_studio_smp_19.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.95</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.98</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.96</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A (reference image) standing next to a vintage motorcycle in Havana</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> The video generation exhibits outstanding identity preservation and environment integration. The character's facial structure, curly hair texture, facial hair, and warm expressions match the reference portrait with extreme fidelity. The worn brown leather flight jacket and white crewneck t-shirt are replicated seamlessly. Crucially, despite the reference image possessing a high-key seamless white studio background, the video shows no edge halos, matte line artifacts, or studio light leakage; the character is completely relit with natural, warm Havana afternoon sunlight and proper ambient fill consistent with the colorful colonial street setting.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-context-cin">Contextual Ref · Cinematic</span>
+                <span class="score-main">★ 0.96</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_context_cin_19.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.96</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.98</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.96</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A, warm pastel-toned cinematic street tracking shot gliding past colorful weathered colonial buildings in Havana, tracking the character as he leans confidently against a classic motorcycle, nodding warmly to passersby as vintage turquoise cars cruise slowly past on the cobblestone avenue, nostalgic cinematic vibe.</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> Exceptional identity preservation and execution of the prompt. The character's facial structure, curly hair, beard, tattoos, jewelry, and worn brown leather jacket are seamlessly maintained across all frames. The warm pastel lighting of the Havana cobblestone street integrates flawlessly onto the subject and vintage motorcycle with zero cutout artifacts or haloing, while the passing vintage car in the background adds subtle, realistic cinematic depth.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-studio-cin">Studio White Ref · Cinematic</span>
+                <span class="score-main">★ 0.94</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_studio_cin_19.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.94</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.96</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.95</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A, warm pastel-toned cinematic street tracking shot gliding past colorful weathered colonial buildings in Havana, tracking the character as he leans confidently against a classic motorcycle, nodding warmly to passersby as vintage turquoise cars cruise slowly past on the cobblestone avenue, nostalgic cinematic vibe.</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> The video demonstrates exceptional character consistency and scene integration. The subject's facial geometry, curly hair, beard style, and warm expression match the reference portrait accurately across all frames. His distressed brown leather jacket and white t-shirt are faithfully preserved. Despite the reference portrait featuring an isolated seamless white studio background, there is zero haloing, edge bleeding, or cutout artifacts; the subject is realistically relit with warm, soft natural sunlight that harmonizes perfectly with the Havana colonial street environment and vintage color palette. Motion tracking and subtle posture adjustments are smooth and believable.</div>
+                </div>
+              </details>
+            </div>
+            
+          </div>
+        </div>
+        
+    </div>
+  </div>
+
+  <script>
+    function filterCases(framing, btn) {
+      document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      document.querySelectorAll('.case-card').forEach(card => {
+        if (framing === 'all' || card.getAttribute('data-framing') === framing) {
+          card.style.display = 'block';
+        } else {
+          card.style.display = 'none';
+        }
+      });
+    }
+  </script>
+</body>
+</html>

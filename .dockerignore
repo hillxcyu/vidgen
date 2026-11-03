@@ -2,6 +2,8 @@
 __pycache__/
 *.pyc
 .git/
-output/
+output/*
+!output/saved_runs.json
 .pytest_cache/
 artifacts/
+benchmarks/

@@ -97,4 +97,29 @@ async def test_generate_video_shot_clip_signature():
     assert "end_image_path" in sig.parameters
 
 
+@pytest.mark.asyncio
+async def test_generate_video_shot_clip_unique_gcs_path():
+    from unittest.mock import patch, AsyncMock
+    from app.agent import generate_video_shot_clip
+
+    mock_ctx = MagicMock()
+    mock_ctx.state = {"run_id": "vidgen_test_run_42"}
+    mock_ctx.save_artifact = AsyncMock()
+
+    with patch("app.agent.get_genai_client"), \
+         patch("app.agent.generate_omni_clip", return_value=b"dummy_mp4_bytes"), \
+         patch("app.agent.extract_first_frame", return_value="dummy_b64"), \
+         patch("app.tools.gcs_storage.get_storage_client", return_value=None):
+        res = await generate_video_shot_clip(
+            prompt="A red panda skiing",
+            shot_index=1,
+            tool_context=mock_ctx,
+        )
+
+    assert "showcase/vidgen_test_run_42/shot_1_" in res["video_url"]
+    assert "showcase/shots/shot_1.mp4" not in res["video_url"]
+    assert "vital-octagon-19612-vidgen-showcase" in res["video_url"]
+
+
+
 

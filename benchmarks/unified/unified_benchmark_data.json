@@ -1,0 +1,992 @@
+{
+  "1": {
+    "case": {
+      "id": 1,
+      "name": "East Asian Male (20s) - Alpine Skiing",
+      "ethnicity": "East Asian",
+      "demographics": "20-year-old East Asian male",
+      "framing": "Headshot / Close-up",
+      "framing_category": "Headshot",
+      "action_summary": "Skiing in Hakuba",
+      "ref_prompt": "A clear, high-resolution portrait photograph of a 20-year-old East Asian male, wearing a stylish red and black alpine ski jacket and dark beanie, friendly confident expression, looking directly into the camera, sharp facial features, natural daylight against soft snowy mountain backdrop, photorealistic.",
+      "ref_studio_prompt": "A clear, high-resolution portrait photograph of a 20-year-old East Asian male, wearing a stylish red and black alpine ski jacket and dark beanie, friendly confident expression, looking directly into the camera, sharp facial features, professional clean studio softbox lighting, isolated against a seamless solid plain white studio backdrop, photorealistic.",
+      "clean_prompt": "Character A (reference image) skiing in Hakuba",
+      "mode_a_cinematic": "Character A, continuous single take, dynamic cinematic tracking shot following the character skiing gracefully down a powdery slope on Hakuba Happo-One ridge, crisp alpine morning sunlight reflecting off the snow, dramatic Japanese Northern Alps in the background, sharp cinematic focus, photorealistic."
+    },
+    "ref_context": "ref_context_01.png",
+    "ref_studio": "ref_studio_01.png",
+    "arm_context_ctl_smp": {
+      "video": "video_context_ctl_smp_01.mp4",
+      "prompt": "Character A (reference image) skiing in Hakuba",
+      "audit": {
+        "facial_similarity": 0.95,
+        "outfit_consistency": 0.96,
+        "relighting_realism": 0.95,
+        "motion_realism": 0.92,
+        "overall": 0.95,
+        "verdict": "STRONG_ADHERENCE",
+        "critique": "Exceptional identity preservation and outfit fidelity across multiple shot scales. The red and black Arc'teryx jacket and ribbed beanie are rendered with near-perfect consistency, and the dynamic addition of Oakley goggles during skiing integrates naturally without disrupting facial structure. Lighting, snow spray, and skiing kinematics blend flawlessly into the alpine environment with zero background bleed or haloing."
+      }
+    },
+    "arm_context_ctl_cin": {
+      "video": "video_context_ctl_cin_01.mp4",
+      "prompt": "Character A, continuous single take, dynamic cinematic tracking shot following the character skiing gracefully down a powdery slope on Hakuba Happo-One ridge, crisp alpine morning sunlight reflecting off the snow, dramatic Japanese Northern Alps in the background, sharp cinematic focus, photorealistic.",
+      "audit": {
+        "facial_similarity": 0.9,
+        "outfit_consistency": 0.95,
+        "relighting_realism": 0.96,
+        "motion_realism": 0.95,
+        "overall": 0.94,
+        "verdict": "STRONG_ADHERENCE",
+        "critique": "Exceptional fidelity to the reference portrait. The subject's facial features and beanie are accurately maintained at distance and across dynamic angles. The red and black technical jacket perfectly mirrors the reference's color blocking, collar structure, and zipper layout. Relighting is completely natural with crisp morning alpine sunlight, lens flares, and cast shadows on the snow without any matte lines or haloing artifacts."
+      }
+    },
+    "arm_context_tsk_smp": {
+      "video": "video_context_tsk_smp_01.mp4",
+      "prompt": "Character A (reference image) skiing in Hakuba",
+      "latency_s": 29.880631923675537,
+      "audit": {
+        "facial_similarity": 0.9,
+        "outfit_consistency": 0.95,
+        "relighting_realism": 0.95,
+        "motion_realism": 0.9,
+        "overall": 0.92,
+        "verdict": "STRONG_ADHERENCE",
+        "critique": "Excellent preservation of the character's facial likeness and apparel across varying camera distances. The red and black technical ski jacket, beanie, and hair styling match the reference portrait precisely. Natural snow-reflected lighting and plausible skiing kinematics create a highly realistic scene integration without artifacts."
+      }
+    },
+    "arm_context_tsk_cin": {
+      "video": "video_context_tsk_cin_01.mp4",
+      "prompt": "Character A, continuous single take, dynamic cinematic tracking shot following the character skiing gracefully down a powdery slope on Hakuba Happo-One ridge, crisp alpine morning sunlight reflecting off the snow, dramatic Japanese Northern Alps in the background, sharp cinematic focus, photorealistic.",
+      "latency_s": 32.26350688934326,
+      "audit": {
+        "facial_similarity": 0.9,
+        "outfit_consistency": 0.95,
+        "relighting_realism": 0.95,
+        "motion_realism": 0.94,
+        "overall": 0.93,
+        "verdict": "STRONG_ADHERENCE",
+        "critique": "Exceptional identity and outfit preservation. The red and black technical ski jacket, beanie, and facial structure closely mirror the reference image. The lighting integration with crisp alpine snow bounce and the physical kinematics of downhill skiing are photorealistic with zero compositing artifacts."
+      }
+    },
+    "arm_studio_tsk_smp": {
+      "video": "video_studio_tsk_smp_01.mp4",
+      "prompt": "Character A (reference image) skiing in Hakuba",
+      "latency_s": 43.26362466812134,
+      "audit": {
+        "facial_similarity": 0.89,
+        "outfit_consistency": 0.94,
+        "relighting_realism": 0.95,
+        "motion_realism": 0.93,
+        "overall": 0.92,
+        "verdict": "STRONG_ADHERENCE",
+        "critique": "The generated video demonstrates excellent fidelity to the reference portrait. The red and black technical jacket, beanie, and the subject's facial features are preserved consistently across various action angles. Relighting into the bright Hakuba alpine environment is seamless, showing zero white matte haloing or studio background bleed, while the skiing kinematics and snow displacement look natural."
+      }
+    },
+    "arm_studio_tsk_cin": {
+      "video": "video_studio_tsk_cin_01.mp4",
+      "prompt": "Character A, continuous single take, dynamic cinematic tracking shot following the character skiing gracefully down a powdery slope on Hakuba Happo-One ridge, crisp alpine morning sunlight reflecting off the snow, dramatic Japanese Northern Alps in the background, sharp cinematic focus, photorealistic.",
+      "latency_s": 27.950126886367798,
+      "audit": {
+        "facial_similarity": 0.92,
+        "outfit_consistency": 0.95,
+        "relighting_realism": 0.96,
+        "motion_realism": 0.94,
+        "overall": 0.94,
+        "verdict": "STRONG_ADHERENCE",
+        "critique": "The video demonstrates exceptional adherence to the reference portrait. The subject's facial profile, dark beanie, and red-and-black technical ski jacket are reproduced with near-perfect consistency. Outdoor alpine sunlight, natural bounce from the snow, and powder spray are integrated flawlessly without any studio haloing or matte artifacts. Skiing kinematics are fluid and physically plausible throughout the tracking shot."
+      }
+    }
+  },
+  "2": {
+    "case": {
+      "id": 2,
+      "name": "Black Female (20s) - Track Sprinting",
+      "ethnicity": "Black / African",
+      "demographics": "20-year-old Black female athlete",
+      "framing": "Full-Body Action Shot",
+      "framing_category": "Full-Body",
+      "action_summary": "Sprinting on coastal track",
+      "ref_prompt": "Full-body portrait of a 20-year-old athletic Black female runner, natural short afro hair, wearing a bright neon yellow running windbreaker, dark compression tights, and running sneakers, confident athletic posture looking forward, crisp outdoor track lighting, photorealistic.",
+      "ref_studio_prompt": "Full-body portrait of a 20-year-old athletic Black female runner, natural short afro hair, wearing a bright neon yellow running windbreaker, dark compression tights, and running sneakers, confident athletic posture looking forward, professional clean studio softbox lighting, isolated against a seamless solid plain white studio backdrop, photorealistic.",
+      "clean_prompt": "Character A (reference image) sprinting on an outdoor running track",
+      "mode_a_cinematic": "Character A, low-angle dynamic cinematic tracking shot racing alongside the character as she sprints explosively down a red running track next to the ocean, athletic stride, glistening skin in golden afternoon light, shallow depth of field, photorealistic 8k."
+    },
+    "ref_context": "ref_context_02.png",
+    "ref_studio": "ref_studio_02.png",
+    "arm_context_ctl_smp": {
+      "video": "video_context_ctl_smp_02.mp4",
+      "prompt": "Character A (reference image) sprinting on an outdoor running track",
+      "audit": {
+        "facial_similarity": 0.95,
+        "outfit_consistency": 0.98,
+        "relighting_realism": 0.96,
+        "motion_realism": 0.93,
+        "overall": 0.95,
+        "verdict": "STRONG_ADHERENCE",
+        "critique": "Exceptional identity and apparel consistency throughout all keyframes. Facial likeness, afro hairstyle with headband, neon jacket details (chevron seamlines and zippers), watch, and footwear match the reference portrait precisely. Natural outdoor daylight integration and realistic athletic motion kinematics."
+      }
+    },
+    "arm_context_ctl_cin": {
+      "video": "video_context_ctl_cin_02.mp4",
+      "prompt": "Character A, low-angle dynamic cinematic tracking shot racing alongside the character as she sprints explosively down a red running track next to the ocean, athletic stride, glistening skin in golden afternoon light, shallow depth of field, photorealistic 8k.",
+      "audit": {
+        "facial_similarity": 0.9,
+        "outfit_consistency": 0.45,
+        "relighting_realism": 0.96,
+        "motion_realism": 0.94,
+        "overall": 0.81,
+        "verdict": "MODERATE_ADHERENCE",
+        "critique": "The character's facial likeness, signature afro hair, and headband are reproduced with high fidelity. The cinematic golden hour lighting seamlessly integrates the subject with no haloing or matte artifacts. However, outfit consistency dropped significantly as the reference's neon jacket and leggings were swapped for a sleeveless running crop top and shorts."
+      }
+    },
+    "arm_context_tsk_smp": {
+      "video": "video_context_tsk_smp_02.mp4",
+      "prompt": "Character A (reference image) sprinting on an outdoor running track",
+      "latency_s": 29.851725816726685,
+      "audit": {
+        "facial_similarity": 0.94,
+        "outfit_consistency": 0.96,
+        "relighting_realism": 0.95,
+        "motion_realism": 0.92,
+        "overall": 0.94,
+        "verdict": "STRONG_ADHERENCE",
+        "critique": "Exceptional reference fidelity across all dimensions. The subject's facial likeness, afro hairstyle, black headband, and stud earrings are impeccably preserved. The neon running jacket, dark leggings, and footwear match the reference precisely, with natural outdoor lighting and realistic sprinting kinematics."
+      }
+    },
+    "arm_context_tsk_cin": {
+      "video": "video_context_tsk_cin_02.mp4",
+      "prompt": "Character A, low-angle dynamic cinematic tracking shot racing alongside the character as she sprints explosively down a red running track next to the ocean, athletic stride, glistening skin in golden afternoon light, shallow depth of field, photorealistic 8k.",
+      "latency_s": 43.55947923660278,
+      "audit": {
+        "facial_similarity": 0.9,
+        "outfit_consistency": 0.72,
+        "relighting_realism": 0.96,
+        "motion_realism": 0.95,
+        "overall": 0.88,
+        "verdict": "STRONG_ADHERENCE",
+        "critique": "The video maintains strong facial and hair likeness to the reference character, including her headband, afro hairstyle, and facial structure. The outfit changes from the neon windbreaker to a patterned sports bra, though the leggings, shoes, and watch remain faithful. Relighting is exceptionally realistic with natural warm golden-hour rim lighting and believable motion dynamics."
+      }
+    },
+    "arm_studio_tsk_smp": {
+      "video": "video_studio_tsk_smp_02.mp4",
+      "prompt": "Character A (reference image) sprinting on an outdoor running track",
+      "latency_s": 28.802011013031006,
+      "audit": {
+        "facial_similarity": 0.88,
+        "outfit_consistency": 0.94,
+        "relighting_realism": 0.93,
+        "motion_realism": 0.92,
+        "overall": 0.91,
+        "verdict": "STRONG_ADHERENCE",
+        "critique": "The video demonstrates excellent reference adherence. The character's facial features, afro hairstyle with headband, and intense running expression match the reference subject well. The neon yellow running jacket, dark leggings, and footwear are reproduced with high fidelity. Integration into the outdoor overcast stadium lighting is seamless with zero studio haloing or cutout artifacts."
+      }
+    },
+    "arm_studio_tsk_cin": {
+      "video": "video_studio_tsk_cin_02.mp4",
+      "prompt": "Character A, low-angle dynamic cinematic tracking shot racing alongside the character as she sprints explosively down a red running track next to the ocean, athletic stride, glistening skin in golden afternoon light, shallow depth of field, photorealistic 8k.",
+      "latency_s": 51.20841884613037,
+      "audit": {
+        "facial_similarity": 0.9,
+        "outfit_consistency": 0.95,
+        "relighting_realism": 0.96,
+        "motion_realism": 0.93,
+        "overall": 0.93,
+        "verdict": "STRONG_ADHERENCE",
+        "critique": "The video demonstrates exceptional adherence to the reference character. Facial structure, afro hairstyle, and headband are maintained accurately across profile views. The neon yellow running jacket, dark leggings, and footwear match the reference precisely. Relighting into the warm, golden-hour coastal environment is completely natural, with no signs of white haloing or matte artifacts from the studio source."
+      }
+    }
+  },
+  "3": {
+    "case": {
+      "id": 3,
+      "name": "Caucasian Male (30s) - Parisian Cafe",
+      "ethnicity": "Caucasian",
+      "demographics": "35-year-old Caucasian male",
+      "framing": "Bust / Medium Portrait",
+      "framing_category": "Medium",
+      "action_summary": "Drinking coffee in Paris cafe",
+      "ref_prompt": "Bust portrait of a 35-year-old Caucasian male with neat short brown hair, trimmed beard, wearing a textured cream cable-knit wool sweater, relaxed friendly smile, natural soft window light in a charming rustic cafe setting, photorealistic.",
+      "ref_studio_prompt": "Bust portrait of a 35-year-old Caucasian male with neat short brown hair, trimmed beard, wearing a textured cream cable-knit wool sweater, relaxed friendly smile, professional clean studio softbox lighting, isolated against a seamless solid plain white studio backdrop, photorealistic.",
+      "clean_prompt": "Character A (reference image) drinking coffee in a Parisian cafe",
+      "mode_a_cinematic": "Character A, slow medium dolly push-in shot of the character sitting by a sunlit window table in an elegant Parisian bistro, gently raising an espresso cup and taking a warm sip as morning street life blurs softly outside, cinematic warm palette."
+    },
+    "ref_context": "ref_context_03.png",
+    "ref_studio": "ref_studio_03.png",
+    "arm_context_ctl_smp": {
+      "video": "video_context_ctl_smp_03.mp4",
+      "prompt": "Character A (reference image) drinking coffee in a Parisian cafe",
+      "audit": {
+        "facial_similarity": 0.96,
+        "outfit_consistency": 0.98,
+        "relighting_realism": 0.96,
+        "motion_realism": 0.94,
+        "overall": 0.96,
+        "verdict": "STRONG_ADHERENCE",
+        "critique": "Exceptional fidelity across all frames. The subject's facial geometry, beard styling, and hair match the reference portrait precisely. The cable-knit pattern of the cream sweater and even the wedding band on his finger are preserved consistently. Motion kinematics during the coffee-drinking sequence are smooth and anatomically natural, with seamless lighting integration in the cafe setting."
+      }
+    },
+    "arm_context_ctl_cin": {
+      "video": "video_context_ctl_cin_03.mp4",
+      "prompt": "Character A, slow medium dolly push-in shot of the character sitting by a sunlit window table in an elegant Parisian bistro, gently raising an espresso cup and taking a warm sip as morning street life blurs softly outside, cinematic warm palette.",
+      "audit": {
+        "facial_similarity": 0.96,
+        "outfit_consistency": 0.98,
+        "relighting_realism": 0.96,
+        "motion_realism": 0.96,
+        "overall": 0.96,
+        "verdict": "STRONG_ADHERENCE",
+        "critique": "Outstanding identity preservation and outfit fidelity. The cable-knit pattern, collar ribbing, and cream tone replicate the reference accurately. Facial features, beard styling, and eye morphology remain fully consistent throughout the shot. Relighting into the Parisian bistro setting is photorealistic, with soft ambient daylight bleeding naturally through the window without edge artifacts or matte haloing. The cup-raising and sipping kinematics are fluid and convincing."
+      }
+    },
+    "arm_context_tsk_smp": {
+      "video": "video_context_tsk_smp_03.mp4",
+      "prompt": "Character A (reference image) drinking coffee in a Parisian cafe",
+      "latency_s": 26.379146814346313,
+      "audit": {
+        "facial_similarity": 0.96,
+        "outfit_consistency": 0.98,
+        "relighting_realism": 0.97,
+        "motion_realism": 0.95,
+        "overall": 0.96,
+        "verdict": "STRONG_ADHERENCE",
+        "critique": "Exceptional identity preservation and outfit replication. The facial geometry, beard texture, and hair accurately match the reference image. The cream cable-knit sweater pattern is consistently detailed across all frames, and the lighting integration with natural depth of field and realistic hand/mug kinematics is top-tier."
+      }
+    },
+    "arm_context_tsk_cin": {
+      "video": "video_context_tsk_cin_03.mp4",
+      "prompt": "Character A, slow medium dolly push-in shot of the character sitting by a sunlit window table in an elegant Parisian bistro, gently raising an espresso cup and taking a warm sip as morning street life blurs softly outside, cinematic warm palette.",
+      "latency_s": 25.733330726623535,
+      "audit": {
+        "facial_similarity": 0.96,
+        "outfit_consistency": 0.98,
+        "relighting_realism": 0.95,
+        "motion_realism": 0.95,
+        "overall": 0.96,
+        "verdict": "STRONG_ADHERENCE",
+        "critique": "Exceptional fidelity across all criteria. The subject's facial geometry, beard styling, and hair match the reference portrait precisely. The cream cable-knit sweater is reproduced with near-identical texture and pattern. The lighting naturally integrates the character into the Parisian bistro environment with plausible window-side directional illumination and warm ambient bounce."
+      }
+    },
+    "arm_studio_tsk_smp": {
+      "video": "video_studio_tsk_smp_03.mp4",
+      "prompt": "Character A (reference image) drinking coffee in a Parisian cafe",
+      "latency_s": 27.238306760787964,
+      "audit": {
+        "facial_similarity": 0.95,
+        "outfit_consistency": 0.98,
+        "relighting_realism": 0.95,
+        "motion_realism": 0.94,
+        "overall": 0.95,
+        "verdict": "STRONG_ADHERENCE",
+        "critique": "Exceptional adherence to the reference portrait. The facial features, beard grooming, and hair texture are replicated with high fidelity across all keyframes. The cream cable-knit sweater is flawlessly preserved in pattern and cut. The relighting realistically blends warm interior cafe fixtures with natural daylight from the window, completely free of white studio matte halos or edge bleed."
+      }
+    },
+    "arm_studio_tsk_cin": {
+      "video": "video_studio_tsk_cin_03.mp4",
+      "prompt": "Character A, slow medium dolly push-in shot of the character sitting by a sunlit window table in an elegant Parisian bistro, gently raising an espresso cup and taking a warm sip as morning street life blurs softly outside, cinematic warm palette.",
+      "latency_s": 38.951605558395386,
+      "audit": {
+        "facial_similarity": 0.98,
+        "outfit_consistency": 0.99,
+        "relighting_realism": 0.98,
+        "motion_realism": 0.96,
+        "overall": 0.98,
+        "verdict": "STRONG_ADHERENCE",
+        "critique": "Exceptional reference preservation and cinematic execution. The character's facial features, beard, and hairstyle match the reference portrait almost perfectly across all keyframes. The cream cable-knit sweater maintains intricate texture and pattern consistency. Relighting is natural and integrated seamlessly with the warm Parisian cafe window light, showing zero studio haloing or cutout artifacts."
+      }
+    }
+  },
+  "4": {
+    "case": {
+      "id": 4,
+      "name": "South Asian Female (20s) - Mumbai Market",
+      "ethnicity": "South Asian",
+      "demographics": "24-year-old South Asian female",
+      "framing": "Headshot / Close-up",
+      "framing_category": "Headshot",
+      "action_summary": "Walking in Mumbai market",
+      "ref_prompt": "Close-up portrait photograph of a 24-year-old South Asian female with warm honey-brown eyes, radiant skin, wearing an emerald green and gold embroidered silk dupatta scarf draped gracefully, gentle welcoming smile, warm ambient lighting with colorful blurred market background, photorealistic.",
+      "ref_studio_prompt": "Close-up portrait photograph of a 24-year-old South Asian female with warm honey-brown eyes, radiant skin, wearing an emerald green and gold embroidered silk dupatta scarf draped gracefully, gentle welcoming smile, professional clean studio softbox lighting, isolated against a seamless solid plain white studio backdrop, photorealistic.",
+      "clean_prompt": "Character A (reference image) walking through a colorful Mumbai market",
+      "mode_a_cinematic": "Character A, vibrant shallow depth-of-field tracking shot gliding backward in front of the character as she walks happily through a bustling Mumbai flower and spice market, golden hour backlight catching the silk fabric, dynamic festive ambiance, cinematic photorealism."
+    },
+    "ref_context": "ref_context_04.png",
+    "ref_studio": "ref_studio_04.png",
+    "arm_context_ctl_smp": {
+      "video": "video_context_ctl_smp_04.mp4",
+      "prompt": "Character A (reference image) walking through a colorful Mumbai market",
+      "audit": {
+        "facial_similarity": 0.96,
+        "outfit_consistency": 0.95,
+        "relighting_realism": 0.95,
+        "motion_realism": 0.94,
+        "overall": 0.95,
+        "verdict": "STRONG_ADHERENCE",
+        "critique": "The video maintains near-flawless character fidelity to the reference portrait. Facial features, expression, hairstyle, and ethnic features remain highly consistent across diverse viewing angles. The emerald green embroidered attire and matching jewelry match the reference closely, and the character is naturally embedded into the Mumbai market environment with realistic depth of field and consistent ambient lighting."
+      }
+    },
+    "arm_context_ctl_cin": {
+      "video": "video_context_ctl_cin_04.mp4",
+      "prompt": "Character A, vibrant shallow depth-of-field tracking shot gliding backward in front of the character as she walks happily through a bustling Mumbai flower and spice market, golden hour backlight catching the silk fabric, dynamic festive ambiance, cinematic photorealism.",
+      "audit": {
+        "facial_similarity": 0.95,
+        "outfit_consistency": 0.93,
+        "relighting_realism": 0.96,
+        "motion_realism": 0.95,
+        "overall": 0.95,
+        "verdict": "STRONG_ADHERENCE",
+        "critique": "Exceptional reference preservation throughout the sequence. Facial features, expression, and hair maintain near-flawless likeness across profile turns and forward tracking. The green and gold embroidered attire and matching earrings faithfully match the reference design. Golden hour market backlighting integrates naturally onto the subject's hair and silk fabric with zero edge artifacts or bleeding."
+      }
+    },
+    "arm_context_tsk_smp": {
+      "video": "video_context_tsk_smp_04.mp4",
+      "prompt": "Character A (reference image) walking through a colorful Mumbai market",
+      "latency_s": 42.01461052894592,
+      "audit": {
+        "facial_similarity": 0.92,
+        "outfit_consistency": 0.95,
+        "relighting_realism": 0.95,
+        "motion_realism": 0.93,
+        "overall": 0.94,
+        "verdict": "STRONG_ADHERENCE",
+        "critique": "The video demonstrates outstanding character identity retention and fidelity to the reference. Facial features, smile, hairstyle, and ethnic features closely mirror the reference portrait. The green saree with gold zardozi embroidery and matching earrings are reproduced accurately. Relighting and atmospheric integration into the bustling Mumbai market are seamless with no matte lines or edge artifacts, accompanied by natural kinematics."
+      }
+    },
+    "arm_context_tsk_cin": {
+      "video": "video_context_tsk_cin_04.mp4",
+      "prompt": "Character A, vibrant shallow depth-of-field tracking shot gliding backward in front of the character as she walks happily through a bustling Mumbai flower and spice market, golden hour backlight catching the silk fabric, dynamic festive ambiance, cinematic photorealism.",
+      "latency_s": 44.34094285964966,
+      "audit": {
+        "facial_similarity": 0.94,
+        "outfit_consistency": 0.95,
+        "relighting_realism": 0.96,
+        "motion_realism": 0.93,
+        "overall": 0.95,
+        "verdict": "STRONG_ADHERENCE",
+        "critique": "Exceptional fidelity to the reference portrait. The facial likeness, skin texture, and expressive smile are preserved accurately. The green and gold embroidered traditional attire and earrings match seamlessly, and the warm golden-hour market lighting integrates naturally with convincing rim light on the subject's hair and clothing."
+      }
+    },
+    "arm_studio_tsk_smp": {
+      "video": "video_studio_tsk_smp_04.mp4",
+      "prompt": "Character A (reference image) walking through a colorful Mumbai market",
+      "latency_s": 28.413155555725098,
+      "audit": {
+        "facial_similarity": 0.94,
+        "outfit_consistency": 0.95,
+        "relighting_realism": 0.95,
+        "motion_realism": 0.92,
+        "overall": 0.94,
+        "verdict": "STRONG_ADHERENCE",
+        "critique": "Exceptional adherence across all dimensions. The character's facial structure, smile, eye features, and wavy hairstyle translate seamlessly from the reference. The emerald green embroidered saree and ornate earrings are accurately preserved. The warm ambient market lighting perfectly relights the character without any studio white haloing or matte artifacts."
+      }
+    },
+    "arm_studio_tsk_cin": {
+      "video": "video_studio_tsk_cin_04.mp4",
+      "prompt": "Character A, vibrant shallow depth-of-field tracking shot gliding backward in front of the character as she walks happily through a bustling Mumbai flower and spice market, golden hour backlight catching the silk fabric, dynamic festive ambiance, cinematic photorealism.",
+      "latency_s": 26.613747358322144,
+      "audit": {
+        "facial_similarity": 0.95,
+        "outfit_consistency": 0.94,
+        "relighting_realism": 0.95,
+        "motion_realism": 0.93,
+        "overall": 0.94,
+        "verdict": "STRONG_ADHERENCE",
+        "critique": "Exceptional reference preservation. The subject's facial identity, distinctive smile, and expression match the portrait seamlessly across diverse angles. The emerald green silk attire with ornate gold embroidery is reproduced with remarkable precision. Lighting transfer from the white studio reference into the warm, golden-hour outdoor market is flawless, featuring natural golden rim highlights and zero studio matte haloing."
+      }
+    }
+  },
+  "6": {
+    "case": {
+      "id": 6,
+      "name": "East Asian Female (30s) - Rainy Shibuya",
+      "ethnicity": "East Asian",
+      "demographics": "30-year-old East Asian female",
+      "framing": "Three-Quarter Shot",
+      "framing_category": "Three-Quarter",
+      "action_summary": "Walking in rainy Shibuya",
+      "ref_prompt": "Three-quarter portrait of a 30-year-old East Asian female with a sleek black bob haircut, wearing a tailored charcoal wool trench coat and minimalist silver jewelry, standing under soft city lights, cool evening mist, elegant poised gaze directly at camera, photorealistic.",
+      "ref_studio_prompt": "Three-quarter portrait of a 30-year-old East Asian female with a sleek black bob haircut, wearing a tailored charcoal wool trench coat and minimalist silver jewelry, elegant poised gaze directly at camera, professional clean studio softbox lighting, isolated against a seamless solid plain white studio backdrop, photorealistic.",
+      "clean_prompt": "Character A (reference image) walking through rainy Shibuya at night",
+      "mode_a_cinematic": "Character A, cinematic slow-motion tracking shot following the character as she walks gracefully with a transparent umbrella through the iconic Shibuya crossing at night, neon billboards reflecting off rain-slicked asphalt, vibrant Tokyo city nightscape, anamorphic lens flare, photorealistic."
+    },
+    "ref_context": "ref_context_06.png",
+    "ref_studio": "ref_studio_06.png",
+    "arm_context_ctl_smp": {
+      "video": "video_context_ctl_smp_06.mp4",
+      "prompt": "Character A (reference image) walking through rainy Shibuya at night",
+      "audit": {
+        "facial_similarity": 0.96,
+        "outfit_consistency": 0.97,
+        "relighting_realism": 0.95,
+        "motion_realism": 0.94,
+        "overall": 0.96,
+        "verdict": "STRONG_ADHERENCE",
+        "critique": "Outstanding identity preservation and cinematic continuity. The facial structure, short bob hairstyle, delicate jewelry, and grey trench coat translate seamlessly into the night-time Shibuya environment with convincing neon ambient relighting and realistic wet-ground kinematics."
+      }
+    },
+    "arm_context_ctl_cin": {
+      "video": "video_context_ctl_cin_06.mp4",
+      "prompt": "Character A, cinematic slow-motion tracking shot following the character as she walks gracefully with a transparent umbrella through the iconic Shibuya crossing at night, neon billboards reflecting off rain-slicked asphalt, vibrant Tokyo city nightscape, anamorphic lens flare, photorealistic.",
+      "audit": {
+        "facial_similarity": 0.95,
+        "outfit_consistency": 0.96,
+        "relighting_realism": 0.95,
+        "motion_realism": 0.93,
+        "overall": 0.95,
+        "verdict": "STRONG_ADHERENCE",
+        "critique": "Exceptional identity retention and seamless relighting. The character's facial geometry, bob hairstyle, and delicate earring accessories match the reference portrait precisely. The grey wool trench coat is reproduced with identical cut, texture, and detailing. Relighting into the night Shibuya setting is natural and physically cohesive, correctly integrating neon environmental reflections onto the umbrella canopy and fabric without matte lines or flat lighting bleed."
+      }
+    },
+    "arm_context_tsk_smp": {
+      "video": "video_context_tsk_smp_06.mp4",
+      "prompt": "Character A (reference image) walking through rainy Shibuya at night",
+      "latency_s": 30.108075857162476,
+      "audit": {
+        "facial_similarity": 0.95,
+        "outfit_consistency": 0.96,
+        "relighting_realism": 0.95,
+        "motion_realism": 0.92,
+        "overall": 0.95,
+        "verdict": "STRONG_ADHERENCE",
+        "critique": "The video demonstrates exceptional adherence to the reference character. Facial structure, bob hairstyle, and subtle accessories (pendant necklace, hoop earrings) are accurately preserved across multiple angles and cuts. The grey belted trench coat remains consistent, and the character is photorealistically relit under rainy night neon lighting in Shibuya with natural reflections and zero matte or halo artifacts."
+      }
+    },
+    "arm_context_tsk_cin": {
+      "video": "video_context_tsk_cin_06.mp4",
+      "prompt": "Character A, cinematic slow-motion tracking shot following the character as she walks gracefully with a transparent umbrella through the iconic Shibuya crossing at night, neon billboards reflecting off rain-slicked asphalt, vibrant Tokyo city nightscape, anamorphic lens flare, photorealistic.",
+      "latency_s": 41.149189949035645,
+      "audit": {
+        "facial_similarity": 0.94,
+        "outfit_consistency": 0.96,
+        "relighting_realism": 0.95,
+        "motion_realism": 0.93,
+        "overall": 0.95,
+        "verdict": "STRONG_ADHERENCE",
+        "critique": "The video maintains exceptional fidelity to the reference subject's facial features, bob hairstyle, and trench coat styling. Relighting from the daylight reference scene to the vibrant, neon-lit nighttime Shibuya environment is executed seamlessly with natural environmental bounce, accurate specular reflections on the transparent umbrella, and zero edge artifacts or matte haloing."
+      }
+    },
+    "arm_studio_tsk_smp": {
+      "video": "video_studio_tsk_smp_06.mp4",
+      "prompt": "Character A (reference image) walking through rainy Shibuya at night",
+      "latency_s": 30.658533334732056,
+      "audit": {
+        "facial_similarity": 0.96,
+        "outfit_consistency": 0.96,
+        "relighting_realism": 0.95,
+        "motion_realism": 0.95,
+        "overall": 0.95,
+        "verdict": "STRONG_ADHERENCE",
+        "critique": "Outstanding identity preservation from the studio white reference to the rainy Shibuya night scene. Facial geometry, hairstyle, and jewelry (earrings and necklace) match flawlessly. The charcoal trench coat is rendered accurately with realistic wet-weather textures and neon environment relighting, showing zero studio haloing."
+      }
+    },
+    "arm_studio_tsk_cin": {
+      "video": "video_studio_tsk_cin_06.mp4",
+      "prompt": "Character A, cinematic slow-motion tracking shot following the character as she walks gracefully with a transparent umbrella through the iconic Shibuya crossing at night, neon billboards reflecting off rain-slicked asphalt, vibrant Tokyo city nightscape, anamorphic lens flare, photorealistic.",
+      "latency_s": 28.882224082946777,
+      "audit": {
+        "facial_similarity": 0.95,
+        "outfit_consistency": 0.98,
+        "relighting_realism": 0.96,
+        "motion_realism": 0.95,
+        "overall": 0.96,
+        "verdict": "STRONG_ADHERENCE",
+        "critique": "Exceptional identity and costume preservation from the isolated studio reference. The character's facial features, bob hairstyle, belted grey trench coat, and delicate jewelry are reproduced with remarkable precision. Scene integration is flawless, relighting the character naturally into the rainy night environment of Shibuya with realistic reflections and anamorphic lens flares, showing zero white matte bleed or haloing."
+      }
+    }
+  },
+  "8": {
+    "case": {
+      "id": 8,
+      "name": "Black Male (30s) - Basketball Action",
+      "ethnicity": "Black / African",
+      "demographics": "32-year-old athletic Black male",
+      "framing": "Full-Body Action Shot",
+      "framing_category": "Full-Body",
+      "action_summary": "Playing basketball on court",
+      "ref_prompt": "Full-body athletic portrait of a 32-year-old Black male basketball player, athletic muscular build, wearing a red basketball jersey, black shorts, and white high-top basketball sneakers, holding a basketball at hip, outdoor urban streetball court at sunset, photorealistic.",
+      "ref_studio_prompt": "Full-body athletic portrait of a 32-year-old Black male basketball player, athletic muscular build, wearing a red basketball jersey, black shorts, and white high-top basketball sneakers, holding a basketball at hip, professional clean studio lighting, isolated against a seamless solid plain white studio backdrop, photorealistic.",
+      "clean_prompt": "Character A (reference image) playing basketball on an outdoor court",
+      "mode_a_cinematic": "Character A, dynamic low-angle slow-motion action shot following the character as he drives past the defender, elevates smoothly toward the basketball rim, and slams down an emphatic two-handed dunk, chain-link fence and sunset sky in background, cinematic sports reel style."
+    },
+    "ref_context": "ref_context_08.png",
+    "ref_studio": "ref_studio_08.png",
+    "arm_context_ctl_smp": {
+      "video": "video_context_ctl_smp_08.mp4",
+      "prompt": "Character A (reference image) playing basketball on an outdoor court",
+      "audit": {
+        "facial_similarity": 0.95,
+        "outfit_consistency": 0.98,
+        "relighting_realism": 0.98,
+        "motion_realism": 0.96,
+        "overall": 0.97,
+        "verdict": "STRONG_ADHERENCE",
+        "critique": "Exceptional reference-to-video fidelity. Facial geometry, braids, and physique remain completely faithful to the reference portrait. The red 'CITY 24' uniform, black compression leggings, and footwear are precisely preserved throughout dynamic athletic movement. Kinematics from dribble drive to dunk are physically plausible, and the sunset court lighting integrates naturally across all keyframes without artifacts."
+      }
+    },
+    "arm_context_ctl_cin": {
+      "video": "video_context_ctl_cin_08.mp4",
+      "prompt": "Character A, dynamic low-angle slow-motion action shot following the character as he drives past the defender, elevates smoothly toward the basketball rim, and slams down an emphatic two-handed dunk, chain-link fence and sunset sky in background, cinematic sports reel style.",
+      "audit": {
+        "facial_similarity": 0.95,
+        "outfit_consistency": 0.98,
+        "relighting_realism": 0.97,
+        "motion_realism": 0.96,
+        "overall": 0.97,
+        "verdict": "STRONG_ADHERENCE",
+        "critique": "Exceptional adherence across all metrics. The subject's facial likeness, braided hairstyle, and muscular build perfectly match the reference portrait. The red 'CITY 24' jersey, shorts, compression tights, and footwear are flawlessly preserved through the entire motion sequence. The golden hour sunset relighting and lens flares are seamlessly integrated with no matte lines or artifacts, and the kinematics of the drive and two-handed dunk are highly authentic."
+      }
+    },
+    "arm_context_tsk_smp": {
+      "video": "video_context_tsk_smp_08.mp4",
+      "prompt": "Character A (reference image) playing basketball on an outdoor court",
+      "latency_s": 31.439506769180298,
+      "audit": {
+        "facial_similarity": 0.95,
+        "outfit_consistency": 0.96,
+        "relighting_realism": 0.98,
+        "motion_realism": 0.95,
+        "overall": 0.96,
+        "verdict": "STRONG_ADHERENCE",
+        "critique": "Exceptional reference preservation across all dimensions. The subject's facial features, hairstyle, and physique perfectly match the reference portrait. Apparel details\u2014including the 'CITY 24' jersey, striped shorts, compression tights, and shoes\u2014remain completely consistent. Cinematic golden hour lighting and basketball kinematics are seamlessly and realistically integrated."
+      }
+    },
+    "arm_context_tsk_cin": {
+      "video": "video_context_tsk_cin_08.mp4",
+      "prompt": "Character A, dynamic low-angle slow-motion action shot following the character as he drives past the defender, elevates smoothly toward the basketball rim, and slams down an emphatic two-handed dunk, chain-link fence and sunset sky in background, cinematic sports reel style.",
+      "latency_s": 29.267151355743408,
+      "audit": {
+        "facial_similarity": 0.93,
+        "outfit_consistency": 0.95,
+        "relighting_realism": 0.95,
+        "motion_realism": 0.92,
+        "overall": 0.94,
+        "verdict": "STRONG_ADHERENCE",
+        "critique": "The video maintains exceptional fidelity to the reference portrait. Facial features, hair braids, and athletic build are consistently preserved. The red 'CITY 24' jersey, shorts, and footwear match accurately, and the character is seamlessly integrated with realistic golden-hour backlighting and natural motion kinematics."
+      }
+    },
+    "arm_studio_tsk_smp": {
+      "video": "video_studio_tsk_smp_08.mp4",
+      "prompt": "Character A (reference image) playing basketball on an outdoor court",
+      "latency_s": 30.2410991191864,
+      "audit": {
+        "facial_similarity": 0.95,
+        "outfit_consistency": 0.98,
+        "relighting_realism": 0.96,
+        "motion_realism": 0.96,
+        "overall": 0.96,
+        "verdict": "STRONG_ADHERENCE",
+        "critique": "Exceptional reference preservation. The character's facial features, braided hairstyle, and muscular build closely match the reference portrait. The red 'CITY 24' uniform, leg tights, and footwear are reproduced with near-perfect consistency. The transition from studio lighting to an outdoor overcast court environment is seamless with zero haloing or matte artifacts, supported by highly realistic basketball kinematics from dribble drive to dunk."
+      }
+    },
+    "arm_studio_tsk_cin": {
+      "video": "video_studio_tsk_cin_08.mp4",
+      "prompt": "Character A, dynamic low-angle slow-motion action shot following the character as he drives past the defender, elevates smoothly toward the basketball rim, and slams down an emphatic two-handed dunk, chain-link fence and sunset sky in background, cinematic sports reel style.",
+      "latency_s": 32.73451352119446,
+      "audit": {
+        "facial_similarity": 0.93,
+        "outfit_consistency": 0.95,
+        "relighting_realism": 0.94,
+        "motion_realism": 0.92,
+        "overall": 0.94,
+        "verdict": "STRONG_ADHERENCE",
+        "critique": "Exceptional translation from a static white-studio reference into a dynamic sunset outdoor action shot. The character's facial features, braided hairstyle, and build are accurately maintained throughout the sequence. The 'CITY 24' uniform, leg compression tights, and footwear are replicated with high fidelity, and the relighting realistically incorporates warm sunset rim lighting and shadows without any studio haloing or matting artifacts."
+      }
+    }
+  },
+  "9": {
+    "case": {
+      "id": 9,
+      "name": "Southeast Asian Female (20s) - Amsterdam Cycling",
+      "ethnicity": "Southeast Asian",
+      "demographics": "25-year-old Southeast Asian female",
+      "framing": "Bust / Medium Portrait",
+      "framing_category": "Medium",
+      "action_summary": "Cycling along Amsterdam canal",
+      "ref_prompt": "Medium bust portrait of a 25-year-old Southeast Asian female with lively expressive brown eyes and high ponytail, wearing a bright yellow waterproof rain jacket, commuter bicycle helmet, and casual scarf, friendly cheerful expression, quaint European canal bridge backdrop, photorealistic.",
+      "ref_studio_prompt": "Medium bust portrait of a 25-year-old Southeast Asian female with lively expressive brown eyes and high ponytail, wearing a bright yellow waterproof rain jacket, commuter bicycle helmet, and casual scarf, friendly cheerful expression, professional clean studio softbox lighting, isolated against a seamless solid plain white studio backdrop, photorealistic.",
+      "clean_prompt": "Character A (reference image) riding a bicycle along an Amsterdam canal",
+      "mode_a_cinematic": "Character A, smooth bicycle-mounted tracking camera facing backward at the character as she pedals merrily along a tree-lined brick canal in Amsterdam, historic 17th-century canal houses and stone bridges gliding past, soft diffused European light, photorealistic travel vlog style."
+    },
+    "ref_context": "ref_context_09.png",
+    "ref_studio": "ref_studio_09.png",
+    "arm_context_ctl_smp": {
+      "video": "video_context_ctl_smp_09.mp4",
+      "prompt": "Character A (reference image) riding a bicycle along an Amsterdam canal",
+      "audit": {
+        "facial_similarity": 0.94,
+        "outfit_consistency": 0.98,
+        "relighting_realism": 0.96,
+        "motion_realism": 0.95,
+        "overall": 0.96,
+        "verdict": "STRONG_ADHERENCE",
+        "critique": "Exceptional identity and costume preservation. The distinctive yellow raincoat, patterned scarf, and black helmet match the reference image with near-perfect fidelity. The facial structure and expressions remain highly consistent throughout the sequence, and the subject integrates seamlessly into the overcast lighting of the Amsterdam street scene with no keying artifacts or lighting bleed."
+      }
+    },
+    "arm_context_ctl_cin": {
+      "video": "video_context_ctl_cin_09.mp4",
+      "prompt": "Character A, smooth bicycle-mounted tracking camera facing backward at the character as she pedals merrily along a tree-lined brick canal in Amsterdam, historic 17th-century canal houses and stone bridges gliding past, soft diffused European light, photorealistic travel vlog style.",
+      "audit": {
+        "facial_similarity": 0.95,
+        "outfit_consistency": 0.96,
+        "relighting_realism": 0.95,
+        "motion_realism": 0.94,
+        "overall": 0.95,
+        "verdict": "STRONG_ADHERENCE",
+        "critique": "Exceptional fidelity across all dimensions. The facial identity, smile, and helmet fit precisely mirror the reference image. The yellow jacket, patterned knit scarf, and helmet detailing are reproduced with outstanding precision. Lighting seamlessly integrates the subject with the overcast Amsterdam canal environment, and the cycling motion and natural wave gesture are fluid and cinematic."
+      }
+    },
+    "arm_context_tsk_smp": {
+      "video": "video_context_tsk_smp_09.mp4",
+      "prompt": "Character A (reference image) riding a bicycle along an Amsterdam canal",
+      "latency_s": 29.62440037727356,
+      "audit": {
+        "facial_similarity": 0.95,
+        "outfit_consistency": 0.96,
+        "relighting_realism": 0.95,
+        "motion_realism": 0.94,
+        "overall": 0.95,
+        "verdict": "STRONG_ADHERENCE",
+        "critique": "Exceptional reference preservation. Facial features, helmet, distinctive patterned scarf, and yellow raincoat details perfectly match the reference portrait while transitioning seamlessly into natural cycling motion along the canal."
+      }
+    },
+    "arm_context_tsk_cin": {
+      "video": "video_context_tsk_cin_09.mp4",
+      "prompt": "Character A, smooth bicycle-mounted tracking camera facing backward at the character as she pedals merrily along a tree-lined brick canal in Amsterdam, historic 17th-century canal houses and stone bridges gliding past, soft diffused European light, photorealistic travel vlog style.",
+      "latency_s": 27.383416175842285,
+      "audit": {
+        "facial_similarity": 0.94,
+        "outfit_consistency": 0.96,
+        "relighting_realism": 0.95,
+        "motion_realism": 0.95,
+        "overall": 0.95,
+        "verdict": "STRONG_ADHERENCE",
+        "critique": "The video maintains exceptional fidelity to the reference portrait. The subject's facial features, smile, and expression remain accurate across various head turns and speaking movements. The wardrobe, including the specific knit pattern of the scarf, yellow raincoat, and commuter helmet, is reproduced with high consistency. Scene lighting is diffused, natural, and integrates the character seamlessly without artifacts or matte lines."
+      }
+    },
+    "arm_studio_tsk_smp": {
+      "video": "video_studio_tsk_smp_09.mp4",
+      "prompt": "Character A (reference image) riding a bicycle along an Amsterdam canal",
+      "latency_s": 29.13787817955017,
+      "audit": {
+        "facial_similarity": 0.95,
+        "outfit_consistency": 0.96,
+        "relighting_realism": 0.95,
+        "motion_realism": 0.94,
+        "overall": 0.95,
+        "verdict": "STRONG_ADHERENCE",
+        "critique": "Outstanding fidelity across all dimensions. The subject's facial features, cheerful expression, and helmet fit closely replicate the reference portrait. The yellow raincoat and distinctly patterned scarf are faithfully preserved. Scene relighting seamlessly integrates the character from the white studio source into the soft daylight of the Amsterdam canal environment with zero haloing or matte artifacts."
+      }
+    },
+    "arm_studio_tsk_cin": {
+      "video": "video_studio_tsk_cin_09.mp4",
+      "prompt": "Character A, smooth bicycle-mounted tracking camera facing backward at the character as she pedals merrily along a tree-lined brick canal in Amsterdam, historic 17th-century canal houses and stone bridges gliding past, soft diffused European light, photorealistic travel vlog style.",
+      "latency_s": 33.18951177597046,
+      "audit": {
+        "facial_similarity": 0.98,
+        "outfit_consistency": 0.99,
+        "relighting_realism": 0.98,
+        "motion_realism": 0.96,
+        "overall": 0.98,
+        "verdict": "STRONG_ADHERENCE",
+        "critique": "Outstanding reference fidelity across all metrics. Facial identity, smile, and bone structure match the reference portrait with near-perfection. The yellow jacket, knit cowl scarf, and black helmet are reproduced with remarkable detail and consistency. Environmental relighting is completely seamless, showing dynamic, physically accurate ambient occlusion and shadow transition as the subject pedals under the stone bridge without any studio cutout artifacts or white edge haloing."
+      }
+    }
+  },
+  "13": {
+    "case": {
+      "id": 13,
+      "name": "Indigenous Male (30s) - Banff Overlook",
+      "ethnicity": "Indigenous / Native",
+      "demographics": "36-year-old Indigenous North American male",
+      "framing": "Bust / Medium Portrait",
+      "framing_category": "Medium",
+      "action_summary": "Standing on mountain overlook",
+      "ref_prompt": "Bust portrait of a 36-year-old Indigenous North American male with strong regal facial features, long dark hair tied in a neat tie, wearing a brown shearling-lined leather jacket, calm thoughtful gaze looking toward the horizon, crisp Canadian Rockies mountain wind, sharp alpine light, photorealistic.",
+      "ref_studio_prompt": "Bust portrait of a 36-year-old Indigenous North American male with strong regal facial features, long dark hair tied in a neat tie, wearing a brown shearling-lined leather jacket, calm thoughtful gaze looking toward camera, professional clean studio softbox lighting, isolated against a seamless solid plain white studio backdrop, photorealistic.",
+      "clean_prompt": "Character A (reference image) standing on a mountain cliff overlook in Banff",
+      "mode_a_cinematic": "Character A, epic slow push-in cinematic shot facing the character standing tall at the edge of a rocky cliff overlook, wind softly rustling his hair as the camera pulls slightly back to reveal the breathtaking turquoise waters of Lake Louise and snow-dusted pine valleys below, National Geographic documentary aesthetic."
+    },
+    "ref_context": "ref_context_13.png",
+    "ref_studio": "ref_studio_13.png",
+    "arm_context_ctl_smp": {
+      "video": "video_context_ctl_smp_13.mp4",
+      "prompt": "Character A (reference image) standing on a mountain cliff overlook in Banff",
+      "audit": {
+        "facial_similarity": 0.97,
+        "outfit_consistency": 0.98,
+        "relighting_realism": 0.95,
+        "motion_realism": 0.92,
+        "overall": 0.96,
+        "verdict": "STRONG_ADHERENCE",
+        "critique": "Exceptional identity preservation and visual fidelity. Facial features, facial hair, skin texture, and hair bun precisely mirror the reference portrait across varying shot scales. The shearling leather jacket and dark sweater are rendered consistently with extreme detail, and the natural daylight and atmospheric mountain wind integrate the character seamlessly into the Banff overlook environment."
+      }
+    },
+    "arm_context_ctl_cin": {
+      "video": "video_context_ctl_cin_13.mp4",
+      "prompt": "Character A, epic slow push-in cinematic shot facing the character standing tall at the edge of a rocky cliff overlook, wind softly rustling his hair as the camera pulls slightly back to reveal the breathtaking turquoise waters of Lake Louise and snow-dusted pine valleys below, National Geographic documentary aesthetic.",
+      "audit": {
+        "facial_similarity": 0.97,
+        "outfit_consistency": 0.98,
+        "relighting_realism": 0.96,
+        "motion_realism": 0.95,
+        "overall": 0.97,
+        "verdict": "STRONG_ADHERENCE",
+        "critique": "Outstanding identity preservation and visual fidelity throughout the shot. The character's facial geometry, hair bun with subtle flyaways, facial hair, and expression match the reference portrait precisely across varying angles and scales. The shearling aviator jacket and knit sweater maintain perfect continuity. The transition from close-up to an expansive wide reveal over the turquoise lake is cinematic, realistic, and free of any lighting artifacts or haloing."
+      }
+    },
+    "arm_context_tsk_smp": {
+      "video": "video_context_tsk_smp_13.mp4",
+      "prompt": "Character A (reference image) standing on a mountain cliff overlook in Banff",
+      "latency_s": 29.76585841178894,
+      "audit": {
+        "facial_similarity": 0.96,
+        "outfit_consistency": 0.98,
+        "relighting_realism": 0.97,
+        "motion_realism": 0.96,
+        "overall": 0.97,
+        "verdict": "STRONG_ADHERENCE",
+        "critique": "Outstanding reference fidelity across all dimensions. The subject's facial features, hairstyle, and facial hair are preserved precisely from the reference image. The shearling leather jacket and knit inner layer maintain complete continuity, while the camera pull-back and walking kinematics integrate flawlessly with the Banff mountain environment lighting."
+      }
+    },
+    "arm_context_tsk_cin": {
+      "video": "video_context_tsk_cin_13.mp4",
+      "prompt": "Character A, epic slow push-in cinematic shot facing the character standing tall at the edge of a rocky cliff overlook, wind softly rustling his hair as the camera pulls slightly back to reveal the breathtaking turquoise waters of Lake Louise and snow-dusted pine valleys below, National Geographic documentary aesthetic.",
+      "latency_s": 33.026038646698,
+      "audit": {
+        "facial_similarity": 0.98,
+        "outfit_consistency": 0.99,
+        "relighting_realism": 0.98,
+        "motion_realism": 0.97,
+        "overall": 0.98,
+        "verdict": "STRONG_ADHERENCE",
+        "critique": "Outstanding consistency across all metrics. The character's facial features, hair structure, and facial hair are preserved with exceptional fidelity. The shearling leather flight jacket and sweater match the reference down to fine textures and hardware. Camera movement smoothly pulls back to reveal the mountain landscape and turquoise water with natural lighting integration and realistic wind physics."
+      }
+    },
+    "arm_studio_tsk_smp": {
+      "video": "video_studio_tsk_smp_13.mp4",
+      "prompt": "Character A (reference image) standing on a mountain cliff overlook in Banff",
+      "latency_s": 30.602365255355835,
+      "audit": {
+        "facial_similarity": 0.98,
+        "outfit_consistency": 0.97,
+        "relighting_realism": 0.98,
+        "motion_realism": 0.96,
+        "overall": 0.97,
+        "verdict": "STRONG_ADHERENCE",
+        "critique": "Exceptional reference preservation across all metrics. The facial geometry, skin texture, and facial hair match the reference portrait near-flawlessly in both medium and close-up angles. The shearling leather jacket is rendered consistently, and the character is seamlessly relit under natural overcast mountain daylight with zero studio white haloing or matte edge artifacts."
+      }
+    },
+    "arm_studio_tsk_cin": {
+      "video": "video_studio_tsk_cin_13.mp4",
+      "prompt": "Character A, epic slow push-in cinematic shot facing the character standing tall at the edge of a rocky cliff overlook, wind softly rustling his hair as the camera pulls slightly back to reveal the breathtaking turquoise waters of Lake Louise and snow-dusted pine valleys below, National Geographic documentary aesthetic.",
+      "latency_s": 26.594034910202026,
+      "audit": {
+        "facial_similarity": 0.94,
+        "outfit_consistency": 0.98,
+        "relighting_realism": 0.96,
+        "motion_realism": 0.95,
+        "overall": 0.96,
+        "verdict": "STRONG_ADHERENCE",
+        "critique": "Exceptional identity preservation and seamless environmental integration. The subject's facial geometry, facial hair, and tied-back hairstyle match the reference portrait precisely. The brown shearling aviator jacket and knit sweater are replicated with high detail and consistency. Relighting from the studio white reference into the soft, diffuse overcast mountain lighting is executed without any edge artifacts, matte lines, or studio haloing."
+      }
+    }
+  },
+  "15": {
+    "case": {
+      "id": 15,
+      "name": "Caucasian Male (20s) - Hawaii Surfing",
+      "ethnicity": "Caucasian",
+      "demographics": "24-year-old Caucasian male surfer",
+      "framing": "Full-Body Action Shot",
+      "framing_category": "Full-Body",
+      "action_summary": "Walking into ocean with surfboard",
+      "ref_prompt": "Full-body portrait of a 24-year-old athletic Caucasian male surfer with sun-bleached tousled hair, sun-kissed skin, wearing a black neoprene surf vest and boardshorts, holding a custom white surfboard under his arm, standing on a golden sand beach, sparkling Pacific ocean breakers behind, photorealistic.",
+      "ref_studio_prompt": "Full-body portrait of a 24-year-old athletic Caucasian male surfer with sun-bleached tousled hair, sun-kissed skin, wearing a black neoprene surf vest and boardshorts, holding a custom white surfboard under his arm, professional clean studio lighting, isolated against a seamless solid plain white studio backdrop, photorealistic.",
+      "clean_prompt": "Character A (reference image) walking into the ocean surf with a surfboard in Hawaii",
+      "mode_a_cinematic": "Character A, cinematic slow-motion tracking shot following the character from behind and side as he walks barefoot across wet sand into the crashing ocean whitewash, paddling out through breaking turquoise waves under a glowing golden Hawaiian sunset, photorealistic surf film style."
+    },
+    "ref_context": "ref_context_15.png",
+    "ref_studio": "ref_studio_15.png",
+    "arm_context_ctl_smp": {
+      "video": "video_context_ctl_smp_15.mp4",
+      "prompt": "Character A (reference image) walking into the ocean surf with a surfboard in Hawaii",
+      "audit": {
+        "facial_similarity": 0.88,
+        "outfit_consistency": 0.96,
+        "relighting_realism": 0.95,
+        "motion_realism": 0.94,
+        "overall": 0.93,
+        "verdict": "STRONG_ADHERENCE",
+        "critique": "The video demonstrates outstanding continuity with the reference image. The character's sleeveless wetsuit vest, striped boardshorts, necklace, watch, and surfboard design match the reference with high precision. Lighting and shadow integration in the sunny coastal environment are photorealistic, and the physical motion of walking into the breaking surf and foam interaction is smooth and natural."
+      }
+    },
+    "arm_context_ctl_cin": {
+      "video": "video_context_ctl_cin_15.mp4",
+      "prompt": "Character A, cinematic slow-motion tracking shot following the character from behind and side as he walks barefoot across wet sand into the crashing ocean whitewash, paddling out through breaking turquoise waves under a glowing golden Hawaiian sunset, photorealistic surf film style.",
+      "audit": {
+        "facial_similarity": 0.83,
+        "outfit_consistency": 0.84,
+        "relighting_realism": 0.96,
+        "motion_realism": 0.95,
+        "overall": 0.89,
+        "verdict": "STRONG_ADHERENCE",
+        "critique": "The video maintains excellent continuity with the reference character's hair texture, build, and boardshort styling. While the wetsuit changed from sleeveless to long-sleeved, the environmental relighting into a warm golden hour sunset and physical interaction with the surf/water are executed with exceptional realism and no matte artifacts."
+      }
+    },
+    "arm_context_tsk_smp": {
+      "video": "video_context_tsk_smp_15.mp4",
+      "prompt": "Character A (reference image) walking into the ocean surf with a surfboard in Hawaii",
+      "latency_s": 31.09627890586853,
+      "audit": {
+        "facial_similarity": 0.9,
+        "outfit_consistency": 0.95,
+        "relighting_realism": 0.94,
+        "motion_realism": 0.92,
+        "overall": 0.93,
+        "verdict": "STRONG_ADHERENCE",
+        "critique": "Exceptional reference preservation across all keyframes. The character's facial likeness, blonde hair, and stubble in side profile match the reference closely. Outfit details\u2014including the sleeveless wetsuit vest, shell necklace, wrist watch, boardshort stripes, and surfboard logos\u2014are remarkably consistent, with natural outdoor lighting and seamless water interaction."
+      }
+    },
+    "arm_context_tsk_cin": {
+      "video": "video_context_tsk_cin_15.mp4",
+      "prompt": "Character A, cinematic slow-motion tracking shot following the character from behind and side as he walks barefoot across wet sand into the crashing ocean whitewash, paddling out through breaking turquoise waves under a glowing golden Hawaiian sunset, photorealistic surf film style.",
+      "latency_s": 28.951860666275024,
+      "audit": {
+        "facial_similarity": 0.88,
+        "outfit_consistency": 0.95,
+        "relighting_realism": 0.95,
+        "motion_realism": 0.95,
+        "overall": 0.93,
+        "verdict": "STRONG_ADHERENCE",
+        "critique": "Exceptional identity and wardrobe preservation across all keyframes. The character's specific sleeveless wetsuit top, striped boardshorts, watch, necklace, and surfboard details transfer seamlessly into the golden hour sunset lighting without any matte artifacts or lighting bleed from the bright daylight reference."
+      }
+    },
+    "arm_studio_tsk_smp": {
+      "video": "video_studio_tsk_smp_15.mp4",
+      "prompt": "Character A (reference image) walking into the ocean surf with a surfboard in Hawaii",
+      "latency_s": 29.074509859085083,
+      "audit": {
+        "facial_similarity": 0.88,
+        "outfit_consistency": 0.82,
+        "relighting_realism": 0.95,
+        "motion_realism": 0.94,
+        "overall": 0.89,
+        "verdict": "STRONG_ADHERENCE",
+        "critique": "The video maintains strong subject fidelity, with the character's hair, build, and facial profile in later keyframes matching the reference well. The striped boardshorts are accurately preserved, though the wetsuit top modified from a sleeveless vest to a full long-sleeve top. Environment integration and relighting are exceptional, showing zero white matte bleed and realistic natural water and light interaction."
+      }
+    },
+    "arm_studio_tsk_cin": {
+      "video": "video_studio_tsk_cin_15.mp4",
+      "prompt": "Character A, cinematic slow-motion tracking shot following the character from behind and side as he walks barefoot across wet sand into the crashing ocean whitewash, paddling out through breaking turquoise waves under a glowing golden Hawaiian sunset, photorealistic surf film style.",
+      "latency_s": 27.334842205047607,
+      "audit": {
+        "facial_similarity": 0.85,
+        "outfit_consistency": 0.8,
+        "relighting_realism": 0.95,
+        "motion_realism": 0.94,
+        "overall": 0.88,
+        "verdict": "STRONG_ADHERENCE",
+        "critique": "The video demonstrates outstanding cinematic quality and seamless relighting under golden hour sunset conditions with realistic water physics and zero white studio background bleed. The character's hair, profile, wrist accessory, and striped boardshort pattern match the reference accurately. However, there is minor outfit drift in the wetsuit top, which transforms from a sleeveless vest in the reference into short sleeves while walking, and then into long sleeves while paddling."
+      }
+    }
+  },
+  "19": {
+    "case": {
+      "id": 19,
+      "name": "Hispanic Male (20s) - Vintage Havana",
+      "ethnicity": "Hispanic / Latino",
+      "demographics": "27-year-old Hispanic male",
+      "framing": "Headshot / Close-up",
+      "framing_category": "Headshot",
+      "action_summary": "With vintage motorcycle in Havana",
+      "ref_prompt": "Close-up portrait of a 27-year-old Hispanic male with charismatic smile and curly dark hair, wearing a worn brown leather aviator jacket over a white cotton t-shirt, resting his arms casually on motorcycle handlebars, warm pastel colonial building facades in background, golden late-afternoon Havana light, photorealistic.",
+      "ref_studio_prompt": "Close-up portrait of a 27-year-old Hispanic male with charismatic smile and curly dark hair, wearing a worn brown leather aviator jacket over a white cotton t-shirt, resting his arms casually forward, warm friendly expression, professional clean studio softbox lighting, isolated against a seamless solid plain white studio backdrop, photorealistic.",
+      "clean_prompt": "Character A (reference image) standing next to a vintage motorcycle in Havana",
+      "mode_a_cinematic": "Character A, warm pastel-toned cinematic street tracking shot gliding past colorful weathered colonial buildings in Havana, tracking the character as he leans confidently against a classic motorcycle, nodding warmly to passersby as vintage turquoise cars cruise slowly past on the cobblestone avenue, nostalgic cinematic vibe."
+    },
+    "ref_context": "ref_context_19.png",
+    "ref_studio": "ref_studio_19.png",
+    "arm_context_ctl_smp": {
+      "video": "video_context_ctl_smp_19.mp4",
+      "prompt": "Character A (reference image) standing next to a vintage motorcycle in Havana",
+      "audit": {
+        "facial_similarity": 0.98,
+        "outfit_consistency": 0.98,
+        "relighting_realism": 0.98,
+        "motion_realism": 0.96,
+        "overall": 0.97,
+        "verdict": "STRONG_ADHERENCE",
+        "critique": "Outstanding consistency across all dimensions. The subject's facial geometry, hair texture, smile, and skin tone perfectly match the reference portrait. The distressed brown leather jacket, white t-shirt, and accessories are meticulously preserved as the character transitions naturally from leaning over the handlebars to standing upright beside the motorcycle, with flawless environmental lighting integration."
+      }
+    },
+    "arm_context_ctl_cin": {
+      "video": "video_context_ctl_cin_19.mp4",
+      "prompt": "Character A, warm pastel-toned cinematic street tracking shot gliding past colorful weathered colonial buildings in Havana, tracking the character as he leans confidently against a classic motorcycle, nodding warmly to passersby as vintage turquoise cars cruise slowly past on the cobblestone avenue, nostalgic cinematic vibe.",
+      "audit": {
+        "facial_similarity": 0.98,
+        "outfit_consistency": 0.99,
+        "relighting_realism": 0.97,
+        "motion_realism": 0.96,
+        "overall": 0.97,
+        "verdict": "STRONG_ADHERENCE",
+        "critique": "Outstanding consistency across all dimensions. The facial features, hair structure, and warm expressive smile perfectly mirror the reference image. The outfit, tattoos, watch, bracelets, and rings show immaculate frame-to-frame stability. Relighting and camera tracking through the Havana street are naturally rendered without artifacts or edge bleeding."
+      }
+    },
+    "arm_context_tsk_smp": {
+      "video": "video_context_tsk_smp_19.mp4",
+      "prompt": "Character A (reference image) standing next to a vintage motorcycle in Havana",
+      "latency_s": 28.682151556015015,
+      "audit": {
+        "facial_similarity": 0.96,
+        "outfit_consistency": 0.97,
+        "relighting_realism": 0.96,
+        "motion_realism": 0.94,
+        "overall": 0.96,
+        "verdict": "STRONG_ADHERENCE",
+        "critique": "Exceptional fidelity to the reference portrait. Facial structure, hair volume and texture, and expressive smile remain perfectly consistent across all keyframes. The distressed leather jacket, white t-shirt, and accessories (bracelets, rings, hand details) match the source seamlessly, with natural motion and lighting integrated into the Havana street setting."
+      }
+    },
+    "arm_context_tsk_cin": {
+      "video": "video_context_tsk_cin_19.mp4",
+      "prompt": "Character A, warm pastel-toned cinematic street tracking shot gliding past colorful weathered colonial buildings in Havana, tracking the character as he leans confidently against a classic motorcycle, nodding warmly to passersby as vintage turquoise cars cruise slowly past on the cobblestone avenue, nostalgic cinematic vibe.",
+      "latency_s": 25.882838487625122,
+      "audit": {
+        "facial_similarity": 0.97,
+        "outfit_consistency": 0.98,
+        "relighting_realism": 0.97,
+        "motion_realism": 0.96,
+        "overall": 0.97,
+        "verdict": "STRONG_ADHERENCE",
+        "critique": "Exceptional fidelity across all metrics. The subject's facial features, curly dark hair, and warm smile remain completely identical to the reference. Outfit details\u2014including the distressed brown leather jacket, white t-shirt, watch, rings, and hand tattoos\u2014are perfectly preserved. The soft, warm pastel lighting matches the Havana streetscape seamlessly with no matte artifacts or lighting bleed, complemented by realistic tracking motion and background traffic."
+      }
+    },
+    "arm_studio_tsk_smp": {
+      "video": "video_studio_tsk_smp_19.mp4",
+      "prompt": "Character A (reference image) standing next to a vintage motorcycle in Havana",
+      "latency_s": 30.314292192459106,
+      "audit": {
+        "facial_similarity": 0.95,
+        "outfit_consistency": 0.98,
+        "relighting_realism": 0.96,
+        "motion_realism": 0.95,
+        "overall": 0.96,
+        "verdict": "STRONG_ADHERENCE",
+        "critique": "Exceptional fidelity across all dimensions. The facial features, curly hair, and characteristic warm expression replicate the reference portrait precisely. Apparel and accessories\u2014including the distressed brown leather jacket, white t-shirt, silver watch, and the specific rose tattoo on the hand\u2014are maintained with remarkable consistency. The relighting from a seamless white studio into the warm outdoor Havana daylight is natural, with zero matte lines, haloing, or lighting artifacts."
+      }
+    },
+    "arm_studio_tsk_cin": {
+      "video": "video_studio_tsk_cin_19.mp4",
+      "prompt": "Character A, warm pastel-toned cinematic street tracking shot gliding past colorful weathered colonial buildings in Havana, tracking the character as he leans confidently against a classic motorcycle, nodding warmly to passersby as vintage turquoise cars cruise slowly past on the cobblestone avenue, nostalgic cinematic vibe.",
+      "latency_s": 28.39702844619751,
+      "audit": {
+        "facial_similarity": 0.94,
+        "outfit_consistency": 0.98,
+        "relighting_realism": 0.96,
+        "motion_realism": 0.95,
+        "overall": 0.95,
+        "verdict": "STRONG_ADHERENCE",
+        "critique": "Exceptional fidelity across all dimensions. The subject's facial features, curly dark hair, and warm smile match the reference portrait precisely. The outfit\u2014including the distressed brown leather jacket, white t-shirt, watch, and beaded wrist accessories\u2014is replicated with high accuracy. The relighting completely strips the isolated white studio background, seamlessly integrating the character into the warm, pastel daylight ambience of the Havana street without matte lines or studio haloing."
+      }
+    }
+  }
+}

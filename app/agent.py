@@ -40,6 +40,8 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 async def init_session_state(callback_context: CallbackContext) -> None:
     """Initializes default pipeline state, user preferences, and app metrics on session start."""
     state = callback_context.state
+    if "run_id" not in state:
+        state["run_id"] = f"vidgen_{int(time.time())}"
     if "pipeline_stage" not in state:
         state["pipeline_stage"] = "pre_production"
     if "shots" not in state:
@@ -166,20 +168,30 @@ async def generate_video_shot_clip(
         elif "user:character_bible" in tool_context.state and isinstance(tool_context.state.get("user:character_bible"), dict):
             ref_img_path = tool_context.state["user:character_bible"].get("main_character_frame")
 
-    if ref_img_path:
-        print(f"[Omni Video Gen] Shot {shot_index} conditioning on reference image: {ref_img_path}")
+    # Guardrail: on Shot 1 without a prior clip, never pass the canonical reference image as <FIRST_FRAME> I2V;
+    # instead route it strictly through R2V (`task="reference_to_video"`).
+    if shot_index == 1 and input_image_path and ref_img_path and os.path.abspath(input_image_path) == os.path.abspath(ref_img_path) and not end_image_path:
+        input_image_b64 = None
+
+    ref_imgs_b64 = None
+    if not input_image_b64 and ref_img_path and os.path.exists(ref_img_path):
+        with open(ref_img_path, "rb") as ref_f:
+            ref_imgs_b64 = [base64.b64encode(ref_f.read()).decode("utf-8")]
+
+    if ref_imgs_b64:
+        print(f"[Omni Video Gen] Shot {shot_index} conditioning on reference image via R2V (task='reference_to_video'): {ref_img_path}")
+    elif input_image_b64:
+        print(f"[Omni Video Gen] Shot {shot_index} chaining from extracted first frame (<FIRST_FRAME>): {input_image_path}")
     else:
         print(f"[Omni Video Gen] Shot {shot_index} running text-to-video seed (no reference image provided)")
 
-    ref_imgs_b64 = None
-    if ref_img_path and os.path.exists(ref_img_path):
-        with open(ref_img_path, "rb") as ref_f:
-            ref_imgs_b64 = [base64.b64encode(ref_f.read()).decode("utf-8")]
+    shot_task = "reference_to_video" if (ref_imgs_b64 and not input_image_b64) else None
 
     clip_bytes = generate_omni_clip(
         prompt=prompt,
         input_image_b64=input_image_b64,
         end_image_b64=end_image_b64,
+        task=shot_task,
         reference_images_b64=ref_imgs_b64,
         aspect_ratio=aspect_ratio,
         resolution=resolution,
@@ -204,20 +216,29 @@ async def generate_video_shot_clip(
             print(f"[Anchor Extraction Notice]: {anchor_err}")
 
     # 1. Upload to GCS showcase for public HTTPS URL
+    from app.tools.gcs_storage import get_storage_client, get_default_bucket_name, ensure_gcs_bucket, upload_file_to_gcs
+    run_id = (
+        tool_context.state.get("run_id")
+        if tool_context and tool_context.state.get("run_id")
+        else f"vidgen_{int(time.time())}"
+    )
+    if tool_context and "run_id" not in tool_context.state:
+        tool_context.state["run_id"] = run_id
+    clip_ts = int(time.time() * 1000)
+    gcs_blob_path = f"showcase/{run_id}/shot_{shot_index}_{clip_ts}.mp4"
     gcs_url = None
     try:
-        from app.tools.gcs_storage import get_storage_client, get_default_bucket_name, ensure_gcs_bucket, upload_file_to_gcs
         gcs_client = get_storage_client()
         bucket_name = get_default_bucket_name()
         if gcs_client:
             bucket = ensure_gcs_bucket(gcs_client, bucket_name)
             if bucket:
-                gcs_url = upload_file_to_gcs(bucket, clip_path, f"showcase/shots/{clip_name}")
+                gcs_url = upload_file_to_gcs(bucket, clip_path, gcs_blob_path)
     except Exception:
         pass
     if not gcs_url:
-        bucket_name = os.getenv("GCS_SHOWCASE_BUCKET", "universal-trail-492014-n5-vidgen-showcase")
-        gcs_url = f"https://storage.googleapis.com/{bucket_name}/showcase/shots/{clip_name}"
+        bucket_name = get_default_bucket_name()
+        gcs_url = f"https://storage.googleapis.com/{bucket_name}/{gcs_blob_path}"
 
     # 2. Register native lightweight URI ADK Artifact and update state
     artifact_saved = False
@@ -306,7 +327,25 @@ async def concatenate_video_clips(
     Returns:
         Dictionary containing stitched video path, public video URL, artifact details, and status.
     """
-    valid_clips = [p for p in video_paths if os.path.exists(p) and os.path.getsize(p) > 0]
+    resolved_paths = []
+    for p in video_paths:
+        if os.path.exists(p) and os.path.getsize(p) > 0:
+            resolved_paths.append(p)
+        else:
+            candidate = os.path.join(OUTPUT_DIR, os.path.basename(p))
+            if os.path.exists(candidate) and os.path.getsize(candidate) > 0:
+                resolved_paths.append(candidate)
+    if not resolved_paths and tool_context and isinstance(tool_context.state.get("shots"), dict):
+        for s_info in sorted(
+            tool_context.state["shots"].values(),
+            key=lambda x: x.get("shot_index", 0) if isinstance(x, dict) else 0,
+        ):
+            if isinstance(s_info, dict):
+                sp = s_info.get("video_path")
+                if sp and os.path.exists(sp) and os.path.getsize(sp) > 0:
+                    resolved_paths.append(sp)
+
+    valid_clips = resolved_paths
     if not valid_clips:
         return {"error": "No valid video clips found to concatenate", "status": "failed"}
 
@@ -315,21 +354,30 @@ async def concatenate_video_clips(
     stitched_path = stitch_videos(valid_clips, out_path)
 
     # 1. Upload to GCS showcase for public HTTPS URL
-    run_id = f"vidgen_{int(time.time())}"
+    from app.tools.gcs_storage import get_storage_client, get_default_bucket_name, ensure_gcs_bucket, upload_file_to_gcs
+    run_id = (
+        tool_context.state.get("run_id")
+        if tool_context and tool_context.state.get("run_id")
+        else f"vidgen_{int(time.time())}"
+    )
+    if tool_context and "run_id" not in tool_context.state:
+        tool_context.state["run_id"] = run_id
+    stitched_ts = int(time.time() * 1000)
+    base_stem, base_ext = os.path.splitext(os.path.basename(stitched_path))
+    gcs_blob_path = f"showcase/{run_id}/{base_stem}_{stitched_ts}{base_ext}"
     gcs_url = None
     try:
-        from app.tools.gcs_storage import get_storage_client, get_default_bucket_name, ensure_gcs_bucket, upload_file_to_gcs
         gcs_client = get_storage_client()
         bucket_name = get_default_bucket_name()
         if gcs_client:
             bucket = ensure_gcs_bucket(gcs_client, bucket_name)
             if bucket:
-                gcs_url = upload_file_to_gcs(bucket, stitched_path, f"showcase/{run_id}/{os.path.basename(stitched_path)}")
+                gcs_url = upload_file_to_gcs(bucket, stitched_path, gcs_blob_path)
     except Exception:
         pass
     if not gcs_url:
-        bucket_name = os.getenv("GCS_SHOWCASE_BUCKET", "universal-trail-492014-n5-vidgen-showcase")
-        gcs_url = f"https://storage.googleapis.com/{bucket_name}/showcase/{run_id}/{os.path.basename(stitched_path)}"
+        bucket_name = get_default_bucket_name()
+        gcs_url = f"https://storage.googleapis.com/{bucket_name}/{gcs_blob_path}"
 
     # 2. Register native lightweight URI ADK Artifact for Agent Runtime / Gemini Enterprise
     artifact_saved = False
@@ -386,7 +434,7 @@ async def generate_multi_shot_video(
     state = PipelineState(
         original_intent=prompt,
         num_shots=num_shots,
-        mode=mode if mode in ["reference", "i2v_chaining"] else "i2v_chaining",
+        mode=mode if mode in ["reference", "i2v_chaining", "video_extend"] else "i2v_chaining",
         aspect_ratio=aspect_ratio,
         resolution=resolution,
         duration=duration
@@ -396,21 +444,28 @@ async def generate_multi_shot_video(
     artifact_saved = False
     gcs_url = None
     if result_state.stitched_video_path and os.path.exists(result_state.stitched_video_path):
+        from app.tools.gcs_storage import get_storage_client, get_default_bucket_name, ensure_gcs_bucket, upload_file_to_gcs
         filename = os.path.basename(result_state.stitched_video_path)
-        run_id = f"vidgen_{int(time.time())}"
+        base_stem, base_ext = os.path.splitext(filename)
+        run_id = (
+            tool_context.state.get("run_id")
+            if tool_context and tool_context.state.get("run_id")
+            else f"vidgen_{int(time.time())}"
+        )
+        stitched_ts = int(time.time() * 1000)
+        gcs_blob_path = f"showcase/{run_id}/{base_stem}_{stitched_ts}{base_ext}"
         try:
-            from app.tools.gcs_storage import get_storage_client, get_default_bucket_name, ensure_gcs_bucket, upload_file_to_gcs
             gcs_client = get_storage_client()
             bucket_name = get_default_bucket_name()
             if gcs_client:
                 bucket = ensure_gcs_bucket(gcs_client, bucket_name)
                 if bucket:
-                    gcs_url = upload_file_to_gcs(bucket, result_state.stitched_video_path, f"showcase/{run_id}/{filename}")
+                    gcs_url = upload_file_to_gcs(bucket, result_state.stitched_video_path, gcs_blob_path)
         except Exception:
             pass
         if not gcs_url:
-            bucket_name = os.getenv("GCS_SHOWCASE_BUCKET", "universal-trail-492014-n5-vidgen-showcase")
-            gcs_url = f"https://storage.googleapis.com/{bucket_name}/showcase/{run_id}/{filename}"
+            bucket_name = get_default_bucket_name()
+            gcs_url = f"https://storage.googleapis.com/{bucket_name}/{gcs_blob_path}"
 
         if tool_context:
             try:
@@ -773,7 +828,7 @@ root_agent = Agent(
         "   Step 2.1 - OPTIMIZE: Delegate to `PromptOptimizerAgent` to optimize the visual prompt for Gemini Omni Flash (pass QualityRater feedback if retrying).\n"
         "   Step 2.2 - AUDIT: Delegate to `HealthCheckerAgent` to verify safety and policy compliance.\n"
         "   Step 2.3 - CRITICAL TOOL CALL (RENDER): Invoke tool `generate_video_shot_clip(prompt=..., shot_index=k, input_image_path=..., reference_image_path=...)`.\n"
-        "              REFERENCE CONDITIONING (CRITICAL): If the user provides a reference image (via file path, URL, or image upload) in their initial request, you MUST pass `reference_image_path` on **Shot 1** as well as all subsequent shots. For workflows without an initial user image, Shot 1 generates text-to-video and automatically establishes the reference for shots k >= 2.\n"
+        "              REFERENCE CONDITIONING (CRITICAL): If the user provides a reference image (via file path, URL, or image upload), pass `reference_image_path` (with `input_image_path=None`) on **Shot 1** so Shot 1 uses native Reference-to-Video (`task='reference_to_video'`) rather than first-frame I2V. In `i2v_chaining` mode on Shots k >= 2, pass `input_image_path` from `parse_terminal_frame` (and omit `reference_image_path` so `<FIRST_FRAME>` chains cleanly). For workflows without an initial user image, Shot 1 generates text-to-video and automatically establishes the reference for downstream evaluation.\n"
         "              CRITICAL RULE: You MUST invoke `generate_video_shot_clip` immediately after `HealthCheckerAgent`. NEVER transfer to `QualityRaterAgent` before this tool call has finished and returned `video_path`.\n"
         "   Step 2.4 - RATE & CROSS-SHOT AUDIT: Delegate to `QualityRaterAgent` passing `video_path` and `reference_image_path` to audit face/wardrobe consistency.\n"
         "   Step 2.5 - PER-SHOT INTERACTIVE DIRECTING CHECKPOINT:\n"

@@ -1,0 +1,2086 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gemini Omni Flash 1.1: Unified Reference-to-Video Master Benchmark</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #090d16;
+      --card-bg: #111827;
+      --card-border: #1f2937;
+      --text: #f3f4f6;
+      --text-dim: #9ca3af;
+      --primary: #38bdf8;
+      --accent: #818cf8;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --studio: #ec4899;
+      --context: #3b82f6;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      padding: 32px 24px;
+    }
+    .container { max-width: 1720px; margin: 0 auto; }
+    
+    .header {
+      background: linear-gradient(135deg, #1e1b4b 0%, #0f172a 100%);
+      border: 1px solid #312e81;
+      border-radius: 16px;
+      padding: 32px;
+      margin-bottom: 28px;
+    }
+    .header h1 { font-size: 28px; font-weight: 800; color: #fff; margin-bottom: 8px; }
+    .header p { color: #cbd5e1; font-size: 15px; max-width: 1200px; }
+    .header .meta-bar {
+      margin-top: 16px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      font-size: 13px;
+      color: #94a3b8;
+    }
+    .meta-bar span { background: rgba(255,255,255,0.06); padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); }
+
+    /* KPI Summary Grid */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+      gap: 18px;
+      margin-bottom: 28px;
+    }
+    .kpi-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+      padding: 20px;
+    }
+    .kpi-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); margin-bottom: 12px; }
+    .kpi-compare {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .kpi-box {
+      background: rgba(255,255,255,0.03);
+      padding: 12px;
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.05);
+    }
+    .kpi-box .lbl { font-size: 11px; color: var(--text-dim); }
+    .kpi-box .val { font-size: 22px; font-weight: 800; margin-top: 2px; }
+    .kpi-deltas {
+      font-size: 12px;
+      color: var(--text-dim);
+      border-top: 1px solid rgba(255,255,255,0.06);
+      padding-top: 10px;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    /* Filters */
+    .filter-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 24px;
+      align-items: center;
+    }
+    .filter-btn {
+      background: #1e293b;
+      color: #94a3b8;
+      border: 1px solid #334155;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .filter-btn:hover, .filter-btn.active {
+      background: #38bdf8;
+      color: #090d16;
+      border-color: #38bdf8;
+      font-weight: 700;
+    }
+
+    /* Case Card */
+    .case-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 24px;
+      margin-bottom: 32px;
+    }
+    .case-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 18px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      padding-bottom: 14px;
+    }
+    .case-title { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .case-id { background: #2563eb; color: #fff; font-size: 12px; font-weight: 800; padding: 3px 8px; border-radius: 6px; }
+    .case-title h3 { font-size: 18px; font-weight: 700; }
+    .framing-badge { background: #374151; color: #e5e7eb; font-size: 11px; padding: 3px 8px; border-radius: 4px; }
+    .demog-tag { background: #1e293b; color: #94a3b8; font-size: 11px; padding: 3px 8px; border-radius: 4px; }
+    .case-action { font-size: 13px; color: #94a3b8; }
+
+    /* Ref Row */
+    .ref-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 24px;
+      background: #0f172a;
+      padding: 16px;
+      border-radius: 12px;
+      border: 1px solid #1e293b;
+    }
+    .ref-box { text-align: center; }
+    .ref-label { font-size: 12px; font-weight: 700; color: #60a5fa; margin-bottom: 8px; }
+    .ref-label.studio-label { color: #f472b6; }
+    .ref-box img {
+      max-height: 200px;
+      width: auto;
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.1);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    }
+
+    .modality-section-title {
+      font-size: 13px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #94a3b8;
+      margin-bottom: 12px;
+      border-left: 3px solid #38bdf8;
+      padding-left: 8px;
+    }
+
+    /* Video Grid 3-Column */
+    .videos-grid-3col {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+    }
+    @media (max-width: 1024px) {
+      .videos-grid-3col { grid-template-columns: 1fr; }
+      .ref-row { grid-template-columns: 1fr; }
+    }
+
+    .video-col {
+      background: #0f172a;
+      border: 1px solid #1e293b;
+      border-radius: 12px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+    }
+    .video-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .badge {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    .badge-ctl { background: #1e293b; color: #cbd5e1; border: 1px solid #475569; }
+    .badge-tsk-ctx { background: #1e3a8a; color: #93c5fd; border: 1px solid #2563eb; }
+    .badge-tsk-stu { background: #831843; color: #fbcfe8; border: 1px solid #db2777; }
+    .score-main { font-size: 14px; font-weight: 800; color: #fbbf24; }
+
+    .video-wrapper {
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      background: #000;
+      border-radius: 8px;
+      overflow: hidden;
+      margin-bottom: 8px;
+    }
+    .video-wrapper video { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+    .score-pills {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-bottom: 8px;
+    }
+    .pill {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.08);
+      font-size: 11px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: #cbd5e1;
+    }
+
+    .details-drawer { margin-top: auto; }
+    .details-drawer summary {
+      font-size: 11px;
+      color: #64748b;
+      cursor: pointer;
+      font-weight: 600;
+      padding: 4px 0;
+    }
+    .details-drawer summary:hover { color: #94a3b8; }
+    .drawer-content {
+      margin-top: 6px;
+      font-size: 11px;
+      background: #090d16;
+      padding: 8px;
+      border-radius: 6px;
+      border: 1px solid #1e293b;
+    }
+    .prompt-box { margin-bottom: 6px; color: #94a3b8; font-family: 'JetBrains Mono', monospace; font-size: 10px; word-break: break-word; }
+    .critique-box { color: #cbd5e1; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Gemini Omni Flash 1.1: Unified Reference-to-Video Master Benchmark</h1>
+      <p>
+        Complete comparative analysis across 10 representative scenarios investigating both
+        <strong>Native Task Parameters vs. Control Strings</strong> (with updated official <code>response_format</code>) and
+        <strong>Contextual Environmental Reference vs. 1-to-1 Derived Studio White Reference</strong>.
+      </p>
+      <div class="meta-bar">
+        <span>Model: <strong>gemini-omni-1.1-flash-preview</strong></span>
+        <span>Reference Derivation: <strong>gemini-3.1-flash-image (Image-to-Image)</strong></span>
+        <span>Evaluator: <strong>gemini-3.7-flash</strong></span>
+        <span>Schema: <strong>generation_config.video_config.task + response_format</strong></span>
+        <span>Scenarios: <strong>10 Cases (60 Video Clips)</strong></span>
+      </div>
+    </div>
+
+    <!-- KPI Summary Grid -->
+    <div class="kpi-grid">
+      <!-- Task Param vs Control String -->
+      <div class="kpi-card">
+        <div class="kpi-title">Task Param vs. Control String (Contextual Ref)</div>
+        <div class="kpi-compare">
+          <div class="kpi-box">
+            <div class="lbl">Control String (Simple)</div>
+            <div class="val" style="color: #94a3b8;">0.956</div>
+          </div>
+          <div class="kpi-box">
+            <div class="lbl">Task Param (Simple)</div>
+            <div class="val" style="color: #60a5fa;">0.948</div>
+          </div>
+        </div>
+        <div class="kpi-deltas">
+          <span>Overall: <span style="color: #ef4444; font-weight: 700;">-0.8%</span></span>
+          <span>Face: <span style="color: #ef4444; font-weight: 700;">-1.1%</span></span>
+          <span>Outfit: <span style="color: #ef4444; font-weight: 700;">-1.0%</span></span>
+        </div>
+      </div>
+
+      <!-- Studio White vs Contextual (Simple) -->
+      <div class="kpi-card">
+        <div class="kpi-title">Studio White vs. Contextual (Simple Task Param)</div>
+        <div class="kpi-compare">
+          <div class="kpi-box">
+            <div class="lbl">Contextual Ref</div>
+            <div class="val" style="color: #60a5fa;">0.948</div>
+          </div>
+          <div class="kpi-box">
+            <div class="lbl">Studio White Ref</div>
+            <div class="val" style="color: #f472b6;">0.940</div>
+          </div>
+        </div>
+        <div class="kpi-deltas">
+          <span>Overall: <span style="color: #ef4444; font-weight: 700;">-0.8%</span></span>
+          <span>Outfit: <span style="color: #ef4444; font-weight: 700;">-1.4%</span></span>
+          <span>Relighting: <span style="color: #94a3b8; font-weight: 700;">-0.4%</span></span>
+        </div>
+      </div>
+
+      <!-- Studio White vs Contextual (Cinematic) -->
+      <div class="kpi-card">
+        <div class="kpi-title">Studio White vs. Contextual (Cinematic Task Param)</div>
+        <div class="kpi-compare">
+          <div class="kpi-box">
+            <div class="lbl">Contextual Ref</div>
+            <div class="val" style="color: #4ade80;">0.944</div>
+          </div>
+          <div class="kpi-box">
+            <div class="lbl">Studio White Ref</div>
+            <div class="val" style="color: #facc15;">0.946</div>
+          </div>
+        </div>
+        <div class="kpi-deltas">
+          <span>Overall: <span style="color: #94a3b8; font-weight: 700;">+0.2%</span></span>
+          <span>Outfit: <span style="color: #10b981; font-weight: 700;">+1.2%</span></span>
+          <span>Relighting: <span style="color: #94a3b8; font-weight: 700;">+0.3%</span></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Filter Buttons -->
+    <div class="filter-bar">
+      <span style="font-size: 12px; font-weight: 700; color: #64748b;">FRAMING:</span>
+      <button class="filter-btn active" onclick="filterCases('all', this)">All (10)</button>
+      <button class="filter-btn" onclick="filterCases('Headshot', this)">Headshot</button>
+      <button class="filter-btn" onclick="filterCases('Medium', this)">Bust / Medium</button>
+      <button class="filter-btn" onclick="filterCases('Three-Quarter', this)">Three-Quarter</button>
+      <button class="filter-btn" onclick="filterCases('Full-Body', this)">Full-Body</button>
+    </div>
+
+    <!-- Cases Gallery -->
+    <div id="cases-container">
+      
+        <div class="case-card" data-framing="Headshot" data-ethnicity="East Asian">
+          <div class="case-header">
+            <div class="case-title">
+              <span class="case-id">#01</span>
+              <h3>East Asian Male (20s) - Alpine Skiing</h3>
+              <span class="framing-badge">Headshot</span>
+              <span class="demog-tag">East Asian</span>
+            </div>
+            <div class="case-action">Target Action: <strong>Skiing in Hakuba</strong></div>
+          </div>
+
+          <!-- Dual Paired References: Contextual vs 1-to-1 Derived Studio White -->
+          <div class="ref-row">
+            <div class="ref-box">
+              <div class="ref-label">Contextual Reference (Original Portrait)</div>
+              <img src="ref_context_01.png" alt="Contextual Reference" loading="lazy">
+            </div>
+            <div class="ref-box">
+              <div class="ref-label studio-label">Derived Studio White Reference (1-to-1 Subject Derivation)</div>
+              <img src="ref_studio_01.png" alt="Derived Studio Reference" loading="lazy">
+            </div>
+          </div>
+
+          <!-- Modality Sections: Row 1 = Simple Prompts, Row 2 = Cinematic Prompts -->
+          <div class="modality-section-title">Mode 1: Simple Prompts (3-Way Comparison)</div>
+          <div class="videos-grid-3col">
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-ctl">Contextual · Control String (Mode B)</span>
+                <span class="score-main">★ 0.95</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_context_ctl_smp_01.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.95</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.96</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.95</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A (reference image) skiing in Hakuba</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> Exceptional identity preservation and outfit fidelity across multiple shot scales. The red and black Arc'teryx jacket and ribbed beanie are rendered with near-perfect consistency, and the dynamic addition of Oakley goggles during skiing integrates naturally without disrupting facial structure. Lighting, snow spray, and skiing kinematics blend flawlessly into the alpine environment with zero background bleed or haloing.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-tsk-ctx">Contextual · Task Param (Mode C)</span>
+                <span class="score-main">★ 0.92</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_context_tsk_smp_01.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.90</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.95</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.95</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A (reference image) skiing in Hakuba</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> Excellent preservation of the character's facial likeness and apparel across varying camera distances. The red and black technical ski jacket, beanie, and hair styling match the reference portrait precisely. Natural snow-reflected lighting and plausible skiing kinematics create a highly realistic scene integration without artifacts.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-tsk-stu">Studio White · Task Param (Mode E)</span>
+                <span class="score-main">★ 0.92</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_studio_tsk_smp_01.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.89</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.94</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.95</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A (reference image) skiing in Hakuba</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> The generated video demonstrates excellent fidelity to the reference portrait. The red and black technical jacket, beanie, and the subject's facial features are preserved consistently across various action angles. Relighting into the bright Hakuba alpine environment is seamless, showing zero white matte haloing or studio background bleed, while the skiing kinematics and snow displacement look natural.</div>
+                </div>
+              </details>
+            </div>
+            
+          </div>
+
+          <div class="modality-section-title" style="margin-top: 20px;">Mode 2: Cinematic Prompts (3-Way Comparison)</div>
+          <div class="videos-grid-3col">
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-ctl">Contextual · Control String (Mode A)</span>
+                <span class="score-main">★ 0.94</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_context_ctl_cin_01.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.90</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.95</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.96</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A, continuous single take, dynamic cinematic tracking shot following the character skiing gracefully down a powdery slope on Hakuba Happo-One ridge, crisp alpine morning sunlight reflecting off the snow, dramatic Japanese Northern Alps in the background, sharp cinematic focus, photorealistic.</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> Exceptional fidelity to the reference portrait. The subject's facial features and beanie are accurately maintained at distance and across dynamic angles. The red and black technical jacket perfectly mirrors the reference's color blocking, collar structure, and zipper layout. Relighting is completely natural with crisp morning alpine sunlight, lens flares, and cast shadows on the snow without any matte lines or haloing artifacts.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-tsk-ctx">Contextual · Task Param (Mode D)</span>
+                <span class="score-main">★ 0.93</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_context_tsk_cin_01.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.90</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.95</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.95</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A, continuous single take, dynamic cinematic tracking shot following the character skiing gracefully down a powdery slope on Hakuba Happo-One ridge, crisp alpine morning sunlight reflecting off the snow, dramatic Japanese Northern Alps in the background, sharp cinematic focus, photorealistic.</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> Exceptional identity and outfit preservation. The red and black technical ski jacket, beanie, and facial structure closely mirror the reference image. The lighting integration with crisp alpine snow bounce and the physical kinematics of downhill skiing are photorealistic with zero compositing artifacts.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-tsk-stu">Studio White · Task Param (Mode F)</span>
+                <span class="score-main">★ 0.94</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_studio_tsk_cin_01.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.92</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.95</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.96</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A, continuous single take, dynamic cinematic tracking shot following the character skiing gracefully down a powdery slope on Hakuba Happo-One ridge, crisp alpine morning sunlight reflecting off the snow, dramatic Japanese Northern Alps in the background, sharp cinematic focus, photorealistic.</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> The video demonstrates exceptional adherence to the reference portrait. The subject's facial profile, dark beanie, and red-and-black technical ski jacket are reproduced with near-perfect consistency. Outdoor alpine sunlight, natural bounce from the snow, and powder spray are integrated flawlessly without any studio haloing or matte artifacts. Skiing kinematics are fluid and physically plausible throughout the tracking shot.</div>
+                </div>
+              </details>
+            </div>
+            
+          </div>
+        </div>
+        
+
+        <div class="case-card" data-framing="Full-Body" data-ethnicity="Black / African">
+          <div class="case-header">
+            <div class="case-title">
+              <span class="case-id">#02</span>
+              <h3>Black Female (20s) - Track Sprinting</h3>
+              <span class="framing-badge">Full-Body</span>
+              <span class="demog-tag">Black / African</span>
+            </div>
+            <div class="case-action">Target Action: <strong>Sprinting on coastal track</strong></div>
+          </div>
+
+          <!-- Dual Paired References: Contextual vs 1-to-1 Derived Studio White -->
+          <div class="ref-row">
+            <div class="ref-box">
+              <div class="ref-label">Contextual Reference (Original Portrait)</div>
+              <img src="ref_context_02.png" alt="Contextual Reference" loading="lazy">
+            </div>
+            <div class="ref-box">
+              <div class="ref-label studio-label">Derived Studio White Reference (1-to-1 Subject Derivation)</div>
+              <img src="ref_studio_02.png" alt="Derived Studio Reference" loading="lazy">
+            </div>
+          </div>
+
+          <!-- Modality Sections: Row 1 = Simple Prompts, Row 2 = Cinematic Prompts -->
+          <div class="modality-section-title">Mode 1: Simple Prompts (3-Way Comparison)</div>
+          <div class="videos-grid-3col">
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-ctl">Contextual · Control String (Mode B)</span>
+                <span class="score-main">★ 0.95</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_context_ctl_smp_02.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.95</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.98</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.96</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A (reference image) sprinting on an outdoor running track</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> Exceptional identity and apparel consistency throughout all keyframes. Facial likeness, afro hairstyle with headband, neon jacket details (chevron seamlines and zippers), watch, and footwear match the reference portrait precisely. Natural outdoor daylight integration and realistic athletic motion kinematics.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-tsk-ctx">Contextual · Task Param (Mode C)</span>
+                <span class="score-main">★ 0.94</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_context_tsk_smp_02.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.94</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.96</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.95</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A (reference image) sprinting on an outdoor running track</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> Exceptional reference fidelity across all dimensions. The subject's facial likeness, afro hairstyle, black headband, and stud earrings are impeccably preserved. The neon running jacket, dark leggings, and footwear match the reference precisely, with natural outdoor lighting and realistic sprinting kinematics.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-tsk-stu">Studio White · Task Param (Mode E)</span>
+                <span class="score-main">★ 0.91</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_studio_tsk_smp_02.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.88</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.94</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.93</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A (reference image) sprinting on an outdoor running track</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> The video demonstrates excellent reference adherence. The character's facial features, afro hairstyle with headband, and intense running expression match the reference subject well. The neon yellow running jacket, dark leggings, and footwear are reproduced with high fidelity. Integration into the outdoor overcast stadium lighting is seamless with zero studio haloing or cutout artifacts.</div>
+                </div>
+              </details>
+            </div>
+            
+          </div>
+
+          <div class="modality-section-title" style="margin-top: 20px;">Mode 2: Cinematic Prompts (3-Way Comparison)</div>
+          <div class="videos-grid-3col">
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-ctl">Contextual · Control String (Mode A)</span>
+                <span class="score-main">★ 0.81</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_context_ctl_cin_02.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.90</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.45</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.96</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A, low-angle dynamic cinematic tracking shot racing alongside the character as she sprints explosively down a red running track next to the ocean, athletic stride, glistening skin in golden afternoon light, shallow depth of field, photorealistic 8k.</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> The character's facial likeness, signature afro hair, and headband are reproduced with high fidelity. The cinematic golden hour lighting seamlessly integrates the subject with no haloing or matte artifacts. However, outfit consistency dropped significantly as the reference's neon jacket and leggings were swapped for a sleeveless running crop top and shorts.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-tsk-ctx">Contextual · Task Param (Mode D)</span>
+                <span class="score-main">★ 0.88</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_context_tsk_cin_02.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.90</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.72</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.96</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A, low-angle dynamic cinematic tracking shot racing alongside the character as she sprints explosively down a red running track next to the ocean, athletic stride, glistening skin in golden afternoon light, shallow depth of field, photorealistic 8k.</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> The video maintains strong facial and hair likeness to the reference character, including her headband, afro hairstyle, and facial structure. The outfit changes from the neon windbreaker to a patterned sports bra, though the leggings, shoes, and watch remain faithful. Relighting is exceptionally realistic with natural warm golden-hour rim lighting and believable motion dynamics.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-tsk-stu">Studio White · Task Param (Mode F)</span>
+                <span class="score-main">★ 0.93</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_studio_tsk_cin_02.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.90</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.95</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.96</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A, low-angle dynamic cinematic tracking shot racing alongside the character as she sprints explosively down a red running track next to the ocean, athletic stride, glistening skin in golden afternoon light, shallow depth of field, photorealistic 8k.</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> The video demonstrates exceptional adherence to the reference character. Facial structure, afro hairstyle, and headband are maintained accurately across profile views. The neon yellow running jacket, dark leggings, and footwear match the reference precisely. Relighting into the warm, golden-hour coastal environment is completely natural, with no signs of white haloing or matte artifacts from the studio source.</div>
+                </div>
+              </details>
+            </div>
+            
+          </div>
+        </div>
+        
+
+        <div class="case-card" data-framing="Medium" data-ethnicity="Caucasian">
+          <div class="case-header">
+            <div class="case-title">
+              <span class="case-id">#03</span>
+              <h3>Caucasian Male (30s) - Parisian Cafe</h3>
+              <span class="framing-badge">Medium</span>
+              <span class="demog-tag">Caucasian</span>
+            </div>
+            <div class="case-action">Target Action: <strong>Drinking coffee in Paris cafe</strong></div>
+          </div>
+
+          <!-- Dual Paired References: Contextual vs 1-to-1 Derived Studio White -->
+          <div class="ref-row">
+            <div class="ref-box">
+              <div class="ref-label">Contextual Reference (Original Portrait)</div>
+              <img src="ref_context_03.png" alt="Contextual Reference" loading="lazy">
+            </div>
+            <div class="ref-box">
+              <div class="ref-label studio-label">Derived Studio White Reference (1-to-1 Subject Derivation)</div>
+              <img src="ref_studio_03.png" alt="Derived Studio Reference" loading="lazy">
+            </div>
+          </div>
+
+          <!-- Modality Sections: Row 1 = Simple Prompts, Row 2 = Cinematic Prompts -->
+          <div class="modality-section-title">Mode 1: Simple Prompts (3-Way Comparison)</div>
+          <div class="videos-grid-3col">
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-ctl">Contextual · Control String (Mode B)</span>
+                <span class="score-main">★ 0.96</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_context_ctl_smp_03.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.96</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.98</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.96</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A (reference image) drinking coffee in a Parisian cafe</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> Exceptional fidelity across all frames. The subject's facial geometry, beard styling, and hair match the reference portrait precisely. The cable-knit pattern of the cream sweater and even the wedding band on his finger are preserved consistently. Motion kinematics during the coffee-drinking sequence are smooth and anatomically natural, with seamless lighting integration in the cafe setting.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-tsk-ctx">Contextual · Task Param (Mode C)</span>
+                <span class="score-main">★ 0.96</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_context_tsk_smp_03.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.96</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.98</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.97</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A (reference image) drinking coffee in a Parisian cafe</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> Exceptional identity preservation and outfit replication. The facial geometry, beard texture, and hair accurately match the reference image. The cream cable-knit sweater pattern is consistently detailed across all frames, and the lighting integration with natural depth of field and realistic hand/mug kinematics is top-tier.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-tsk-stu">Studio White · Task Param (Mode E)</span>
+                <span class="score-main">★ 0.95</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_studio_tsk_smp_03.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.95</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.98</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.95</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A (reference image) drinking coffee in a Parisian cafe</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> Exceptional adherence to the reference portrait. The facial features, beard grooming, and hair texture are replicated with high fidelity across all keyframes. The cream cable-knit sweater is flawlessly preserved in pattern and cut. The relighting realistically blends warm interior cafe fixtures with natural daylight from the window, completely free of white studio matte halos or edge bleed.</div>
+                </div>
+              </details>
+            </div>
+            
+          </div>
+
+          <div class="modality-section-title" style="margin-top: 20px;">Mode 2: Cinematic Prompts (3-Way Comparison)</div>
+          <div class="videos-grid-3col">
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-ctl">Contextual · Control String (Mode A)</span>
+                <span class="score-main">★ 0.96</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_context_ctl_cin_03.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.96</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.98</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.96</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A, slow medium dolly push-in shot of the character sitting by a sunlit window table in an elegant Parisian bistro, gently raising an espresso cup and taking a warm sip as morning street life blurs softly outside, cinematic warm palette.</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> Outstanding identity preservation and outfit fidelity. The cable-knit pattern, collar ribbing, and cream tone replicate the reference accurately. Facial features, beard styling, and eye morphology remain fully consistent throughout the shot. Relighting into the Parisian bistro setting is photorealistic, with soft ambient daylight bleeding naturally through the window without edge artifacts or matte haloing. The cup-raising and sipping kinematics are fluid and convincing.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-tsk-ctx">Contextual · Task Param (Mode D)</span>
+                <span class="score-main">★ 0.96</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_context_tsk_cin_03.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.96</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.98</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.95</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A, slow medium dolly push-in shot of the character sitting by a sunlit window table in an elegant Parisian bistro, gently raising an espresso cup and taking a warm sip as morning street life blurs softly outside, cinematic warm palette.</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> Exceptional fidelity across all criteria. The subject's facial geometry, beard styling, and hair match the reference portrait precisely. The cream cable-knit sweater is reproduced with near-identical texture and pattern. The lighting naturally integrates the character into the Parisian bistro environment with plausible window-side directional illumination and warm ambient bounce.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-tsk-stu">Studio White · Task Param (Mode F)</span>
+                <span class="score-main">★ 0.98</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_studio_tsk_cin_03.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.98</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.99</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.98</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A, slow medium dolly push-in shot of the character sitting by a sunlit window table in an elegant Parisian bistro, gently raising an espresso cup and taking a warm sip as morning street life blurs softly outside, cinematic warm palette.</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> Exceptional reference preservation and cinematic execution. The character's facial features, beard, and hairstyle match the reference portrait almost perfectly across all keyframes. The cream cable-knit sweater maintains intricate texture and pattern consistency. Relighting is natural and integrated seamlessly with the warm Parisian cafe window light, showing zero studio haloing or cutout artifacts.</div>
+                </div>
+              </details>
+            </div>
+            
+          </div>
+        </div>
+        
+
+        <div class="case-card" data-framing="Headshot" data-ethnicity="South Asian">
+          <div class="case-header">
+            <div class="case-title">
+              <span class="case-id">#04</span>
+              <h3>South Asian Female (20s) - Mumbai Market</h3>
+              <span class="framing-badge">Headshot</span>
+              <span class="demog-tag">South Asian</span>
+            </div>
+            <div class="case-action">Target Action: <strong>Walking in Mumbai market</strong></div>
+          </div>
+
+          <!-- Dual Paired References: Contextual vs 1-to-1 Derived Studio White -->
+          <div class="ref-row">
+            <div class="ref-box">
+              <div class="ref-label">Contextual Reference (Original Portrait)</div>
+              <img src="ref_context_04.png" alt="Contextual Reference" loading="lazy">
+            </div>
+            <div class="ref-box">
+              <div class="ref-label studio-label">Derived Studio White Reference (1-to-1 Subject Derivation)</div>
+              <img src="ref_studio_04.png" alt="Derived Studio Reference" loading="lazy">
+            </div>
+          </div>
+
+          <!-- Modality Sections: Row 1 = Simple Prompts, Row 2 = Cinematic Prompts -->
+          <div class="modality-section-title">Mode 1: Simple Prompts (3-Way Comparison)</div>
+          <div class="videos-grid-3col">
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-ctl">Contextual · Control String (Mode B)</span>
+                <span class="score-main">★ 0.95</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_context_ctl_smp_04.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.96</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.95</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.95</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A (reference image) walking through a colorful Mumbai market</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> The video maintains near-flawless character fidelity to the reference portrait. Facial features, expression, hairstyle, and ethnic features remain highly consistent across diverse viewing angles. The emerald green embroidered attire and matching jewelry match the reference closely, and the character is naturally embedded into the Mumbai market environment with realistic depth of field and consistent ambient lighting.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-tsk-ctx">Contextual · Task Param (Mode C)</span>
+                <span class="score-main">★ 0.94</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_context_tsk_smp_04.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.92</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.95</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.95</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A (reference image) walking through a colorful Mumbai market</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> The video demonstrates outstanding character identity retention and fidelity to the reference. Facial features, smile, hairstyle, and ethnic features closely mirror the reference portrait. The green saree with gold zardozi embroidery and matching earrings are reproduced accurately. Relighting and atmospheric integration into the bustling Mumbai market are seamless with no matte lines or edge artifacts, accompanied by natural kinematics.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-tsk-stu">Studio White · Task Param (Mode E)</span>
+                <span class="score-main">★ 0.94</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_studio_tsk_smp_04.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.94</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.95</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.95</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A (reference image) walking through a colorful Mumbai market</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> Exceptional adherence across all dimensions. The character's facial structure, smile, eye features, and wavy hairstyle translate seamlessly from the reference. The emerald green embroidered saree and ornate earrings are accurately preserved. The warm ambient market lighting perfectly relights the character without any studio white haloing or matte artifacts.</div>
+                </div>
+              </details>
+            </div>
+            
+          </div>
+
+          <div class="modality-section-title" style="margin-top: 20px;">Mode 2: Cinematic Prompts (3-Way Comparison)</div>
+          <div class="videos-grid-3col">
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-ctl">Contextual · Control String (Mode A)</span>
+                <span class="score-main">★ 0.95</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_context_ctl_cin_04.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.95</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.93</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.96</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A, vibrant shallow depth-of-field tracking shot gliding backward in front of the character as she walks happily through a bustling Mumbai flower and spice market, golden hour backlight catching the silk fabric, dynamic festive ambiance, cinematic photorealism.</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> Exceptional reference preservation throughout the sequence. Facial features, expression, and hair maintain near-flawless likeness across profile turns and forward tracking. The green and gold embroidered attire and matching earrings faithfully match the reference design. Golden hour market backlighting integrates naturally onto the subject's hair and silk fabric with zero edge artifacts or bleeding.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-tsk-ctx">Contextual · Task Param (Mode D)</span>
+                <span class="score-main">★ 0.95</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_context_tsk_cin_04.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.94</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.95</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.96</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A, vibrant shallow depth-of-field tracking shot gliding backward in front of the character as she walks happily through a bustling Mumbai flower and spice market, golden hour backlight catching the silk fabric, dynamic festive ambiance, cinematic photorealism.</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> Exceptional fidelity to the reference portrait. The facial likeness, skin texture, and expressive smile are preserved accurately. The green and gold embroidered traditional attire and earrings match seamlessly, and the warm golden-hour market lighting integrates naturally with convincing rim light on the subject's hair and clothing.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-tsk-stu">Studio White · Task Param (Mode F)</span>
+                <span class="score-main">★ 0.94</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_studio_tsk_cin_04.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.95</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.94</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.95</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A, vibrant shallow depth-of-field tracking shot gliding backward in front of the character as she walks happily through a bustling Mumbai flower and spice market, golden hour backlight catching the silk fabric, dynamic festive ambiance, cinematic photorealism.</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> Exceptional reference preservation. The subject's facial identity, distinctive smile, and expression match the portrait seamlessly across diverse angles. The emerald green silk attire with ornate gold embroidery is reproduced with remarkable precision. Lighting transfer from the white studio reference into the warm, golden-hour outdoor market is flawless, featuring natural golden rim highlights and zero studio matte haloing.</div>
+                </div>
+              </details>
+            </div>
+            
+          </div>
+        </div>
+        
+
+        <div class="case-card" data-framing="Three-Quarter" data-ethnicity="East Asian">
+          <div class="case-header">
+            <div class="case-title">
+              <span class="case-id">#06</span>
+              <h3>East Asian Female (30s) - Rainy Shibuya</h3>
+              <span class="framing-badge">Three-Quarter</span>
+              <span class="demog-tag">East Asian</span>
+            </div>
+            <div class="case-action">Target Action: <strong>Walking in rainy Shibuya</strong></div>
+          </div>
+
+          <!-- Dual Paired References: Contextual vs 1-to-1 Derived Studio White -->
+          <div class="ref-row">
+            <div class="ref-box">
+              <div class="ref-label">Contextual Reference (Original Portrait)</div>
+              <img src="ref_context_06.png" alt="Contextual Reference" loading="lazy">
+            </div>
+            <div class="ref-box">
+              <div class="ref-label studio-label">Derived Studio White Reference (1-to-1 Subject Derivation)</div>
+              <img src="ref_studio_06.png" alt="Derived Studio Reference" loading="lazy">
+            </div>
+          </div>
+
+          <!-- Modality Sections: Row 1 = Simple Prompts, Row 2 = Cinematic Prompts -->
+          <div class="modality-section-title">Mode 1: Simple Prompts (3-Way Comparison)</div>
+          <div class="videos-grid-3col">
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-ctl">Contextual · Control String (Mode B)</span>
+                <span class="score-main">★ 0.96</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_context_ctl_smp_06.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.96</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.97</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.95</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A (reference image) walking through rainy Shibuya at night</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> Outstanding identity preservation and cinematic continuity. The facial structure, short bob hairstyle, delicate jewelry, and grey trench coat translate seamlessly into the night-time Shibuya environment with convincing neon ambient relighting and realistic wet-ground kinematics.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-tsk-ctx">Contextual · Task Param (Mode C)</span>
+                <span class="score-main">★ 0.95</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_context_tsk_smp_06.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.95</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.96</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.95</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A (reference image) walking through rainy Shibuya at night</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> The video demonstrates exceptional adherence to the reference character. Facial structure, bob hairstyle, and subtle accessories (pendant necklace, hoop earrings) are accurately preserved across multiple angles and cuts. The grey belted trench coat remains consistent, and the character is photorealistically relit under rainy night neon lighting in Shibuya with natural reflections and zero matte or halo artifacts.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-tsk-stu">Studio White · Task Param (Mode E)</span>
+                <span class="score-main">★ 0.95</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_studio_tsk_smp_06.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.96</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.96</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.95</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A (reference image) walking through rainy Shibuya at night</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> Outstanding identity preservation from the studio white reference to the rainy Shibuya night scene. Facial geometry, hairstyle, and jewelry (earrings and necklace) match flawlessly. The charcoal trench coat is rendered accurately with realistic wet-weather textures and neon environment relighting, showing zero studio haloing.</div>
+                </div>
+              </details>
+            </div>
+            
+          </div>
+
+          <div class="modality-section-title" style="margin-top: 20px;">Mode 2: Cinematic Prompts (3-Way Comparison)</div>
+          <div class="videos-grid-3col">
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-ctl">Contextual · Control String (Mode A)</span>
+                <span class="score-main">★ 0.95</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_context_ctl_cin_06.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.95</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.96</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.95</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A, cinematic slow-motion tracking shot following the character as she walks gracefully with a transparent umbrella through the iconic Shibuya crossing at night, neon billboards reflecting off rain-slicked asphalt, vibrant Tokyo city nightscape, anamorphic lens flare, photorealistic.</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> Exceptional identity retention and seamless relighting. The character's facial geometry, bob hairstyle, and delicate earring accessories match the reference portrait precisely. The grey wool trench coat is reproduced with identical cut, texture, and detailing. Relighting into the night Shibuya setting is natural and physically cohesive, correctly integrating neon environmental reflections onto the umbrella canopy and fabric without matte lines or flat lighting bleed.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-tsk-ctx">Contextual · Task Param (Mode D)</span>
+                <span class="score-main">★ 0.95</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_context_tsk_cin_06.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.94</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.96</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.95</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A, cinematic slow-motion tracking shot following the character as she walks gracefully with a transparent umbrella through the iconic Shibuya crossing at night, neon billboards reflecting off rain-slicked asphalt, vibrant Tokyo city nightscape, anamorphic lens flare, photorealistic.</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> The video maintains exceptional fidelity to the reference subject's facial features, bob hairstyle, and trench coat styling. Relighting from the daylight reference scene to the vibrant, neon-lit nighttime Shibuya environment is executed seamlessly with natural environmental bounce, accurate specular reflections on the transparent umbrella, and zero edge artifacts or matte haloing.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-tsk-stu">Studio White · Task Param (Mode F)</span>
+                <span class="score-main">★ 0.96</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_studio_tsk_cin_06.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.95</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.98</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.96</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A, cinematic slow-motion tracking shot following the character as she walks gracefully with a transparent umbrella through the iconic Shibuya crossing at night, neon billboards reflecting off rain-slicked asphalt, vibrant Tokyo city nightscape, anamorphic lens flare, photorealistic.</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> Exceptional identity and costume preservation from the isolated studio reference. The character's facial features, bob hairstyle, belted grey trench coat, and delicate jewelry are reproduced with remarkable precision. Scene integration is flawless, relighting the character naturally into the rainy night environment of Shibuya with realistic reflections and anamorphic lens flares, showing zero white matte bleed or haloing.</div>
+                </div>
+              </details>
+            </div>
+            
+          </div>
+        </div>
+        
+
+        <div class="case-card" data-framing="Full-Body" data-ethnicity="Black / African">
+          <div class="case-header">
+            <div class="case-title">
+              <span class="case-id">#08</span>
+              <h3>Black Male (30s) - Basketball Action</h3>
+              <span class="framing-badge">Full-Body</span>
+              <span class="demog-tag">Black / African</span>
+            </div>
+            <div class="case-action">Target Action: <strong>Playing basketball on court</strong></div>
+          </div>
+
+          <!-- Dual Paired References: Contextual vs 1-to-1 Derived Studio White -->
+          <div class="ref-row">
+            <div class="ref-box">
+              <div class="ref-label">Contextual Reference (Original Portrait)</div>
+              <img src="ref_context_08.png" alt="Contextual Reference" loading="lazy">
+            </div>
+            <div class="ref-box">
+              <div class="ref-label studio-label">Derived Studio White Reference (1-to-1 Subject Derivation)</div>
+              <img src="ref_studio_08.png" alt="Derived Studio Reference" loading="lazy">
+            </div>
+          </div>
+
+          <!-- Modality Sections: Row 1 = Simple Prompts, Row 2 = Cinematic Prompts -->
+          <div class="modality-section-title">Mode 1: Simple Prompts (3-Way Comparison)</div>
+          <div class="videos-grid-3col">
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-ctl">Contextual · Control String (Mode B)</span>
+                <span class="score-main">★ 0.97</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_context_ctl_smp_08.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.95</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.98</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.98</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A (reference image) playing basketball on an outdoor court</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> Exceptional reference-to-video fidelity. Facial geometry, braids, and physique remain completely faithful to the reference portrait. The red 'CITY 24' uniform, black compression leggings, and footwear are precisely preserved throughout dynamic athletic movement. Kinematics from dribble drive to dunk are physically plausible, and the sunset court lighting integrates naturally across all keyframes without artifacts.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-tsk-ctx">Contextual · Task Param (Mode C)</span>
+                <span class="score-main">★ 0.96</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_context_tsk_smp_08.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.95</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.96</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.98</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A (reference image) playing basketball on an outdoor court</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> Exceptional reference preservation across all dimensions. The subject's facial features, hairstyle, and physique perfectly match the reference portrait. Apparel details—including the 'CITY 24' jersey, striped shorts, compression tights, and shoes—remain completely consistent. Cinematic golden hour lighting and basketball kinematics are seamlessly and realistically integrated.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-tsk-stu">Studio White · Task Param (Mode E)</span>
+                <span class="score-main">★ 0.96</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_studio_tsk_smp_08.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.95</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.98</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.96</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A (reference image) playing basketball on an outdoor court</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> Exceptional reference preservation. The character's facial features, braided hairstyle, and muscular build closely match the reference portrait. The red 'CITY 24' uniform, leg tights, and footwear are reproduced with near-perfect consistency. The transition from studio lighting to an outdoor overcast court environment is seamless with zero haloing or matte artifacts, supported by highly realistic basketball kinematics from dribble drive to dunk.</div>
+                </div>
+              </details>
+            </div>
+            
+          </div>
+
+          <div class="modality-section-title" style="margin-top: 20px;">Mode 2: Cinematic Prompts (3-Way Comparison)</div>
+          <div class="videos-grid-3col">
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-ctl">Contextual · Control String (Mode A)</span>
+                <span class="score-main">★ 0.97</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_context_ctl_cin_08.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.95</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.98</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.97</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A, dynamic low-angle slow-motion action shot following the character as he drives past the defender, elevates smoothly toward the basketball rim, and slams down an emphatic two-handed dunk, chain-link fence and sunset sky in background, cinematic sports reel style.</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> Exceptional adherence across all metrics. The subject's facial likeness, braided hairstyle, and muscular build perfectly match the reference portrait. The red 'CITY 24' jersey, shorts, compression tights, and footwear are flawlessly preserved through the entire motion sequence. The golden hour sunset relighting and lens flares are seamlessly integrated with no matte lines or artifacts, and the kinematics of the drive and two-handed dunk are highly authentic.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-tsk-ctx">Contextual · Task Param (Mode D)</span>
+                <span class="score-main">★ 0.94</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_context_tsk_cin_08.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.93</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.95</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.95</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A, dynamic low-angle slow-motion action shot following the character as he drives past the defender, elevates smoothly toward the basketball rim, and slams down an emphatic two-handed dunk, chain-link fence and sunset sky in background, cinematic sports reel style.</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> The video maintains exceptional fidelity to the reference portrait. Facial features, hair braids, and athletic build are consistently preserved. The red 'CITY 24' jersey, shorts, and footwear match accurately, and the character is seamlessly integrated with realistic golden-hour backlighting and natural motion kinematics.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-tsk-stu">Studio White · Task Param (Mode F)</span>
+                <span class="score-main">★ 0.94</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_studio_tsk_cin_08.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.93</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.95</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.94</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A, dynamic low-angle slow-motion action shot following the character as he drives past the defender, elevates smoothly toward the basketball rim, and slams down an emphatic two-handed dunk, chain-link fence and sunset sky in background, cinematic sports reel style.</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> Exceptional translation from a static white-studio reference into a dynamic sunset outdoor action shot. The character's facial features, braided hairstyle, and build are accurately maintained throughout the sequence. The 'CITY 24' uniform, leg compression tights, and footwear are replicated with high fidelity, and the relighting realistically incorporates warm sunset rim lighting and shadows without any studio haloing or matting artifacts.</div>
+                </div>
+              </details>
+            </div>
+            
+          </div>
+        </div>
+        
+
+        <div class="case-card" data-framing="Medium" data-ethnicity="Southeast Asian">
+          <div class="case-header">
+            <div class="case-title">
+              <span class="case-id">#09</span>
+              <h3>Southeast Asian Female (20s) - Amsterdam Cycling</h3>
+              <span class="framing-badge">Medium</span>
+              <span class="demog-tag">Southeast Asian</span>
+            </div>
+            <div class="case-action">Target Action: <strong>Cycling along Amsterdam canal</strong></div>
+          </div>
+
+          <!-- Dual Paired References: Contextual vs 1-to-1 Derived Studio White -->
+          <div class="ref-row">
+            <div class="ref-box">
+              <div class="ref-label">Contextual Reference (Original Portrait)</div>
+              <img src="ref_context_09.png" alt="Contextual Reference" loading="lazy">
+            </div>
+            <div class="ref-box">
+              <div class="ref-label studio-label">Derived Studio White Reference (1-to-1 Subject Derivation)</div>
+              <img src="ref_studio_09.png" alt="Derived Studio Reference" loading="lazy">
+            </div>
+          </div>
+
+          <!-- Modality Sections: Row 1 = Simple Prompts, Row 2 = Cinematic Prompts -->
+          <div class="modality-section-title">Mode 1: Simple Prompts (3-Way Comparison)</div>
+          <div class="videos-grid-3col">
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-ctl">Contextual · Control String (Mode B)</span>
+                <span class="score-main">★ 0.96</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_context_ctl_smp_09.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.94</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.98</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.96</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A (reference image) riding a bicycle along an Amsterdam canal</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> Exceptional identity and costume preservation. The distinctive yellow raincoat, patterned scarf, and black helmet match the reference image with near-perfect fidelity. The facial structure and expressions remain highly consistent throughout the sequence, and the subject integrates seamlessly into the overcast lighting of the Amsterdam street scene with no keying artifacts or lighting bleed.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-tsk-ctx">Contextual · Task Param (Mode C)</span>
+                <span class="score-main">★ 0.95</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_context_tsk_smp_09.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.95</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.96</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.95</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A (reference image) riding a bicycle along an Amsterdam canal</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> Exceptional reference preservation. Facial features, helmet, distinctive patterned scarf, and yellow raincoat details perfectly match the reference portrait while transitioning seamlessly into natural cycling motion along the canal.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-tsk-stu">Studio White · Task Param (Mode E)</span>
+                <span class="score-main">★ 0.95</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_studio_tsk_smp_09.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.95</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.96</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.95</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A (reference image) riding a bicycle along an Amsterdam canal</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> Outstanding fidelity across all dimensions. The subject's facial features, cheerful expression, and helmet fit closely replicate the reference portrait. The yellow raincoat and distinctly patterned scarf are faithfully preserved. Scene relighting seamlessly integrates the character from the white studio source into the soft daylight of the Amsterdam canal environment with zero haloing or matte artifacts.</div>
+                </div>
+              </details>
+            </div>
+            
+          </div>
+
+          <div class="modality-section-title" style="margin-top: 20px;">Mode 2: Cinematic Prompts (3-Way Comparison)</div>
+          <div class="videos-grid-3col">
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-ctl">Contextual · Control String (Mode A)</span>
+                <span class="score-main">★ 0.95</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_context_ctl_cin_09.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.95</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.96</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.95</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A, smooth bicycle-mounted tracking camera facing backward at the character as she pedals merrily along a tree-lined brick canal in Amsterdam, historic 17th-century canal houses and stone bridges gliding past, soft diffused European light, photorealistic travel vlog style.</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> Exceptional fidelity across all dimensions. The facial identity, smile, and helmet fit precisely mirror the reference image. The yellow jacket, patterned knit scarf, and helmet detailing are reproduced with outstanding precision. Lighting seamlessly integrates the subject with the overcast Amsterdam canal environment, and the cycling motion and natural wave gesture are fluid and cinematic.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-tsk-ctx">Contextual · Task Param (Mode D)</span>
+                <span class="score-main">★ 0.95</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_context_tsk_cin_09.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.94</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.96</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.95</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A, smooth bicycle-mounted tracking camera facing backward at the character as she pedals merrily along a tree-lined brick canal in Amsterdam, historic 17th-century canal houses and stone bridges gliding past, soft diffused European light, photorealistic travel vlog style.</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> The video maintains exceptional fidelity to the reference portrait. The subject's facial features, smile, and expression remain accurate across various head turns and speaking movements. The wardrobe, including the specific knit pattern of the scarf, yellow raincoat, and commuter helmet, is reproduced with high consistency. Scene lighting is diffused, natural, and integrates the character seamlessly without artifacts or matte lines.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-tsk-stu">Studio White · Task Param (Mode F)</span>
+                <span class="score-main">★ 0.98</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_studio_tsk_cin_09.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.98</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.99</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.98</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A, smooth bicycle-mounted tracking camera facing backward at the character as she pedals merrily along a tree-lined brick canal in Amsterdam, historic 17th-century canal houses and stone bridges gliding past, soft diffused European light, photorealistic travel vlog style.</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> Outstanding reference fidelity across all metrics. Facial identity, smile, and bone structure match the reference portrait with near-perfection. The yellow jacket, knit cowl scarf, and black helmet are reproduced with remarkable detail and consistency. Environmental relighting is completely seamless, showing dynamic, physically accurate ambient occlusion and shadow transition as the subject pedals under the stone bridge without any studio cutout artifacts or white edge haloing.</div>
+                </div>
+              </details>
+            </div>
+            
+          </div>
+        </div>
+        
+
+        <div class="case-card" data-framing="Medium" data-ethnicity="Indigenous / Native">
+          <div class="case-header">
+            <div class="case-title">
+              <span class="case-id">#13</span>
+              <h3>Indigenous Male (30s) - Banff Overlook</h3>
+              <span class="framing-badge">Medium</span>
+              <span class="demog-tag">Indigenous / Native</span>
+            </div>
+            <div class="case-action">Target Action: <strong>Standing on mountain overlook</strong></div>
+          </div>
+
+          <!-- Dual Paired References: Contextual vs 1-to-1 Derived Studio White -->
+          <div class="ref-row">
+            <div class="ref-box">
+              <div class="ref-label">Contextual Reference (Original Portrait)</div>
+              <img src="ref_context_13.png" alt="Contextual Reference" loading="lazy">
+            </div>
+            <div class="ref-box">
+              <div class="ref-label studio-label">Derived Studio White Reference (1-to-1 Subject Derivation)</div>
+              <img src="ref_studio_13.png" alt="Derived Studio Reference" loading="lazy">
+            </div>
+          </div>
+
+          <!-- Modality Sections: Row 1 = Simple Prompts, Row 2 = Cinematic Prompts -->
+          <div class="modality-section-title">Mode 1: Simple Prompts (3-Way Comparison)</div>
+          <div class="videos-grid-3col">
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-ctl">Contextual · Control String (Mode B)</span>
+                <span class="score-main">★ 0.96</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_context_ctl_smp_13.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.97</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.98</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.95</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A (reference image) standing on a mountain cliff overlook in Banff</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> Exceptional identity preservation and visual fidelity. Facial features, facial hair, skin texture, and hair bun precisely mirror the reference portrait across varying shot scales. The shearling leather jacket and dark sweater are rendered consistently with extreme detail, and the natural daylight and atmospheric mountain wind integrate the character seamlessly into the Banff overlook environment.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-tsk-ctx">Contextual · Task Param (Mode C)</span>
+                <span class="score-main">★ 0.97</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_context_tsk_smp_13.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.96</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.98</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.97</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A (reference image) standing on a mountain cliff overlook in Banff</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> Outstanding reference fidelity across all dimensions. The subject's facial features, hairstyle, and facial hair are preserved precisely from the reference image. The shearling leather jacket and knit inner layer maintain complete continuity, while the camera pull-back and walking kinematics integrate flawlessly with the Banff mountain environment lighting.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-tsk-stu">Studio White · Task Param (Mode E)</span>
+                <span class="score-main">★ 0.97</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_studio_tsk_smp_13.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.98</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.97</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.98</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A (reference image) standing on a mountain cliff overlook in Banff</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> Exceptional reference preservation across all metrics. The facial geometry, skin texture, and facial hair match the reference portrait near-flawlessly in both medium and close-up angles. The shearling leather jacket is rendered consistently, and the character is seamlessly relit under natural overcast mountain daylight with zero studio white haloing or matte edge artifacts.</div>
+                </div>
+              </details>
+            </div>
+            
+          </div>
+
+          <div class="modality-section-title" style="margin-top: 20px;">Mode 2: Cinematic Prompts (3-Way Comparison)</div>
+          <div class="videos-grid-3col">
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-ctl">Contextual · Control String (Mode A)</span>
+                <span class="score-main">★ 0.97</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_context_ctl_cin_13.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.97</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.98</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.96</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A, epic slow push-in cinematic shot facing the character standing tall at the edge of a rocky cliff overlook, wind softly rustling his hair as the camera pulls slightly back to reveal the breathtaking turquoise waters of Lake Louise and snow-dusted pine valleys below, National Geographic documentary aesthetic.</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> Outstanding identity preservation and visual fidelity throughout the shot. The character's facial geometry, hair bun with subtle flyaways, facial hair, and expression match the reference portrait precisely across varying angles and scales. The shearling aviator jacket and knit sweater maintain perfect continuity. The transition from close-up to an expansive wide reveal over the turquoise lake is cinematic, realistic, and free of any lighting artifacts or haloing.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-tsk-ctx">Contextual · Task Param (Mode D)</span>
+                <span class="score-main">★ 0.98</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_context_tsk_cin_13.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.98</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.99</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.98</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A, epic slow push-in cinematic shot facing the character standing tall at the edge of a rocky cliff overlook, wind softly rustling his hair as the camera pulls slightly back to reveal the breathtaking turquoise waters of Lake Louise and snow-dusted pine valleys below, National Geographic documentary aesthetic.</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> Outstanding consistency across all metrics. The character's facial features, hair structure, and facial hair are preserved with exceptional fidelity. The shearling leather flight jacket and sweater match the reference down to fine textures and hardware. Camera movement smoothly pulls back to reveal the mountain landscape and turquoise water with natural lighting integration and realistic wind physics.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-tsk-stu">Studio White · Task Param (Mode F)</span>
+                <span class="score-main">★ 0.96</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_studio_tsk_cin_13.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.94</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.98</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.96</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A, epic slow push-in cinematic shot facing the character standing tall at the edge of a rocky cliff overlook, wind softly rustling his hair as the camera pulls slightly back to reveal the breathtaking turquoise waters of Lake Louise and snow-dusted pine valleys below, National Geographic documentary aesthetic.</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> Exceptional identity preservation and seamless environmental integration. The subject's facial geometry, facial hair, and tied-back hairstyle match the reference portrait precisely. The brown shearling aviator jacket and knit sweater are replicated with high detail and consistency. Relighting from the studio white reference into the soft, diffuse overcast mountain lighting is executed without any edge artifacts, matte lines, or studio haloing.</div>
+                </div>
+              </details>
+            </div>
+            
+          </div>
+        </div>
+        
+
+        <div class="case-card" data-framing="Full-Body" data-ethnicity="Caucasian">
+          <div class="case-header">
+            <div class="case-title">
+              <span class="case-id">#15</span>
+              <h3>Caucasian Male (20s) - Hawaii Surfing</h3>
+              <span class="framing-badge">Full-Body</span>
+              <span class="demog-tag">Caucasian</span>
+            </div>
+            <div class="case-action">Target Action: <strong>Walking into ocean with surfboard</strong></div>
+          </div>
+
+          <!-- Dual Paired References: Contextual vs 1-to-1 Derived Studio White -->
+          <div class="ref-row">
+            <div class="ref-box">
+              <div class="ref-label">Contextual Reference (Original Portrait)</div>
+              <img src="ref_context_15.png" alt="Contextual Reference" loading="lazy">
+            </div>
+            <div class="ref-box">
+              <div class="ref-label studio-label">Derived Studio White Reference (1-to-1 Subject Derivation)</div>
+              <img src="ref_studio_15.png" alt="Derived Studio Reference" loading="lazy">
+            </div>
+          </div>
+
+          <!-- Modality Sections: Row 1 = Simple Prompts, Row 2 = Cinematic Prompts -->
+          <div class="modality-section-title">Mode 1: Simple Prompts (3-Way Comparison)</div>
+          <div class="videos-grid-3col">
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-ctl">Contextual · Control String (Mode B)</span>
+                <span class="score-main">★ 0.93</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_context_ctl_smp_15.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.88</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.96</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.95</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A (reference image) walking into the ocean surf with a surfboard in Hawaii</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> The video demonstrates outstanding continuity with the reference image. The character's sleeveless wetsuit vest, striped boardshorts, necklace, watch, and surfboard design match the reference with high precision. Lighting and shadow integration in the sunny coastal environment are photorealistic, and the physical motion of walking into the breaking surf and foam interaction is smooth and natural.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-tsk-ctx">Contextual · Task Param (Mode C)</span>
+                <span class="score-main">★ 0.93</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_context_tsk_smp_15.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.90</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.95</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.94</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A (reference image) walking into the ocean surf with a surfboard in Hawaii</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> Exceptional reference preservation across all keyframes. The character's facial likeness, blonde hair, and stubble in side profile match the reference closely. Outfit details—including the sleeveless wetsuit vest, shell necklace, wrist watch, boardshort stripes, and surfboard logos—are remarkably consistent, with natural outdoor lighting and seamless water interaction.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-tsk-stu">Studio White · Task Param (Mode E)</span>
+                <span class="score-main">★ 0.89</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_studio_tsk_smp_15.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.88</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.82</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.95</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A (reference image) walking into the ocean surf with a surfboard in Hawaii</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> The video maintains strong subject fidelity, with the character's hair, build, and facial profile in later keyframes matching the reference well. The striped boardshorts are accurately preserved, though the wetsuit top modified from a sleeveless vest to a full long-sleeve top. Environment integration and relighting are exceptional, showing zero white matte bleed and realistic natural water and light interaction.</div>
+                </div>
+              </details>
+            </div>
+            
+          </div>
+
+          <div class="modality-section-title" style="margin-top: 20px;">Mode 2: Cinematic Prompts (3-Way Comparison)</div>
+          <div class="videos-grid-3col">
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-ctl">Contextual · Control String (Mode A)</span>
+                <span class="score-main">★ 0.89</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_context_ctl_cin_15.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.83</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.84</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.96</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A, cinematic slow-motion tracking shot following the character from behind and side as he walks barefoot across wet sand into the crashing ocean whitewash, paddling out through breaking turquoise waves under a glowing golden Hawaiian sunset, photorealistic surf film style.</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> The video maintains excellent continuity with the reference character's hair texture, build, and boardshort styling. While the wetsuit changed from sleeveless to long-sleeved, the environmental relighting into a warm golden hour sunset and physical interaction with the surf/water are executed with exceptional realism and no matte artifacts.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-tsk-ctx">Contextual · Task Param (Mode D)</span>
+                <span class="score-main">★ 0.93</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_context_tsk_cin_15.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.88</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.95</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.95</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A, cinematic slow-motion tracking shot following the character from behind and side as he walks barefoot across wet sand into the crashing ocean whitewash, paddling out through breaking turquoise waves under a glowing golden Hawaiian sunset, photorealistic surf film style.</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> Exceptional identity and wardrobe preservation across all keyframes. The character's specific sleeveless wetsuit top, striped boardshorts, watch, necklace, and surfboard details transfer seamlessly into the golden hour sunset lighting without any matte artifacts or lighting bleed from the bright daylight reference.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-tsk-stu">Studio White · Task Param (Mode F)</span>
+                <span class="score-main">★ 0.88</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_studio_tsk_cin_15.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.85</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.80</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.95</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A, cinematic slow-motion tracking shot following the character from behind and side as he walks barefoot across wet sand into the crashing ocean whitewash, paddling out through breaking turquoise waves under a glowing golden Hawaiian sunset, photorealistic surf film style.</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> The video demonstrates outstanding cinematic quality and seamless relighting under golden hour sunset conditions with realistic water physics and zero white studio background bleed. The character's hair, profile, wrist accessory, and striped boardshort pattern match the reference accurately. However, there is minor outfit drift in the wetsuit top, which transforms from a sleeveless vest in the reference into short sleeves while walking, and then into long sleeves while paddling.</div>
+                </div>
+              </details>
+            </div>
+            
+          </div>
+        </div>
+        
+
+        <div class="case-card" data-framing="Headshot" data-ethnicity="Hispanic / Latino">
+          <div class="case-header">
+            <div class="case-title">
+              <span class="case-id">#19</span>
+              <h3>Hispanic Male (20s) - Vintage Havana</h3>
+              <span class="framing-badge">Headshot</span>
+              <span class="demog-tag">Hispanic / Latino</span>
+            </div>
+            <div class="case-action">Target Action: <strong>With vintage motorcycle in Havana</strong></div>
+          </div>
+
+          <!-- Dual Paired References: Contextual vs 1-to-1 Derived Studio White -->
+          <div class="ref-row">
+            <div class="ref-box">
+              <div class="ref-label">Contextual Reference (Original Portrait)</div>
+              <img src="ref_context_19.png" alt="Contextual Reference" loading="lazy">
+            </div>
+            <div class="ref-box">
+              <div class="ref-label studio-label">Derived Studio White Reference (1-to-1 Subject Derivation)</div>
+              <img src="ref_studio_19.png" alt="Derived Studio Reference" loading="lazy">
+            </div>
+          </div>
+
+          <!-- Modality Sections: Row 1 = Simple Prompts, Row 2 = Cinematic Prompts -->
+          <div class="modality-section-title">Mode 1: Simple Prompts (3-Way Comparison)</div>
+          <div class="videos-grid-3col">
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-ctl">Contextual · Control String (Mode B)</span>
+                <span class="score-main">★ 0.97</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_context_ctl_smp_19.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.98</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.98</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.98</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A (reference image) standing next to a vintage motorcycle in Havana</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> Outstanding consistency across all dimensions. The subject's facial geometry, hair texture, smile, and skin tone perfectly match the reference portrait. The distressed brown leather jacket, white t-shirt, and accessories are meticulously preserved as the character transitions naturally from leaning over the handlebars to standing upright beside the motorcycle, with flawless environmental lighting integration.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-tsk-ctx">Contextual · Task Param (Mode C)</span>
+                <span class="score-main">★ 0.96</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_context_tsk_smp_19.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.96</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.97</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.96</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A (reference image) standing next to a vintage motorcycle in Havana</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> Exceptional fidelity to the reference portrait. Facial structure, hair volume and texture, and expressive smile remain perfectly consistent across all keyframes. The distressed leather jacket, white t-shirt, and accessories (bracelets, rings, hand details) match the source seamlessly, with natural motion and lighting integrated into the Havana street setting.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-tsk-stu">Studio White · Task Param (Mode E)</span>
+                <span class="score-main">★ 0.96</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_studio_tsk_smp_19.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.95</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.98</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.96</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A (reference image) standing next to a vintage motorcycle in Havana</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> Exceptional fidelity across all dimensions. The facial features, curly hair, and characteristic warm expression replicate the reference portrait precisely. Apparel and accessories—including the distressed brown leather jacket, white t-shirt, silver watch, and the specific rose tattoo on the hand—are maintained with remarkable consistency. The relighting from a seamless white studio into the warm outdoor Havana daylight is natural, with zero matte lines, haloing, or lighting artifacts.</div>
+                </div>
+              </details>
+            </div>
+            
+          </div>
+
+          <div class="modality-section-title" style="margin-top: 20px;">Mode 2: Cinematic Prompts (3-Way Comparison)</div>
+          <div class="videos-grid-3col">
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-ctl">Contextual · Control String (Mode A)</span>
+                <span class="score-main">★ 0.97</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_context_ctl_cin_19.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.98</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.99</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.97</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A, warm pastel-toned cinematic street tracking shot gliding past colorful weathered colonial buildings in Havana, tracking the character as he leans confidently against a classic motorcycle, nodding warmly to passersby as vintage turquoise cars cruise slowly past on the cobblestone avenue, nostalgic cinematic vibe.</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> Outstanding consistency across all dimensions. The facial features, hair structure, and warm expressive smile perfectly mirror the reference image. The outfit, tattoos, watch, bracelets, and rings show immaculate frame-to-frame stability. Relighting and camera tracking through the Havana street are naturally rendered without artifacts or edge bleeding.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-tsk-ctx">Contextual · Task Param (Mode D)</span>
+                <span class="score-main">★ 0.97</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_context_tsk_cin_19.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.97</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.98</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.97</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A, warm pastel-toned cinematic street tracking shot gliding past colorful weathered colonial buildings in Havana, tracking the character as he leans confidently against a classic motorcycle, nodding warmly to passersby as vintage turquoise cars cruise slowly past on the cobblestone avenue, nostalgic cinematic vibe.</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> Exceptional fidelity across all metrics. The subject's facial features, curly dark hair, and warm smile remain completely identical to the reference. Outfit details—including the distressed brown leather jacket, white t-shirt, watch, rings, and hand tattoos—are perfectly preserved. The soft, warm pastel lighting matches the Havana streetscape seamlessly with no matte artifacts or lighting bleed, complemented by realistic tracking motion and background traffic.</div>
+                </div>
+              </details>
+            </div>
+            
+            
+            <div class="video-col">
+              <div class="video-header">
+                <span class="badge badge-tsk-stu">Studio White · Task Param (Mode F)</span>
+                <span class="score-main">★ 0.95</span>
+              </div>
+              <div class="video-wrapper">
+                <video src="video_studio_tsk_cin_19.mp4" controls preload="metadata" playsinline></video>
+              </div>
+              <div class="score-pills">
+                <span class="pill" title="Facial Similarity">Face: 0.94</span>
+                <span class="pill" title="Outfit Consistency">Outfit: 0.98</span>
+                <span class="pill" title="Scene Relighting Realism">Relight: 0.96</span>
+              </div>
+              <details class="details-drawer">
+                <summary>Prompt & Audit</summary>
+                <div class="drawer-content">
+                  <div class="prompt-box"><strong>Prompt:</strong> Character A, warm pastel-toned cinematic street tracking shot gliding past colorful weathered colonial buildings in Havana, tracking the character as he leans confidently against a classic motorcycle, nodding warmly to passersby as vintage turquoise cars cruise slowly past on the cobblestone avenue, nostalgic cinematic vibe.</div>
+                  <div class="critique-box"><strong>Judge Critique:</strong> Exceptional fidelity across all dimensions. The subject's facial features, curly dark hair, and warm smile match the reference portrait precisely. The outfit—including the distressed brown leather jacket, white t-shirt, watch, and beaded wrist accessories—is replicated with high accuracy. The relighting completely strips the isolated white studio background, seamlessly integrating the character into the warm, pastel daylight ambience of the Havana street without matte lines or studio haloing.</div>
+                </div>
+              </details>
+            </div>
+            
+          </div>
+        </div>
+        
+    </div>
+  </div>
+
+  <script>
+    function filterCases(framing, btn) {
+      document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      document.querySelectorAll('.case-card').forEach(card => {
+        if (framing === 'all' || card.getAttribute('data-framing') === framing) {
+          card.style.display = 'block';
+        } else {
+          card.style.display = 'none';
+        }
+      });
+    }
+  </script>
+</body>
+</html>

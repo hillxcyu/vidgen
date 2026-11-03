@@ -11,7 +11,7 @@ def get_default_bucket_name() -> str:
     if env_bucket and env_bucket.strip():
         return env_bucket.strip()
     config = Config()
-    project_id = config.PROJECT_ID or "universal-trail-492014-n5"
+    project_id = config.PROJECT_ID or "vital-octagon-19612"
     return f"{project_id}-vidgen-showcase"
 
 
@@ -46,8 +46,10 @@ def get_storage_client() -> Optional[Any]:
 
 def ensure_gcs_bucket(client: Any, bucket_name: str) -> Optional[Any]:
     """Retrieves or attempts to create the GCS showcase bucket and ensures public read permissions."""
+    if not client or not bucket_name:
+        return None
+    bucket = client.bucket(bucket_name)
     try:
-        bucket = client.bucket(bucket_name)
         if not bucket.exists():
             config = Config()
             location = config.LOCATION if config.LOCATION and config.LOCATION.upper() != "GLOBAL" else "us-central1"
@@ -69,7 +71,9 @@ def ensure_gcs_bucket(client: Any, bucket_name: str) -> Optional[Any]:
         try:
             return client.get_bucket(bucket_name)
         except Exception:
-            return None
+            # Return unverified bucket handle so object-level uploads (storage.objects.create)
+            # succeed even when the runtime service account lacks storage.buckets.get permission.
+            return bucket
 
 
 def upload_file_to_gcs(bucket: Optional[Any], local_path: str, gcs_blob_name: str) -> Optional[str]:
@@ -78,6 +82,7 @@ def upload_file_to_gcs(bucket: Optional[Any], local_path: str, gcs_blob_name: st
         return None
     try:
         blob = bucket.blob(gcs_blob_name)
+        blob.cache_control = "no-cache, max-age=0"
         blob.upload_from_filename(local_path)
         try:
             blob.make_public()
@@ -161,19 +166,27 @@ def save_run(
         "trajectory_logs": trajectory_logs or []
     }
 
-    os.makedirs(output_dir, exist_ok=True)
     manifest_path = os.path.join(output_dir, "saved_runs.json")
     saved_runs = get_saved_runs(output_dir)
     saved_runs = [r for r in saved_runs if r.get("run_id") != run_id]
     saved_runs.insert(0, run_entry)
 
-    with open(manifest_path, "w", encoding="utf-8") as f:
-        json.dump(saved_runs, f, indent=2)
+    try:
+        os.makedirs(output_dir, exist_ok=True)
+        with open(manifest_path, "w", encoding="utf-8") as f:
+            json.dump(saved_runs, f, indent=2)
+    except Exception as e:
+        print(f"[NOTICE] Local saved_runs.json write notice: {e}")
 
     if bucket:
         try:
             blob = bucket.blob(f"showcase/{run_id}/run_manifest.json")
+            blob.cache_control = "no-cache, max-age=0"
             blob.upload_from_string(json.dumps(run_entry, indent=2), content_type="application/json")
+            try:
+                blob.make_public()
+            except Exception:
+                pass
         except Exception:
             pass
 
@@ -185,33 +198,49 @@ def get_saved_runs(output_dir: str = "output") -> List[Dict[str, Any]]:
     runs_by_id: Dict[str, Dict[str, Any]] = {}
 
     manifest_path = os.path.join(output_dir, "saved_runs.json")
-    if os.path.exists(manifest_path):
-        try:
-            with open(manifest_path, "r", encoding="utf-8") as f:
-                local_runs = json.load(f)
-                for r in local_runs:
-                    if r.get("run_id"):
-                        runs_by_id[r["run_id"]] = r
-        except Exception as e:
-            print(f"[NOTICE] Error reading local saved_runs.json: {e}")
+    candidate_local_paths = [manifest_path]
+    if output_dir in ("output", "/tmp/vidgen_output", "/app/output"):
+        for fallback_p in ("/app/output/saved_runs.json", "output/saved_runs.json"):
+            if fallback_p not in candidate_local_paths:
+                candidate_local_paths.append(fallback_p)
+    for lpath in candidate_local_paths:
+        if os.path.exists(lpath):
+            try:
+                with open(lpath, "r", encoding="utf-8") as f:
+                    local_runs = json.load(f)
+                    for r in local_runs:
+                        if r.get("run_id") and r["run_id"] not in runs_by_id:
+                            runs_by_id[r["run_id"]] = r
+            except Exception as e:
+                print(f"[NOTICE] Error reading local saved_runs.json ({lpath}): {e}")
 
     try:
         client = get_storage_client()
-        bucket_name = get_default_bucket_name()
         if client:
-            bucket = client.bucket(bucket_name)
-            if bucket.exists():
-                blobs = client.list_blobs(bucket, prefix="showcase/")
-                for blob in blobs:
-                    if blob.name.endswith("run_manifest.json"):
-                        try:
-                            content = blob.download_as_text()
-                            entry = json.loads(content)
-                            run_id = entry.get("run_id")
-                            if run_id and run_id not in runs_by_id:
-                                runs_by_id[run_id] = entry
-                        except Exception as manifest_err:
-                            print(f"[NOTICE] Error reading GCS manifest {blob.name}: {manifest_err}")
+            candidate_buckets = []
+            for b_name in [
+                get_default_bucket_name(),
+                "vital-octagon-19612-vidgen-showcase",
+                "universal-trail-492014-n5-vidgen-showcase",
+            ]:
+                if b_name and b_name not in candidate_buckets:
+                    candidate_buckets.append(b_name)
+            for b_name in candidate_buckets:
+                try:
+                    bucket = client.bucket(b_name)
+                    blobs = client.list_blobs(bucket, prefix="showcase/")
+                    for blob in blobs:
+                        if blob.name.endswith("run_manifest.json"):
+                            try:
+                                content = blob.download_as_text()
+                                entry = json.loads(content)
+                                run_id = entry.get("run_id")
+                                if run_id and run_id not in runs_by_id:
+                                    runs_by_id[run_id] = entry
+                            except Exception as manifest_err:
+                                print(f"[NOTICE] Error reading GCS manifest {blob.name}: {manifest_err}")
+                except Exception as bucket_err:
+                    print(f"[NOTICE] Error listing GCS showcase bucket {b_name}: {bucket_err}")
     except Exception as gcs_err:
         print(f"[NOTICE] Error fetching GCS showcase runs: {gcs_err}")
 
@@ -243,10 +272,9 @@ def delete_saved_run(run_id: str, output_dir: str = "output") -> bool:
         bucket_name = get_default_bucket_name()
         if client:
             bucket = client.bucket(bucket_name)
-            if bucket.exists():
-                blob = bucket.blob(f"showcase/{run_id}/run_manifest.json")
-                if blob.exists():
-                    blob.delete()
+            blob = bucket.blob(f"showcase/{run_id}/run_manifest.json")
+            if blob.exists():
+                blob.delete()
     except Exception as e:
         print(f"[NOTICE] Error deleting GCS manifest for {run_id}: {e}")
 
@@ -298,11 +326,10 @@ def retrieve_session_state(session_id: str, output_dir: str = "output") -> Optio
         bucket_name = get_default_bucket_name()
         if client:
             bucket = client.bucket(bucket_name)
-            if bucket.exists():
-                blob = bucket.blob(f"sessions/{session_id}.json")
-                if blob.exists():
-                    content = blob.download_as_text()
-                    return json.loads(content)
+            blob = bucket.blob(f"sessions/{session_id}.json")
+            if blob.exists():
+                content = blob.download_as_text()
+                return json.loads(content)
     except Exception as gcs_err:
         print(f"[NOTICE] Error retrieving GCS session: {gcs_err}")
 
