@@ -19,7 +19,9 @@ class Config:
     VIDEO_EXTEND_INPUT_SECONDS: float = float(os.getenv("VIDEO_EXTEND_INPUT_SECONDS", "5.0"))
     MEDIA_PROCESSING: str = os.getenv("MEDIA_PROCESSING", "agentic")
     ORCHESTRATOR_TIMEOUT_MS: int = int(os.getenv("ORCHESTRATOR_TIMEOUT_MS", "60000"))
+    RATER_TIMEOUT_MS: int = int(os.getenv("RATER_TIMEOUT_MS", "120000"))
     VIDEO_GEN_TIMEOUT_MS: int = int(os.getenv("VIDEO_GEN_TIMEOUT_MS", "600000"))
+    MAX_PARALLEL_SHOTS: int = int(os.getenv("MAX_PARALLEL_SHOTS", "3"))
 
 def get_genai_client(timeout_ms: Optional[int] = None) -> genai.Client:
     """Initialize and return Google GenAI Client configured for Vertex AI backend."""

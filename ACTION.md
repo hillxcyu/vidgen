@@ -464,3 +464,44 @@
     - **Slide 10:** Unified Fast-Access Hub (`3 SKUs × 3 Modes` = 9 clickable 30s MP4 buttons + Live Studio button) + Side-by-Side 3-Method Comparison Table + Hybrid Multi-Mode Choreography Callout (`Act-Break Re-Anchoring` & `Pose-to-Motion + Dual-Anchor`).
     - **Slide 11:** GTM Qualification Matrix & 2-Week Retail Pilot Path.
   - Exported PDFs (`en_v11.pdf`, `zh_v11.pdf`) and rasterized PNGs (`audit_v11/`), visually auditing Slides 7, 10, and 11 in both EN and ZH-CN: zero text overflow, crisp margins, and working links across all 9 examples and the Live Web Studio.
+
+
+---
+
+## [2026-11-04 01:00 UTC] Stage 3 (ACT): Auto-Rater v2 (`QualityRaterAgent`) & Pipeline Architecture Upgrade (`feat/autorater-v2-pipeline`)
+
+### Phase 0: Git Baseline Commit & Branch Isolation (`[git]`)
+- Committed clean 3-mode + 9-run showcase baseline onto `main` (`eaf2e99`: `"chore(showcase): commit 3-mode R2V/I2V/VideoExtend baseline and 9-run showcase"`).
+- Created and checked out dedicated feature branch **`feat/autorater-v2-pipeline`** (`HEAD -> feat/autorater-v2-pipeline` from `eaf2e99`).
+
+### Phase 1: Auto-Rater v2 — Ground-Truth Anchoring, Observation-First Schema & Deterministic Telemetry (`[autorater]`)
+- **Config (`app/config.py`, `src/config.py`):** Added `RATER_TIMEOUT_MS = 120000` (`120s`) and `MAX_PARALLEL_SHOTS = 3`.
+- **Deterministic Telemetry & Keyframes (`app/tools/video_parser.py`, `src/tools/video_parser.py`):**
+  - `decode_valid_image_b64()`: Validates base64 + PNG/JPEG/WebP magic bytes so real reference anchors attach cleanly while mock test strings (`"fake_ref_b64"`) degrade gracefully.
+  - `extract_labeled_audit_keyframes()`: Extracts high-res PNG stills for `KEY FRAME A (t=0.00s, opening frame)`, `KEY FRAME M (mid-shot)`, and `KEY FRAME B (terminal frame)` to pair with `AGENTIC` `video_part` and overcome ~60 tokens/frame video spatial quantization.
+  - `analyze_clip_audio_tail()`: Measures `clip_duration_sec`, `mid_rms_db`, `trailing_rms_db` (`[duration - 0.2s, duration]`), and `speech_cutoff_detected` (`trailing_rms_db > -26 dBFS` without tail decay).
+  - `compute_transcript_metrics()`: Computes deterministic word-level Levenshtein `transcript_wer` and multiset recall `transcript_word_overlap`.
+- **Observation-First Critic (`app/agents/pipeline.py`, `app/agent.py`, `src/agents/stitcher_graph.py`):**
+  - Ordered CoT grounding fields strictly *before* `score` and `verdict` via `build_quality_evaluation_schema()` (`property_ordering = ["opening_environment_observed", "heard_transcript", "speech_end_sec", "detected_internal_cuts", "reason", "score", "verdict", "feedback"]`).
+  - Attached captioned `CANONICAL REFERENCE ANCHOR (#FFFFFF)`, `PRIOR SHOT TERMINAL FRAME`, and `KEY FRAME A/M/B` stills alongside `AGENTIC` `video_part`.
+  - Replaced per-attempt `consolidate_rubric_with_llm()` inside `evaluate_clip_quality()` with zero-extra-hop deterministic `build_shot_evaluation_rubric()`, enforced post-rater deterministic score caps (`< 0.80 -> REATTEMPT_REQUIRED`) on trailing `0.2s` speech cutoffs, `transcript_wer > 0.35`, or `detected_internal_cuts > 0`, and surfaced explicit `audit_status="AUDIT_TIMEOUT_DEGRADED"` on API timeouts.
+
+### Phase 2: Monotonic Best-of-$K$ Checkpointing & Post-Stitch Master Seam Critic (`[autorater]`)
+- **Best-of-$K$ Retry Checkpointing (`_execute_single_shot` in `app/agents/pipeline.py`):** Tracks `(best_score, best_video_bytes, best_prompt, best_eval_result)` across retry attempts so lower-scoring final retries never overwrite higher-scoring earlier clips.
+- **Post-Stitch Master Seam Critic (`evaluate_stitched_master` in `app/agents/pipeline.py`):** Audits stitched multi-shot masters across `[t_cut - 1.5s, t_cut + 1.5s]` transition windows (`seam_observations`, `voice_timbre_consistent`, `loudness_continuity_ok`, `visual_xfade_smooth`) and populates `PipelineState.master_quality_report`.
+
+### Phase 3: Parallel Mode A Execution, Per-Shot Hybrid Choreography & Unified FastAPI Runner (`[backend]` / `[frontend]`)
+- **State & Choreography (`app/state.py`, `src/state.py`, `app/agents/pipeline.py`):** Added `mode_override` and `quality_score` on `VideoShot`, `mode_override` on `StoryboardEntry`, `"hybrid"` on `PipelineState.mode`, and concurrent `asyncio.Semaphore(Config.MAX_PARALLEL_SHOTS)` + `asyncio.gather` execution for Mode A (`mode="reference"`).
+- **Unified Web Runner & UI (`app/fast_api_app.py`, `src/server.py`, `app/templates/index.html`, `src/templates/index.html`):** Refactored `run_adk_pipeline_background` (`+85/-441 lines`) to delegate directly to `run_pipeline_async(..., event_callback=...)` and added the `🧬 Hybrid Choreography` mode selector and Showcase Drawer badge (`Mode D: Hybrid`).
+
+### Phase 4: Automated Test Suite (`69 passed`) & Live Vertex AI Smoke Verification (`[qa]`)
+- **Automated Test Execution (`task-6397`):**
+  - Command: `uv run --no-sync pytest tests/unit tests/integration tests/test_pipeline.py -v`
+  - Result: **`69 passed, 0 failed in 156.20s`** (including 9 new tests in `tests/unit/test_autorater_v2.py` and `tests/unit/test_autorater_calibration.py`).
+- **Live Vertex AI Multimodal Smoke Audit (`gemini-3.7-flash` on `retail_uc1_apparel_extend_30s`):**
+  1. **Negative Discrimination Check (`task-6355` — intentional prompt/dialogue mismatch):**
+     - Extracted `opening_environment_observed` (*"rust-orange quilted puffer jacket on a cold, foggy urban street sidewalk"*) and `heard_transcript` (`"Crafted to shield against freezing winter wind."`), computed `transcript_wer = 1.0`, `transcript_word_overlap = 0.091`, and returned `score = 0.10`, `verdict = "REATTEMPT_REQUIRED"`.
+  2. **Positive Calibration Check (`task-6398` — matching rust-orange puffer jacket prompt & dialogue):**
+     - `opening_environment_observed` verified, `heard_transcript = "Crafted to shield against freezing winter wind."`, `speech_end_sec = 4.8`, `detected_internal_cuts = 0`, `transcript_wer = 0.0`, `transcript_word_overlap = 1.0`, `trailing_rms_db = -39.0 dBFS` (`speech_cutoff_detected = False`), `seam_mae = 3.81` -> **`score = 0.96` (`verdict = "PASSED"`)**.
+  3. **Post-Stitch Master Seam Critic (`task-6398` on `output_stitched_30s.mp4`):**
+     - Audited `[8.5s - 11.5s]` (`seam_timestamp_sec = 10.0`, `seam_score = 0.95`) and `[18.5s - 21.5s]` (`seam_timestamp_sec = 20.0`, `seam_score = 0.95`) -> **`score = 0.95` (`verdict = "PASSED"`, `voice_timbre_consistent = True`, `loudness_continuity_ok = True`, `visual_xfade_smooth = True`)**.

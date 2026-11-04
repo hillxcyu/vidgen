@@ -498,7 +498,14 @@
                         <input type="radio" name="mode" value="reference" onchange="window.selectMode('reference')">
                         <div>
                             <strong>🎨 Asset Reference Mode</strong>
-                            <div style="font-size: 11px; color: var(--muted-text);">Shared character & style image reference anchors</div>
+                            <div style="font-size: 11px; color: var(--muted-text);">Parallel shared character & style image reference anchors</div>
+                        </div>
+                    </label>
+                    <label class="mode-option" id="mode-hybrid">
+                        <input type="radio" name="mode" value="hybrid" onchange="window.selectMode('hybrid')">
+                        <div>
+                            <strong>🧬 Hybrid Choreography</strong>
+                            <div style="font-size: 11px; color: var(--muted-text);">Auto per-shot R2V re-anchoring + Video Extend / I2V continuity</div>
                         </div>
                     </label>
                 </div>
@@ -640,7 +647,7 @@
             window.selectedMode = mode;
             var refPanel = document.getElementById("refUploadPanel");
             if (refPanel) {
-                if (mode === "reference") {
+                if (mode === "reference" || mode === "hybrid") {
                     refPanel.classList.add("active-panel");
                 } else {
                     refPanel.classList.remove("active-panel");
@@ -1153,9 +1160,11 @@
                     var syncBadge = run.gcs_synced ? '<span class="badge badge-success">☁️ GCS Synced</span>' : '<span class="badge badge-info">💾 Local</span>';
                     var modeBadge = run.mode === "video_extend"
                         ? '<span class="badge badge-info" style="background: rgba(168, 85, 247, 0.2); color: #d8b4fe; border: 1px solid rgba(168, 85, 247, 0.4);">🎞️ Mode C: Video Extend</span>'
-                        : (run.mode === "reference"
-                            ? '<span class="badge badge-info" style="background: rgba(66, 133, 244, 0.2); color: #93c5fd; border: 1px solid rgba(66, 133, 244, 0.45);">🎨 Mode A: Shared R2V</span>'
-                            : '<span class="badge badge-info" style="background: rgba(52, 168, 83, 0.2); color: #86efac; border: 1px solid rgba(52, 168, 83, 0.45);">⚡ Mode B: I2V Chaining</span>');
+                        : (run.mode === "hybrid"
+                            ? '<span class="badge badge-info" style="background: rgba(245, 158, 11, 0.2); color: #fcd34d; border: 1px solid rgba(245, 158, 11, 0.45);">🧬 Mode D: Hybrid</span>'
+                            : (run.mode === "reference"
+                                ? '<span class="badge badge-info" style="background: rgba(66, 133, 244, 0.2); color: #93c5fd; border: 1px solid rgba(66, 133, 244, 0.45);">🎨 Mode A: Shared R2V</span>'
+                                : '<span class="badge badge-info" style="background: rgba(52, 168, 83, 0.2); color: #86efac; border: 1px solid rgba(52, 168, 83, 0.45);">⚡ Mode B: I2V Chaining</span>'));
                     var videoSrc = formatMediaUrl(run.stitched_video_url, run.stitched_video_path, "output_stitched.mp4");
                     
                     card.innerHTML = '<h4>' + run.original_intent + '</h4>' +

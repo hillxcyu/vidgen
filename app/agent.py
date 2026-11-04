@@ -26,7 +26,15 @@ from google.adk.tools.preload_memory_tool import PreloadMemoryTool
 from google.genai import types
 
 from app.config import Config, get_genai_client
-from app.tools.video_parser import extract_first_frame, extract_last_frame, extract_keyframes, create_agentic_video_part
+from app.tools.video_parser import (
+    extract_first_frame,
+    extract_last_frame,
+    extract_keyframes,
+    create_agentic_video_part,
+    extract_labeled_audit_keyframes,
+    analyze_clip_audio_tail,
+    compute_transcript_metrics,
+)
 from app.tools.omni_client import generate_omni_clip, build_omni_control_string
 from app.tools.stitcher import stitch_videos
 from app.state import PipelineState, VideoShot, StoryboardEntry
@@ -602,27 +610,32 @@ async def evaluate_video_clip_quality(
     prompt: str,
     evaluation_criteria: Optional[str] = None,
     reference_image_path: Optional[str] = None,
+    spoken_dialogue: Optional[str] = None,
     tool_context: Optional[ToolContext] = None,
 ) -> dict:
-    """Inspects and audits an actual MP4 video clip file using Gemini multimodal vision.
+    """Inspects and audits an actual MP4 video clip file using Gemini multimodal vision + deterministic telemetry.
 
     Args:
         video_path: Local filesystem path or public URL of the generated .mp4 video clip.
         prompt: The visual prompt describing what should happen in the shot.
         evaluation_criteria: Specific quality criteria or character/lighting requirements.
         reference_image_path: Optional path to canonical character reference image for cross-shot continuity audit.
+        spoken_dialogue: Optional expected spoken dialogue transcript for deterministic WER & tail cutoff checking.
         tool_context: Optional ADK tool execution context for state tracking.
 
     Returns:
-        Structured evaluation result with numerical score (0.0 to 1.0), rubric breakdown, verdict (PASSED/RETRY), and detailed perceptual critique.
+        Structured evaluation result with observation-first grounding fields, numerical score (0.0 to 1.0),
+        rubric breakdown, verdict (PASSED/RETRY), deterministic audio/WER telemetry, and perceptual critique.
     """
     from app.config import get_genai_client
     from google.genai import types
+    import tempfile
     import urllib.request
     import json
     import re
 
     video_bytes = None
+    resolved_local_video_path = None
     candidates = [
         video_path,
         os.path.join(OUTPUT_DIR, os.path.basename(video_path)),
@@ -633,6 +646,7 @@ async def evaluate_video_clip_quality(
             try:
                 with open(c, "rb") as fp:
                     video_bytes = fp.read()
+                resolved_local_video_path = c
                 break
             except Exception:
                 pass
@@ -646,6 +660,10 @@ async def evaluate_video_clip_quality(
 
     if not video_bytes:
         res = {
+            "opening_environment_observed": "",
+            "heard_transcript": "",
+            "speech_end_sec": None,
+            "detected_internal_cuts": 0,
             "score": 0.0,
             "verdict": "RETRY",
             "rubric_breakdown": {
@@ -656,12 +674,48 @@ async def evaluate_video_clip_quality(
             },
             "feedback": f"Could not open video file at {video_path} for visual inspection.",
             "criteria_evaluated": evaluation_criteria,
+            "transcript_wer": None,
+            "transcript_word_overlap": None,
+            "audit_status": "FILE_MISSING",
         }
         if tool_context:
             tool_context.state["quality_rating"] = 0.0
             tool_context.state["quality_verdict"] = "RETRY"
             tool_context.state["rater_feedback"] = res["feedback"]
         return res
+
+    temp_audit_video_path = None
+    if not resolved_local_video_path:
+        try:
+            with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tf:
+                tf.write(video_bytes)
+                temp_audit_video_path = tf.name
+                resolved_local_video_path = temp_audit_video_path
+        except Exception:
+            pass
+
+    # Deterministic OpenCV keyframe extraction & FFMPEG audio tail analysis
+    audit_keyframes: List[tuple] = []
+    audio_telemetry: Dict[str, Any] = {}
+    if resolved_local_video_path and os.path.exists(resolved_local_video_path):
+        try:
+            audit_keyframes = await asyncio.to_thread(
+                extract_labeled_audit_keyframes, resolved_local_video_path
+            )
+        except Exception:
+            audit_keyframes = []
+        try:
+            audio_telemetry = await asyncio.to_thread(
+                analyze_clip_audio_tail, resolved_local_video_path, 0.2
+            )
+        except Exception:
+            audio_telemetry = {}
+
+    if temp_audit_video_path and os.path.exists(temp_audit_video_path):
+        try:
+            os.remove(temp_audit_video_path)
+        except Exception:
+            pass
 
     # Resolve canonical reference image for cross-shot continuity checking
     ref_img_path = reference_image_path
@@ -688,45 +742,123 @@ async def evaluate_video_clip_quality(
             print(f"[Ref Image Download Notice]: {ref_dl_err}")
 
     if ref_img_bytes:
-        print(f"[Quality Rater Multimodal] Attached Reference Image ({ref_img_path}) for character identity and wardrobe consistency audit.")
+        print(f"[Quality Rater Multimodal] Attached Reference Image ({ref_img_path}) + {len(audit_keyframes)} High-Res Keyframes.")
     else:
-        print("[Quality Rater Multimodal] Running standard visual audit (no reference image attached).")
+        print(f"[Quality Rater Multimodal] Running visual + audio audit with {len(audit_keyframes)} High-Res Keyframes.")
 
-    client = get_genai_client()
+    client = get_genai_client(timeout_ms=Config.RATER_TIMEOUT_MS)
     criteria_str = f"Specific Scene Goal: {evaluation_criteria}" if evaluation_criteria else "Standard quality audit."
-    
+    dialogue_str = (
+        f"Expected Spoken Dialogue: '{spoken_dialogue}'\n"
+        if spoken_dialogue and spoken_dialogue.strip()
+        else ""
+    )
+    telemetry_lines = []
+    if audio_telemetry.get("clip_duration_sec"):
+        telemetry_lines.append(f"- Measured Clip Duration: {audio_telemetry['clip_duration_sec']}s")
+    if audio_telemetry.get("has_audio"):
+        telemetry_lines.append(
+            f"- Mid-Clip RMS Energy: {audio_telemetry.get('mid_rms_db')} dBFS | "
+            f"Trailing 0.2s Tail RMS Energy: {audio_telemetry.get('trailing_rms_db')} dBFS | "
+            f"Active Speech Cutoff Flag: {audio_telemetry.get('speech_cutoff_detected')}"
+        )
+    telemetry_block = (
+        "DETERMINISTIC TELEMETRY SIGNALS:\n" + "\n".join(telemetry_lines) + "\n\n"
+        if telemetry_lines
+        else ""
+    )
+
     continuity_rubric = ""
     if ref_img_bytes:
         continuity_rubric = (
-            "CRITICAL CROSS-SHOT CONTINUITY CHECK (REFERENCE IMAGE ATTACHED):\n"
-            "- Facial Identity: Compare the character in the video to the attached Reference Image. Facial features, hair color, facial hair, skin tone, and character ethnicity MUST match the reference image.\n"
-            "- Wardrobe & Colors: Clothing style, jacket color, shirt, pants, and accessories MUST be consistent with the reference image.\n"
-            "- MANDATORY PENALTY: If the character's face morphs into a different person, hair changes color, or clothing changes color/style unexpectedly, assign score < 0.60, verdict 'RETRY', and explicitly detail the continuity discrepancy in 'feedback'.\n\n"
+            "CRITICAL CROSS-SHOT CONTINUITY CHECK (CANONICAL REFERENCE IMAGE ATTACHED):\n"
+            "- Fine-Detail Identity & SKU Lock: Compare the attached High-Resolution KEY FRAME A/M/B stills and video against the Reference Image (facial geometry, hair, wardrobe/product colors, logos, stitching).\n"
+            "- Scene Opening Environment: Ensure Frame 0 opens inside the target scene environment rather than echoing a studio #FFFFFF white backdrop.\n"
+            "- MANDATORY PENALTY: If identity/SKU drifts or Frame 0 echoes a blank white backdrop, assign score < 0.60, verdict 'RETRY', and detail the discrepancy in 'feedback'.\n\n"
         )
 
     eval_prompt = (
-        "You are the QualityRaterAgent performing an autonomous agentic video understanding audit on an actual AI-generated MP4 video clip.\n"
-        "Leverage agentic video understanding to dynamically inspect critical timestamps, focus on motion transitions, evaluate physics/snow spray/footwork, and verify character likeness persistence across the full duration.\n"
+        "You are the QualityRaterAgent performing an observation-first agentic video understanding audit on an AI-generated MP4 video clip.\n"
         f"Target Shot Prompt: '{prompt}'\n"
+        f"{dialogue_str}"
         f"{criteria_str}\n\n"
+        f"{telemetry_block}"
         f"{continuity_rubric}"
-        "Inspect the provided video clip across 4 key evaluation rubrics:\n"
-        "1. Subject Identity Consistency (character/object consistency throughout the shot and against reference image)\n"
-        "2. Motion Smoothness & Dynamics (natural pacing, no jitter or abrupt morphs)\n"
-        "3. Visual Prompt Adherence (visual elements match the target prompt)\n"
-        "4. Temporal Asset Persistence (lighting, clothing, background stability)\n\n"
-        "Return ONLY a JSON object with keys:\n"
-        "- score: float between 0.0 and 1.0 (overall quality score)\n"
-        "- verdict: string ('PASSED' if score >= 0.8 else 'RETRY')\n"
-        "- rubric_breakdown: dict with float scores for subject_identity_consistency, motion_smoothness, prompt_adherence, temporal_asset_persistence\n"
-        "- feedback: detailed paragraph describing specific visual observations from the video"
+        "STEP 1 — FACTUAL OBSERVATION EXTRACTION (populate BEFORE scoring):\n"
+        "- opening_environment_observed: Describe the exact physical setting, lighting, and subject visible on Frame 0 (t=0.0s).\n"
+        "- heard_transcript: Transcribe verbatim every spoken word heard in the audio track ('' if silent).\n"
+        "- speech_end_sec: Timestamp in seconds where speech finishes (null if no speech).\n"
+        "- detected_internal_cuts: Count of abrupt internal camera jump-cuts inside this single clip (0 if unbroken single take).\n\n"
+        "STEP 2 — RUBRIC SCORING:\n"
+        "1. Subject Identity Consistency (character/product consistency across high-res stills, video, and reference anchor)\n"
+        "2. Motion Smoothness & Single-Take Integrity (natural pacing, zero internal jump-cuts)\n"
+        "3. Visual & Audio Prompt Adherence (visual elements + exact spoken dialogue completed before clip end)\n"
+        "4. Temporal Asset Persistence (lighting, clothing, props, and background stability)\n"
     )
 
-    contents = [eval_prompt]
+    tool_eval_schema = types.Schema(
+        type=types.Type.OBJECT,
+        property_ordering=[
+            "opening_environment_observed",
+            "heard_transcript",
+            "speech_end_sec",
+            "detected_internal_cuts",
+            "rubric_breakdown",
+            "score",
+            "verdict",
+            "feedback",
+        ],
+        properties={
+            "opening_environment_observed": types.Schema(type=types.Type.STRING),
+            "heard_transcript": types.Schema(type=types.Type.STRING),
+            "speech_end_sec": types.Schema(type=types.Type.NUMBER, nullable=True),
+            "detected_internal_cuts": types.Schema(type=types.Type.INTEGER),
+            "rubric_breakdown": types.Schema(
+                type=types.Type.OBJECT,
+                property_ordering=[
+                    "subject_identity_consistency",
+                    "motion_smoothness",
+                    "prompt_adherence",
+                    "temporal_asset_persistence",
+                ],
+                properties={
+                    "subject_identity_consistency": types.Schema(type=types.Type.NUMBER),
+                    "motion_smoothness": types.Schema(type=types.Type.NUMBER),
+                    "prompt_adherence": types.Schema(type=types.Type.NUMBER),
+                    "temporal_asset_persistence": types.Schema(type=types.Type.NUMBER),
+                },
+                required=[
+                    "subject_identity_consistency",
+                    "motion_smoothness",
+                    "prompt_adherence",
+                    "temporal_asset_persistence",
+                ],
+            ),
+            "score": types.Schema(type=types.Type.NUMBER),
+            "verdict": types.Schema(type=types.Type.STRING),
+            "feedback": types.Schema(type=types.Type.STRING),
+        },
+        required=[
+            "opening_environment_observed",
+            "heard_transcript",
+            "detected_internal_cuts",
+            "rubric_breakdown",
+            "score",
+            "verdict",
+            "feedback",
+        ],
+    )
+
+    contents: List[Any] = [eval_prompt]
     if ref_img_bytes:
         mime = "image/jpeg" if ref_img_path.lower().endswith((".jpg", ".jpeg")) else "image/png"
+        contents.append("CANONICAL REFERENCE ANCHOR IMAGE:")
         contents.append(types.Part.from_bytes(data=ref_img_bytes, mime_type=mime))
+    for kf_label, kf_png_bytes in audit_keyframes:
+        contents.append(f"CANDIDATE HIGH-RES STILL [{kf_label}]:")
+        contents.append(types.Part.from_bytes(data=kf_png_bytes, mime_type="image/png"))
     video_media_proc = os.getenv("MEDIA_PROCESSING", "agentic")
+    contents.append("CANDIDATE FULL VIDEO CLIP (inspect temporal motion & audio track):")
     contents.append(create_agentic_video_part(video_path_or_uri=video_path, video_bytes=video_bytes, media_processing=video_media_proc))
 
     result_data = None
@@ -737,6 +869,8 @@ async def evaluate_video_clip_quality(
             contents=contents,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
+                response_schema=tool_eval_schema,
+                temperature=0.1,
             )
         )
         if resp and resp.text:
@@ -744,18 +878,57 @@ async def evaluate_video_clip_quality(
             json_match = re.search(r"\{.*\}", text, re.DOTALL)
             clean_text = json_match.group(0) if json_match else text
             data = json.loads(clean_text)
+            raw_score = float(data.get("score", 0.0))
+            heard_tx = str(data.get("heard_transcript", "") or "")
+            internal_cuts = int(data.get("detected_internal_cuts", 0) or 0)
+            feedback_str = str(data.get("feedback", "Video inspected."))
+
+            wer_val = None
+            overlap_val = None
+            if spoken_dialogue and spoken_dialogue.strip():
+                tx_metrics = compute_transcript_metrics(spoken_dialogue, heard_tx)
+                wer_val = tx_metrics["transcript_wer"]
+                overlap_val = tx_metrics["transcript_word_overlap"]
+                if (heard_tx.strip() or audio_telemetry.get("has_audio")) and wer_val is not None and wer_val > 0.35:
+                    raw_score = min(raw_score, 0.65)
+                    feedback_str = f"[Transcript WER={wer_val:.2f}] {feedback_str}"
+
+            if audio_telemetry.get("speech_cutoff_detected"):
+                raw_score = min(raw_score, 0.65)
+                feedback_str = (
+                    f"[Trailing 0.2s Audio Cutoff Detected ({audio_telemetry.get('trailing_rms_db')} dBFS)] "
+                    f"{feedback_str}"
+                )
+
+            if internal_cuts > 0:
+                raw_score = min(raw_score, 0.60)
+                feedback_str = f"[Internal Jump-Cuts={internal_cuts}] {feedback_str}"
+
+            verdict_str = "PASSED" if raw_score >= 0.8 else "RETRY"
             result_data = {
-                "score": float(data.get("score", 0.0)),
-                "verdict": str(data.get("verdict", "RETRY")).upper(),
+                "opening_environment_observed": str(data.get("opening_environment_observed", "")),
+                "heard_transcript": heard_tx,
+                "speech_end_sec": data.get("speech_end_sec"),
+                "detected_internal_cuts": internal_cuts,
+                "score": round(raw_score, 3),
+                "verdict": verdict_str,
                 "rubric_breakdown": data.get("rubric_breakdown", {}),
-                "feedback": data.get("feedback", "Video inspected."),
+                "feedback": feedback_str,
                 "criteria_evaluated": evaluation_criteria,
+                "transcript_wer": wer_val,
+                "transcript_word_overlap": overlap_val,
+                "deterministic_telemetry": audio_telemetry,
+                "audit_status": "OK",
             }
     except Exception as e:
         print(f"[Multimodal Video Evaluation Notice]: {e}")
 
     if not result_data:
         result_data = {
+            "opening_environment_observed": "",
+            "heard_transcript": "",
+            "speech_end_sec": None,
+            "detected_internal_cuts": 0,
             "score": 0.0,
             "verdict": "RETRY",
             "rubric_breakdown": {
@@ -764,8 +937,12 @@ async def evaluate_video_clip_quality(
                 "prompt_adherence": 0.0,
                 "temporal_asset_persistence": 0.0
             },
-            "feedback": "Multimodal video analysis failed to parse. Retry required.",
+            "feedback": "Multimodal video analysis failed or timed out. Retry required.",
             "criteria_evaluated": evaluation_criteria,
+            "transcript_wer": None,
+            "transcript_word_overlap": None,
+            "deterministic_telemetry": audio_telemetry,
+            "audit_status": "AUDIT_TIMEOUT_DEGRADED",
         }
 
     if tool_context:
@@ -773,6 +950,7 @@ async def evaluate_video_clip_quality(
         tool_context.state["quality_verdict"] = result_data["verdict"]
         tool_context.state["rater_feedback"] = result_data["feedback"]
         tool_context.state["rubric_breakdown"] = result_data["rubric_breakdown"]
+        tool_context.state["heard_transcript"] = result_data["heard_transcript"]
 
     return result_data
 

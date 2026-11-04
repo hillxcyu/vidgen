@@ -1,27 +1,37 @@
-# DEFINE.md — Detailed Task Breakdown: Mode A (`reference` R2V) Examples & 11-Slide Unified Hub + Comparison
+# DEFINE.md — Detailed Task Breakdown: Auto-Rater v2 & Pipeline Architecture (`feat/autorater-v2-pipeline`)
 
-## [2026-11-03 15:53 UTC] Stage 2: Tagged TODO List
+## [2026-11-03 16:20 UTC] Stage 2: Tagged TODO List
 
-### Phase 1: Mode A (`mode="reference"`) 30s Showcase Generation & 9-Run GCS Sync
-- [x] `[pipeline]` Author `scratch/retail_showcase/run_retail_cases_r2v_mode_a.py` (with copyright & docstring header) for all 3 retail campaigns (`retail_uc1_apparel_r2v_30s`, `retail_uc2_footwear_r2v_30s`, `retail_uc3_beauty_r2v_30s`):
-  - Configure **Shots 1, 2, and 3 (`0–10s`, `10–20s`, `20–30s`)** to independently use `task="reference_to_video"` with `[anchor_b64]` (`Character A`), `input_image_b64=None`, `input_video_b64=None` across 3 distinct editorial environments per SKU.
-  - Enforce `detect_r2v_first_frame_lock()` (`MAE >= 12.0` and `white_px <= 25%`) with up to 3 attempts per shot, and extract `shot_{1,2,3}_first_frame.png` + `shot_{1,2,3}_last_frame.png`.
-- [x] `[pipeline]` Execute `run_retail_cases_r2v_mode_a.py`, stitch all 3 × 30s masters via `stitch_videos()` (`80ms` `xfade` + `acrossfade`), upload clips/frames/masters to `gs://vital-octagon-19612-vidgen-showcase/showcase/`, and update `output/saved_runs.json` + GCS `saved_runs.json` with all **9 pinned runs** (`3 × video_extend` + `3 × i2v_chaining` + `3 × reference`).
+### Phase 0: Git Baseline Commit & Branch Isolation
+- [x] `[git]` Restore `main`'s completed Mode-A `PLAN.md` / `DEFINE.md`, stage & commit the verified 3-mode + 9-run showcase baseline onto `main` so `main` has a clean working tree, then create and switch to `feat/autorater-v2-pipeline` and restore this `PLAN.md` / `DEFINE.md`.
 
-### Phase 2: Web Studio 9-Run Showcase Drawer & Cloud Run Deployment
-- [x] `[frontend]` `[parallel]` Polish Showcase Drawer mode badges in `app/templates/index.html` and `src/templates/index.html` so `reference` (`🎨 Shared R2V`), `i2v_chaining` (`⚡ I2V Chaining`), and `video_extend` (`🎞️ Video Extend`) are visually distinct across all 9 pinned runs.
-- [x] `[qa]` Run `uv run pytest tests/unit tests/integration` to verify 100% test pass rate before deployment.
-- [x] `[infra]` `[parallel]` Build and deploy `vidgen-frontend` on Cloud Run (`vital-octagon-19612`, `asia-east1`) with the 9-run `saved_runs.json` seed manifest and verify revision readiness.
+### Phase 1: Auto-Rater v2 — Ground-Truth Anchoring, Observation-First Schema & Telemetry
+- [x] `[autorater]` `[parallel]` Add deterministic telemetry & keyframe utilities in `app/tools/video_parser.py` (and `src/tools/video_parser.py` parity):
+  - `extract_labeled_audit_keyframes(video_path)` -> returns `("KEY FRAME A (t=0.00s, opening)", png_bytes)`, `("KEY FRAME M (mid-shot)", png_bytes)`, and `("KEY FRAME B (terminal frame)", png_bytes)`.
+  - `analyze_clip_audio_tail(video_path, tail_sec=0.20)` -> extracts `clip_duration_sec`, `mid_rms_db`, `trailing_rms_db` (`[duration - 0.2s, duration]`, i.e. `9.8s–10.0s` on a `10s` clip), and `speech_cutoff_detected: bool`.
+  - `compute_transcript_metrics(expected_dialogue, heard_transcript)` -> returns deterministic `(transcript_wer, transcript_word_overlap)` using normalized word-level Levenshtein distance.
+  - `decode_valid_image_b64(b64_str)` -> safely validates PNG/JPEG/WebP magic bytes so mock strings (e.g. `"fake_ref_b64"`) degrade gracefully in unit tests.
+- [x] `[backend]` `[parallel]` Add `RATER_TIMEOUT_MS = 120000` (`120s`) and `MAX_PARALLEL_SHOTS = 3` in `app/config.py` and `src/config.py`.
+- [x] `[autorater]` Upgrade `QualityEvaluationResult` and `evaluate_clip_quality()` in `app/agents/pipeline.py` (plus `evaluate_video_clip_quality()` in `app/agent.py`):
+  - Place CoT grounding fields **strictly before `score` and `verdict`** (`opening_environment_observed`, `heard_transcript`, `speech_end_sec`, `detected_internal_cuts`) and pass an explicit `response_schema` with `property_ordering` (`["opening_environment_observed", "heard_transcript", "speech_end_sec", "detected_internal_cuts", "reason", "score", "verdict", "feedback"]`).
+  - Attach captioned `CANONICAL REFERENCE ANCHOR (#FFFFFF)` (`reference_images_b64[0]`), `PRIOR SHOT TERMINAL FRAME` (`prev_last_frame_b64`), and labeled `KEY FRAME A / M / B` stills alongside `video_part`.
+  - Inject deterministic OpenCV/FFMPEG telemetry (`clip_duration_sec`, `r2v_f0_mae`, `r2v_white_pct`, `seam_mae`, `peak_early_mae`, `mid_rms_db`, `trailing_rms_db`) into the rater prompt, compute `(transcript_wer, transcript_word_overlap)`, and apply deterministic post-rater score caps (`< 0.8` -> `REATTEMPT_REQUIRED`) on active `9.8s–10.0s` speech cutoffs, `transcript_wer > 0.35`, or `detected_internal_cuts > 0`.
+  - Replace the per-attempt un-schematized `consolidate_rubric_with_llm()` call inside `evaluate_clip_quality()` with deterministic `build_shot_evaluation_rubric()` (keeping `consolidate_rubric_with_llm()` available for backward compatibility) and flag API timeout fallbacks explicitly with `audit_status="AUDIT_TIMEOUT_DEGRADED"`.
 
-### Phase 3: Mode A Storyboard Composites & 11-Slide Bilingual GTM Decks (`EN` & `ZH-CN`)
-- [x] `[gtm-slides]` `[parallel]` Create `scratch/retail_showcase/build_mode_a_composites.py` to render bilingual `2×2` Mode A storyboard strips (`uc{1,2,3}_r2v_strip_{en,zh}.png`: `#FFFFFF Anchor` + `0–10s Scene 1 R2V` + `10–20s Scene 2 R2V` + `20–30s Scene 3 R2V`) via `uv run --with pillow python ...` and upload to `gs://vital-octagon-19612-vidgen-showcase/showcase/composites/`.
-- [x] `[gtm-slides]` Update deck builder script (`v11_` element IDs, `11`-slide pagination `01 / 11 .. 11 / 11`) for both **EN (`1b5jlgCWk3Q2LFr5tDYAZZps6Pw_N2_EaIfbAwk9M_3A`)** and **ZH-CN (`12zy4XxPt7sllLsNF3nMIroPRhZSvCGsdEW3UwKnAdj0`)**:
-  - **Slide 7 (NEW):** Mode A (`#FFFFFF` Shared Canonical R2V) 3-card 30s Retail Showcase (`UC1`, `UC2`, `UC3` clickable MP4s + Frame-0 MAE / multi-location metrics).
-  - **Slide 8:** Mode B (`Shot 1 R2V + <FIRST_FRAME> I2V`) 3-card 30s Retail Showcase.
-  - **Slide 9:** Mode C (`Shot 1 R2V + 5.0s Audio-Intact Video Extend`) 3-card 30s Retail Showcase.
-  - **Slide 10 (Unified Fast-Access Hub + Method Comparison + Hybrid Combinations):**
-    - Top/Left **3-Mode Engineering Comparison Table** (`Mode A: Shared R2V` vs. `Mode B: I2V Chaining` vs. `Mode C: 5s Video Extend` — Conditioning, Parallelism, Cut/Motion Physics, Best Use Case & Trade-offs).
-    - Right **All-9 Fast-Access Clickable MP4 Grid** (`UC1 Apparel`, `UC2 Footwear`, `UC3 Beauty` × `[🎨 R2V | ⚡ I2V | 🎞️ Extend]`) + `🎬 Live Web Studio (9 Runs)` button.
-    - Bottom **Hybrid Multi-Mode Choreography Callout** (*Act-Break Re-Anchoring*: `Mode A` → `Mode C` unbroken take → `Mode A` location cut re-locking `#FFFFFF` SKU + `Dual-Anchor` surgical middle-shot edits).
-  - **Slide 11:** GTM Qualification Matrix & 2-Week Retail Pilot Path.
-- [x] `[qa]` Export PDFs (`en_v11.pdf`, `zh_v11.pdf`) and rasterize PNGs (`audit_v11/`), visually inspecting Slides 7, 8, 9, 10, and 11 in both EN and ZH-CN to confirm zero text overflow, clean margins, and accurate links.
+### Phase 2: Monotonic Best-of-$K$ Checkpointing & Post-Stitch Master Seam Rater
+- [x] `[autorater]` Implement **Monotonic Best-of-$K$ Retry Checkpointing** inside shot generation in `app/agents/pipeline.py`: track `(best_score, best_video_bytes, best_prompt, best_eval_result)` across attempts `1..max_attempts` so lower-scoring final retries never overwrite a higher-scoring earlier clip.
+- [x] `[autorater]` Add `MasterSeamEvaluationResult` and `evaluate_stitched_master()` in `app/agents/pipeline.py` (plus `master_quality_report: Optional[Dict[str, Any]] = None` on `PipelineState` in `app/state.py` / `src/state.py`) to audit `output_stitched_*.mp4` across seam transition windows (`[t_cut - 1.5s, t_cut + 1.5s]`) for voice timbre consistency, loudness continuity, and `xfade` smoothness.
+
+### Phase 3: Parallel Mode A Execution, Per-Shot Hybrid Choreography & Unified Loop
+- [x] `[backend]` `[parallel]` Extend `app/state.py` & `src/state.py`:
+  - Add `mode_override: Optional[Literal["reference", "i2v_chaining", "video_extend"]] = None` to `StoryboardEntry` and `VideoShot`.
+  - Add `"hybrid"` to `PipelineState.mode` (`Literal["reference", "i2v_chaining", "video_extend", "hybrid"]`) so `StoryboarderAgent` automatically assigns `"reference"` on act-break location jumps and `"video_extend"` / `"i2v_chaining"` on continuous takes.
+- [x] `[backend]` Upgrade `run_production_loop_async()` in `app/agents/pipeline.py`:
+  - Execute independent Mode A (`mode="reference"`) shots concurrently via `asyncio.Semaphore(Config.MAX_PARALLEL_SHOTS)` + `asyncio.gather` while preserving deterministic shot ordering for FFMPEG stitching.
+  - Honor `shot.mode_override` (and `"hybrid"` mode) per shot cleanly.
+- [x] `[backend]` `[frontend]` Unify `run_adk_pipeline_background()` in `app/fast_api_app.py` to delegate to `run_pipeline_async(..., event_callback=...)` while streaming Web Studio SSE `broadcast_log` events, and add the `🧬 Hybrid Choreography (Auto R2V + Extend/I2V)` option & badge in `app/templates/index.html` and `src/templates/index.html`.
+
+### Phase 4: Unit, Integration, Golden Calibration Suite & Live Vertex AI Smoke Audit
+- [x] `[qa]` `[parallel]` Create `tests/unit/test_autorater_v2.py` (with copyright & docstring header) testing ground-truth image & keyframe attachment, `property_ordering` schema structure, WER/overlap math, Best-of-$K$ monotonic selection, `evaluate_stitched_master`, parallel Mode A concurrency, and `"hybrid"` `mode_override` execution.
+- [x] `[qa]` `[parallel]` Create `tests/unit/test_autorater_calibration.py` (with copyright & docstring header) testing synthetic golden positive vs. negative clips (`#FFFFFF`-locked Frame 0, seam jump-cuts, truncated `9.8s–10.0s` speech energy, and clean reference clips).
+- [x] `[qa]` Run `uv run pytest tests/unit tests/integration -v` (100% pass target), execute a live Vertex AI `evaluate_clip_quality()` + `evaluate_stitched_master()` smoke audit on an existing retail showcase run + `#FFFFFF` anchor, log all results to `ACTION.md`, and create clean commits on `feat/autorater-v2-pipeline`.

@@ -303,7 +303,7 @@ async def run_adk_pipeline_background(adk_session: Session):
         state = PipelineState(
             original_intent=prompt,
             num_shots=num_shots,
-            mode=mode if mode in ["reference", "i2v_chaining", "video_extend"] else "i2v_chaining",
+            mode=mode if mode in ["reference", "i2v_chaining", "video_extend", "hybrid"] else "i2v_chaining",
             aspect_ratio=aspect_ratio,
             resolution=resolution,
             duration=duration,

@@ -62,6 +62,7 @@ from app.agents.pipeline import (
     run_adk_agent,
     create_pipeline_agents,
     split_voice_transcript_across_shots,
+    run_pipeline_async,
 )
 
 load_dotenv()
@@ -470,6 +471,7 @@ async def stream_adk_pipeline(session_id: str):
 
 
 async def run_adk_pipeline_background(adk_session: Session):
+    """Unified background worker delegating directly to app.agents.pipeline.run_pipeline_async."""
     state_dict = adk_session.state
     session_id = adk_session.id
     prompt = state_dict.get("original_intent", "")
@@ -483,452 +485,86 @@ async def run_adk_pipeline_background(adk_session: Session):
     reference_assets_b64 = state_dict.get("reference_assets_b64", [])
     reference_audio_b64 = state_dict.get("reference_audio_b64", [])
 
+    action_step_map: Dict[str, int] = {
+        "INITIATE_PIPELINE": 1,
+        "EXPAND_SCRIPT": 2,
+        "GENERATE_STORYBOARD": 3,
+        "OPTIMIZE_PROMPT": 4,
+        "AUDIT_PROMPT": 5,
+        "RENDER_CLIP": 6,
+        "VERIFY_R2V_SCENE_OPENING": 6,
+        "VERIFY_SEAM_CONTINUITY": 6,
+        "EVALUATE_QUALITY": 7,
+        "EXTRACT_TERMINAL_FRAME": 8,
+        "EXTRACT_VIDEO_TAIL": 8,
+        "CONCATENATE_CLIPS": 9,
+        "EVALUATE_MASTER_SEAMS": 9,
+    }
+
     try:
         client = get_genai_client()
         num_shots = max(1, min(10, shots or 3))
+        valid_mode = (
+            mode
+            if mode in ["reference", "i2v_chaining", "video_extend", "hybrid"]
+            else "i2v_chaining"
+        )
         pipeline_state = PipelineState(
             original_intent=prompt,
             num_shots=num_shots,
-            mode=mode if mode in ["reference", "i2v_chaining", "video_extend"] else "i2v_chaining",
+            mode=valid_mode,
             aspect_ratio=aspect_ratio or "16:9",
             resolution=resolution or "720p",
             duration=duration or 10,
             max_attempts=max_attempts or 2,
             voice_transcript=voice_transcript,
             reference_assets_b64=reference_assets_b64,
-            reference_audio_b64=reference_audio_b64
+            reference_audio_b64=reference_audio_b64,
         )
 
-        # 1. Orchestrator
-        broadcast_log(session_id, {
-            'step': 1,
-            'agent': 'OrchestratorAgent',
-            'action': 'INITIATE_PIPELINE',
-            'details': {
-                'intent': prompt,
-                'num_shots': num_shots,
-                'mode': mode,
-                'aspect_ratio': aspect_ratio,
-                'resolution': resolution,
-                'duration': f'{duration}s',
-                'max_attempts': max_attempts,
-                'dialogue_specified': bool(voice_transcript)
-            }
-        }, state_dict)
-
-        # 2. Screenwriter
-        agents = create_pipeline_agents(Config())
-        screenwriter = agents["screenwriter"]
-        transcript_ctx = (
-            f"\nVoice Transcript Spoken Lines: '{voice_transcript}'"
-            if voice_transcript else ""
-        )
-        extend_mode_ctx = (
-            "\nCONTINUOUS EXTENSION RULE (video_extend mode): Design all scenes as one unbroken continuous single-take camera journey where each scene smoothly continues from the exact ending pose and space of the previous scene without hard location cuts."
-            if mode == "video_extend" else ""
-        )
-        r2v_anchor_ctx = (
-            "\nREFERENCE-TO-VIDEO SCENE-1 RULE: A studio-white subject/product reference image is provided. Scene 1 (and all scenes) MUST open immediately on Frame 0 inside a rich physical environment—NEVER describe, open on, or transition/dissolve out of a white studio backdrop."
-            if reference_assets_b64 else ""
-        )
-        screenplay_prompt = (
-            f"User request: '{prompt}'. Mode: {mode}.{transcript_ctx}{extend_mode_ctx}{r2v_anchor_ctx}\n"
-            f"Write a concise {num_shots}-scene screenplay breakdown describing visual motifs, camera directions, character actions, and dialogue distribution (<= 12 spoken words per 10s scene)."
-        )
-        try:
-            screenplay_text = await run_adk_agent(screenwriter, screenplay_prompt, session_service=adk_session_service, session_id=session_id)
-        except Exception:
-            screenplay_text = f"Scene 1 to {num_shots}: {prompt}"
-
-        pipeline_state.screenplay_draft = screenplay_text
-        broadcast_log(session_id, {
-            'step': 2,
-            'agent': 'ScreenwriterAgent',
-            'action': 'EXPAND_SCRIPT',
-            'details': {
-                'status': 'COMPLETED',
-                'intent': prompt,
-                'screenplay': screenplay_text
-            }
-        }, state_dict)
-
-        # 3. Storyboarder
-        storyboarder = agents["storyboarder"]
-        storyboard_prompt = (
-            f"You are the StoryboarderAgent. Convert the following screenplay into a structured {num_shots}-scene video storyboard with custom quality evaluation criteria for each scene.\n\n"
-            f"SCREENPLAY:\n{screenplay_text}{transcript_ctx}{extend_mode_ctx}{r2v_anchor_ctx}\n\n"
-            "CRITICAL TRANSCRIPT SEGMENTATION RULE: If a Voice Transcript is provided, split it chronologically across the scenes (<= 12 words per scene) in 'spoken_dialogue' so speech never cuts off at 10s boundaries.\n"
-            f"Return ONLY a JSON list of {num_shots} items, where each item has keys: "
-            "'scene_number' (int 1 to N), 'description' (str), 'camera_angle' (str), 'spoken_dialogue' (str or null), 'evaluation_criteria' (str)."
-        )
-        try:
-            sb_text = await run_adk_agent(storyboarder, storyboard_prompt, session_service=adk_session_service, session_id=session_id)
-            if sb_text.startswith("```"):
-                sb_text = sb_text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
-            if sb_text.startswith("json"):
-                sb_text = sb_text[4:].strip()
-
-            raw_sb = json.loads(sb_text)
-            pipeline_state.storyboard = [
-                StoryboardEntry(
-                    scene_number=item.get("scene_number", idx + 1),
-                    description=item.get("description", f"Scene {idx + 1}"),
-                    camera_angle=item.get("camera_angle", "medium"),
-                    spoken_dialogue=item.get("spoken_dialogue"),
-                    evaluation_criteria=item.get("evaluation_criteria", "Check character identity lock, smooth motion, and object persistence.")
-                )
-                for idx, item in enumerate(raw_sb[:num_shots])
-            ]
-        except Exception:
-            angles = ["wide", "medium", "close-up", "low-angle", "tracking", "crane", "macro"]
-            pipeline_state.storyboard = [
-                StoryboardEntry(
-                    scene_number=i + 1,
-                    description=f"{prompt} - Shot {i + 1}",
-                    camera_angle=angles[i % len(angles)],
-                    evaluation_criteria="Check character identity lock, lighting stability, smooth motion, and object persistence."
-                )
-                for i in range(num_shots)
-            ]
-
-        broadcast_log(session_id, {
-            'step': 3,
-            'agent': 'StoryboarderAgent',
-            'action': 'GENERATE_STORYBOARD',
-            'details': {
-                'status': 'COMPLETED',
-                'scenes_count': len(pipeline_state.storyboard),
-                'scenes': [s.model_dump() for s in pipeline_state.storyboard]
-            }
-        }, state_dict)
-
-        has_sb_dialogue = any(bool(sb.spoken_dialogue and sb.spoken_dialogue.strip()) for sb in pipeline_state.storyboard)
-        fallback_dialogues = split_voice_transcript_across_shots(voice_transcript, len(pipeline_state.storyboard))
-        pipeline_state.shots = [
-            VideoShot(
-                shot_index=sb.scene_number,
-                prompt=f"{sb.camera_angle} shot: {sb.description}",
-                spoken_dialogue=sb.spoken_dialogue if has_sb_dialogue else fallback_dialogues[idx],
-                evaluation_criteria=sb.evaluation_criteria
-            )
-            for idx, sb in enumerate(pipeline_state.storyboard)
-        ]
-
-        # Production Loop
-        generated_clip_paths = []
-        prev_frame_b64: Optional[str] = None
-        prev_last_frame_b64: Optional[str] = None
-        prev_clip_path: Optional[str] = None
-        prev_video_tail_b64: Optional[str] = None
-        prev_video_tail_sec: float = 0.0
-
-        for shot in pipeline_state.shots:
-            if state_dict.get("status") == "stopped":
-                break
-
-            clip_filename = os.path.join(OUTPUT_DIR, f"shot_{shot.shot_index}.mp4")
-            frame_filename = os.path.join(OUTPUT_DIR, f"shot_{shot.shot_index}_last_frame.png")
-            is_extend_shot = mode == "video_extend" and prev_video_tail_b64 is not None
-            is_r2v_shot = bool(
-                reference_assets_b64
-                and (
-                    (mode == "reference")
-                    or (mode == "i2v_chaining" and not prev_frame_b64)
-                    or (mode == "video_extend" and not prev_video_tail_b64)
-                )
+        def _on_pipeline_event(ev: Dict[str, Any]) -> None:
+            action = ev.get("action", "PIPELINE_EVENT")
+            agent = ev.get("agent", "OrchestratorAgent")
+            step_num = action_step_map.get(action, state_dict.get("step", 1))
+            details = ev.get("details")
+            if details is None and isinstance(ev.get("state"), dict):
+                t_logs = ev["state"].get("trajectory_logs") or []
+                if t_logs:
+                    details = t_logs[-1].get("details", {})
+            broadcast_log(
+                session_id,
+                {
+                    "step": step_num,
+                    "agent": agent,
+                    "action": action,
+                    "details": details or {},
+                },
+                state_dict,
             )
 
-            feedback = None
-            for attempt in range(max_attempts):
-                if state_dict.get("status") == "stopped":
-                    break
+        pipeline_state = await run_pipeline_async(
+            pipeline_state,
+            output_dir=OUTPUT_DIR,
+            client=client,
+            event_callback=_on_pipeline_event,
+            is_stopped=lambda: state_dict.get("status") == "stopped",
+        )
 
-                optimized_prompt = await optimize_prompt(
-                    raw_prompt=shot.prompt,
-                    voice_transcript=shot.spoken_dialogue,
-                    feedback=feedback,
-                    is_extend_shot=is_extend_shot,
-                    is_r2v_shot=is_r2v_shot,
-                    session_service=adk_session_service,
-                    session_id=session_id,
-                    client=client
-                )
-
-                broadcast_log(session_id, {
-                    'step': 4,
-                    'agent': 'PromptOptimizerAgent',
-                    'action': 'OPTIMIZE_PROMPT',
-                    'details': {
-                        'shot_index': shot.shot_index,
-                        'attempt': attempt + 1,
-                        'raw_prompt': shot.prompt,
-                        'optimized_prompt': optimized_prompt,
-                        'feedback_applied': feedback
-                    }
-                }, state_dict)
-
-                is_healthy = await audit_prompt_health(
-                    optimized_prompt,
-                    session_service=adk_session_service,
-                    session_id=session_id,
-                    client=client
-                )
-
-                broadcast_log(session_id, {
-                    'step': 5,
-                    'agent': 'HealthCheckerAgent',
-                    'action': 'AUDIT_PROMPT',
-                    'details': {
-                        'shot_index': shot.shot_index,
-                        'verdict': 'APPROVED' if is_healthy else 'REJECTED_REVERTED',
-                        'safety_status': 'CLEAR',
-                        'ethical_ai_score': '99/100'
-                    }
-                }, state_dict)
-
-                if not is_healthy:
-                    optimized_prompt = shot.prompt
-
-                if state_dict.get("status") == "stopped":
-                    break
-
-                is_extend_shot = mode == "video_extend" and prev_video_tail_b64 is not None
-                use_refs = reference_assets_b64 if is_r2v_shot else None
-                shot_task = (
-                    "extend"
-                    if is_extend_shot
-                    else ("reference_to_video" if is_r2v_shot else None)
-                )
-                broadcast_log(session_id, {
-                    'step': 6,
-                    'agent': 'GeminiOmniFlash',
-                    'action': 'RENDER_CLIP',
-                    'details': {
-                        'shot_index': shot.shot_index,
-                        'mode': mode,
-                        'task': shot_task or 'image_to_video',
-                        'prompt': optimized_prompt,
-                        'has_input_image': prev_frame_b64 is not None,
-                        'has_reference_anchor': is_r2v_shot,
-                        'has_input_video_tail': is_extend_shot,
-                        'input_tail_seconds': round(prev_video_tail_sec, 2) if is_extend_shot else 0.0
-                    }
-                }, state_dict)
-
-                try:
-                    video_bytes = await asyncio.to_thread(
-                        generate_omni_clip,
-                        prompt=optimized_prompt,
-                        input_image_b64=prev_frame_b64 if mode == "i2v_chaining" else None,
-                        input_video_b64=prev_video_tail_b64 if is_extend_shot else None,
-                        task=shot_task,
-                        reference_images_b64=use_refs,
-                        voice_transcript=shot.spoken_dialogue,
-                        aspect_ratio=aspect_ratio,
-                        resolution=resolution,
-                        duration=duration,
-                        client=client
-                    )
-                except Exception as gen_err:
-                    if (
-                        is_extend_shot
-                        and prev_clip_path
-                        and "speech_edit" in str(gen_err).lower()
-                    ):
-                        silent_tail_b64, _ = await asyncio.to_thread(
-                            extract_video_tail,
-                            prev_clip_path,
-                            Config.VIDEO_EXTEND_INPUT_SECONDS,
-                            True,
-                        )
-                        video_bytes = await asyncio.to_thread(
-                            generate_omni_clip,
-                            prompt=optimized_prompt,
-                            input_video_b64=silent_tail_b64,
-                            task="extend",
-                            voice_transcript=shot.spoken_dialogue,
-                            aspect_ratio=aspect_ratio,
-                            resolution=resolution,
-                            duration=duration,
-                            client=client,
-                        )
-                    else:
-                        raise
-
-                if is_extend_shot and prev_video_tail_sec > 0:
-                    video_bytes = await asyncio.to_thread(
-                        trim_video_prefix,
-                        video_bytes,
-                        prev_video_tail_sec,
-                        float(duration or 10),
-                        prev_last_frame_b64,
-                    )
-
-                with open(clip_filename, "wb") as f:
-                    f.write(video_bytes)
-
-                if is_r2v_shot and use_refs:
-                    locked_to_ref, r2v_f0_mae = await asyncio.to_thread(
-                        detect_r2v_first_frame_lock,
-                        use_refs[0],
-                        clip_filename,
-                        12.0,
-                    )
-                    broadcast_log(session_id, {
-                        'step': 6,
-                        'agent': 'OpenCVVideoParser',
-                        'action': 'VERIFY_R2V_SCENE_OPENING',
-                        'details': {
-                            'shot_index': shot.shot_index,
-                            'attempt': attempt + 1,
-                            'frame0_vs_ref_mae': r2v_f0_mae,
-                            'locked_to_ref_first_frame': locked_to_ref,
-                        }
-                    }, state_dict)
-                    if locked_to_ref and attempt < max_attempts - 1:
-                        feedback = (
-                            f"Frame 0 echoed the white-background reference image (MAE={r2v_f0_mae:.2f}). "
-                            "Open immediately inside the full target environment with dynamic camera framing—no studio white backdrop."
-                        )
-                        continue
-
-                if is_extend_shot and prev_last_frame_b64:
-                    has_jump_cut, seam_mae, peak_mae = await asyncio.to_thread(
-                        detect_seam_jump_cut,
-                        prev_last_frame_b64,
-                        clip_filename,
-                        28.0,
-                        5,
-                    )
-                    broadcast_log(session_id, {
-                        'step': 6,
-                        'agent': 'OpenCVVideoParser',
-                        'action': 'VERIFY_SEAM_CONTINUITY',
-                        'details': {
-                            'shot_index': shot.shot_index,
-                            'attempt': attempt + 1,
-                            'seam_mae': seam_mae,
-                            'peak_early_mae': peak_mae,
-                            'has_jump_cut': has_jump_cut,
-                        }
-                    }, state_dict)
-                    if has_jump_cut and attempt < max_attempts - 1:
-                        feedback = (
-                            f"Hard jump-cut detected at extension boundary (peak MAE={peak_mae:.1f}). "
-                            "Continue seamlessly from the exact ending frame and environment in a single continuous camera take with zero scene cuts."
-                        )
-                        continue
-
-                eval_result = await evaluate_clip_quality(
-                    shot_index=shot.shot_index,
-                    prompt=optimized_prompt,
-                    video_path=clip_filename,
-                    evaluation_criteria=shot.evaluation_criteria,
-                    spoken_dialogue=shot.spoken_dialogue,
-                    session_service=adk_session_service,
-                    session_id=session_id,
-                    client=client
-                )
-                score = eval_result.get("score", 0.9)
-
-                broadcast_log(session_id, {
-                    'step': 7,
-                    'agent': 'QualityRaterAgent',
-                    'action': 'EVALUATE_QUALITY',
-                    'details': {
-                        'shot_index': shot.shot_index,
-                        'video_path': f"/output/shot_{shot.shot_index}.mp4",
-                        'criteria_evaluated': shot.evaluation_criteria,
-                        'attempt': attempt + 1,
-                        'score': score,
-                        'feedback': eval_result.get("feedback", "Good visual quality"),
-                        'verdict': eval_result.get("verdict", "PASSED")
-                    }
-                }, state_dict)
-
-                if score >= 0.8 or attempt == max_attempts - 1:
-                    break
-                else:
-                    feedback = eval_result.get("feedback", "Refine visual continuity and pacing")
-
-            shot.video_path = clip_filename
-            shot.prompt = optimized_prompt
-            shot.status = "completed"
-            generated_clip_paths.append(clip_filename)
-
-            if mode == "i2v_chaining":
-                try:
-                    prev_frame_b64 = await asyncio.to_thread(extract_last_frame, clip_filename, output_image_path=frame_filename)
-                    shot.extracted_last_frame_b64 = prev_frame_b64
-                    broadcast_log(session_id, {
-                        'step': 8,
-                        'agent': 'OpenCVVideoParser',
-                        'action': 'EXTRACT_TERMINAL_FRAME',
-                        'details': {
-                            'shot_index': shot.shot_index,
-                            'frame_file': f"/output/shot_{shot.shot_index}_last_frame.png",
-                            'passed_to_next_shot': True
-                        }
-                    }, state_dict)
-                except Exception:
-                    prev_frame_b64 = None
-            elif mode == "video_extend":
-                prev_clip_path = clip_filename
-                try:
-                    prev_last_frame_b64 = await asyncio.to_thread(extract_last_frame, clip_filename, output_image_path=frame_filename)
-                    shot.extracted_last_frame_b64 = prev_last_frame_b64
-                except Exception:
-                    prev_last_frame_b64 = None
-                try:
-                    prev_video_tail_b64, prev_video_tail_sec = await asyncio.to_thread(
-                        extract_video_tail,
-                        clip_filename,
-                        Config.VIDEO_EXTEND_INPUT_SECONDS,
-                        False,
-                    )
-                    broadcast_log(session_id, {
-                        'step': 8,
-                        'agent': 'OpenCVVideoParser',
-                        'action': 'EXTRACT_VIDEO_TAIL',
-                        'details': {
-                            'shot_index': shot.shot_index,
-                            'tail_seconds': round(prev_video_tail_sec, 2),
-                            'strip_audio': False,
-                            'task': 'extend',
-                            'frame_file': f"/output/shot_{shot.shot_index}_last_frame.png",
-                            'passed_to_next_shot': True
-                        }
-                    }, state_dict)
-                except Exception:
-                    prev_video_tail_b64 = None
-                    prev_video_tail_sec = 0.0
-
-        if state_dict.get("status") != "stopped" and generated_clip_paths:
-            stitched_filename = f"output_stitched_{len(generated_clip_paths)*10}s.mp4"
-            stitched_path = os.path.join(OUTPUT_DIR, stitched_filename)
-            pipeline_state.stitched_video_path = await asyncio.to_thread(stitch_videos, generated_clip_paths, stitched_path)
-
-            broadcast_log(session_id, {
-                'step': 9,
-                'agent': 'FFMPEGStitcherTool',
-                'action': 'CONCATENATE_CLIPS',
-                'details': {
-                    'clips_count': len(generated_clip_paths),
-                    'output_path': f"/output/{stitched_filename}",
-                    'final_duration': f"{len(generated_clip_paths)*10}s"
-                }
-            }, state_dict)
-
+        completed_shots = [s for s in pipeline_state.shots if s.status == "completed" and s.video_path]
+        if state_dict.get("status") != "stopped" and pipeline_state.stitched_video_path and completed_shots:
+            stitched_filename = os.path.basename(pipeline_state.stitched_video_path)
             shots_data = [
                 {
                     "shot_index": s.shot_index,
                     "prompt": s.prompt,
                     "evaluation_criteria": s.evaluation_criteria,
+                    "mode_override": s.mode_override,
+                    "quality_score": s.quality_score,
                     "video_path": f"/output/shot_{s.shot_index}.mp4",
                     "video_url": f"/output/shot_{s.shot_index}.mp4",
                     "frame_path": f"/output/shot_{s.shot_index}_last_frame.png",
                     "frame_url": f"/output/shot_{s.shot_index}_last_frame.png",
-                    "status": s.status
+                    "status": s.status,
                 }
                 for s in pipeline_state.shots
             ]
@@ -938,25 +574,30 @@ async def run_adk_pipeline_background(adk_session: Session):
                 "stitched_video": f"/output/{stitched_filename}",
                 "stitched_video_url": f"/output/{stitched_filename}",
                 "stitched_video_path": f"/output/{stitched_filename}",
-                "final_duration": f"{len(generated_clip_paths)*10}s",
-                "shots": shots_data
+                "final_duration": f"{len(completed_shots) * 10}s",
+                "shots": shots_data,
+                "master_quality_report": pipeline_state.master_quality_report,
             }
             state_dict["status"] = "completed"
             state_dict["result"] = result_summary
 
-            broadcast_log(session_id, {
-                'step': 9,
-                'agent': 'OrchestratorAgent',
-                'action': 'COMPLETE_PIPELINE',
-                'details': result_summary
-            }, state_dict)
+            broadcast_log(
+                session_id,
+                {
+                    "step": 9,
+                    "agent": "OrchestratorAgent",
+                    "action": "COMPLETE_PIPELINE",
+                    "details": result_summary,
+                },
+                state_dict,
+            )
 
             await asyncio.to_thread(
                 save_run,
                 run_id=session_id,
                 original_intent=prompt,
                 num_shots=num_shots,
-                mode=mode,
+                mode=valid_mode,
                 stitched_video_path=pipeline_state.stitched_video_path,
                 shots=shots_data,
                 trajectory_logs=state_dict.get("trajectory_logs", []),
@@ -964,7 +605,7 @@ async def run_adk_pipeline_background(adk_session: Session):
                 aspect_ratio=aspect_ratio,
                 resolution=resolution,
                 duration=duration,
-                output_dir=OUTPUT_DIR
+                output_dir=OUTPUT_DIR,
             )
 
     except Exception as e:
@@ -972,12 +613,16 @@ async def run_adk_pipeline_background(adk_session: Session):
         traceback.print_exc()
         state_dict["status"] = "failed"
         state_dict["error"] = str(e)
-        broadcast_log(session_id, {
-            'step': 0,
-            'agent': 'OrchestratorAgent',
-            'action': 'PIPELINE_FAILED',
-            'details': {'error': str(e)}
-        }, state_dict)
+        broadcast_log(
+            session_id,
+            {
+                "step": 0,
+                "agent": "OrchestratorAgent",
+                "action": "PIPELINE_FAILED",
+                "details": {"error": str(e)},
+            },
+            state_dict,
+        )
 
 
 @app.get("/api/runs")

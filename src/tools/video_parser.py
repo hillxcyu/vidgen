@@ -418,3 +418,177 @@ def trim_video_prefix(
         for p in (in_path, out_path):
             if os.path.exists(p):
                 os.remove(p)
+
+
+def decode_valid_image_b64(b64_str: Optional[str]) -> Optional[tuple]:
+    """Decodes a base64 image string and validates image magic bytes (PNG/JPEG/WebP)."""
+    if not b64_str or not isinstance(b64_str, str):
+        return None
+    cleaned = b64_str.strip()
+    if cleaned.startswith("data:") and "," in cleaned:
+        cleaned = cleaned.split(",", 1)[1].strip()
+    try:
+        raw = base64.b64decode(cleaned, validate=True)
+    except Exception:
+        return None
+    if len(raw) < 12:
+        return None
+    if raw.startswith(b"\x89PNG\r\n\x1a\n"):
+        return raw, "image/png"
+    if raw.startswith(b"\xff\xd8\xff"):
+        return raw, "image/jpeg"
+    if raw.startswith(b"RIFF") and raw[8:12] == b"WEBP":
+        return raw, "image/webp"
+    return None
+
+
+def extract_labeled_audit_keyframes(video_path: str) -> List[tuple]:
+    """Extracts high-resolution boundary and mid-shot PNG stills with explicit temporal labels."""
+    if not os.path.exists(video_path) or os.path.getsize(video_path) == 0:
+        return []
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        return []
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    fps = float(cap.get(cv2.CAP_PROP_FPS) or 24.0)
+    if fps <= 0.0:
+        fps = 24.0
+    if total_frames <= 0:
+        cap.release()
+        return []
+    mid_idx = max(0, total_frames // 2)
+    last_idx = max(0, total_frames - 1)
+    targets = [
+        (0, "KEY FRAME A (t=0.00s, opening frame)"),
+        (mid_idx, f"KEY FRAME M (t={mid_idx / fps:.2f}s, mid-shot)"),
+        (last_idx, f"KEY FRAME B (t={last_idx / fps:.2f}s, terminal frame)"),
+    ]
+    results: List[tuple] = []
+    seen = set()
+    for idx, label in targets:
+        if idx in seen and len(targets) > 1:
+            continue
+        seen.add(idx)
+        cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
+        ret, frame = cap.read()
+        if ret and frame is not None:
+            ok, buf = cv2.imencode(".png", frame)
+            if ok:
+                results.append((label, buf.tobytes()))
+    cap.release()
+    return results
+
+
+def analyze_clip_audio_tail(video_path: str, tail_sec: float = 0.20) -> dict:
+    """Computes deterministic clip duration and RMS dBFS energy in mid-clip vs. trailing window."""
+    import math
+    import struct
+    import wave
+
+    clip_duration = round(get_video_duration(video_path), 2)
+    telemetry = {
+        "clip_duration_sec": clip_duration,
+        "has_audio": False,
+        "mid_rms_db": None,
+        "trailing_rms_db": None,
+        "tail_window_sec": round(tail_sec, 2),
+        "speech_cutoff_detected": False,
+    }
+    if not os.path.exists(video_path) or os.path.getsize(video_path) == 0:
+        return telemetry
+
+    tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+    wav_path = tmp.name
+    tmp.close()
+
+    try:
+        subprocess.run(
+            ["ffmpeg", "-y", "-i", video_path, "-vn", "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1", wav_path],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=True,
+        )
+        if not os.path.exists(wav_path) or os.path.getsize(wav_path) <= 44:
+            return telemetry
+
+        with wave.open(wav_path, "rb") as wf:
+            sr = wf.getframerate() or 16000
+            n_frames = wf.getnframes()
+            if n_frames <= 0:
+                return telemetry
+            raw_pcm = wf.readframes(n_frames)
+
+        samples = struct.unpack(f"<{n_frames}h", raw_pcm)
+        if not samples:
+            return telemetry
+
+        telemetry["has_audio"] = True
+        audio_dur = n_frames / float(sr)
+        if clip_duration <= 0.0:
+            telemetry["clip_duration_sec"] = round(audio_dur, 2)
+
+        def _rms_db(chunk) -> float:
+            if not chunk:
+                return -90.0
+            mean_sq = sum(s * s for s in chunk) / float(len(chunk))
+            rms = math.sqrt(mean_sq) / 32768.0
+            if rms <= 1e-9:
+                return -90.0
+            return round(20.0 * math.log10(rms), 1)
+
+        tail_samples_count = max(1, int(round(tail_sec * sr)))
+        trailing_db = _rms_db(samples[-tail_samples_count:])
+        mid_start = min(len(samples), int(round(0.5 * sr)))
+        mid_end = max(mid_start + 1, len(samples) - int(round(0.5 * sr)))
+        mid_chunk = samples[mid_start:mid_end] if mid_end > mid_start else samples
+        mid_db = _rms_db(mid_chunk)
+
+        telemetry["mid_rms_db"] = mid_db
+        telemetry["trailing_rms_db"] = trailing_db
+        telemetry["speech_cutoff_detected"] = bool(
+            trailing_db > -26.0 and trailing_db >= (mid_db - 6.0)
+        )
+        return telemetry
+    except Exception:
+        return telemetry
+    finally:
+        if os.path.exists(wav_path):
+            os.remove(wav_path)
+
+
+def compute_transcript_metrics(
+    expected_dialogue: Optional[str],
+    heard_transcript: Optional[str],
+) -> dict:
+    """Computes deterministic word-level Levenshtein WER and recall word-overlap."""
+    import re
+    from collections import Counter
+
+    ref_words = re.findall(r"[a-z0-9']+", (expected_dialogue or "").lower())
+    if not ref_words:
+        return {"transcript_wer": None, "transcript_word_overlap": None}
+
+    hyp_words = re.findall(r"[a-z0-9']+", (heard_transcript or "").lower())
+    if not hyp_words:
+        return {"transcript_wer": 1.0, "transcript_word_overlap": 0.0}
+
+    m, n = len(ref_words), len(hyp_words)
+    dp = list(range(n + 1))
+    for i in range(1, m + 1):
+        prev_diag = dp[0]
+        dp[0] = i
+        for j in range(1, n + 1):
+            temp = dp[j]
+            cost = 0 if ref_words[i - 1] == hyp_words[j - 1] else 1
+            dp[j] = min(dp[j] + 1, dp[j - 1] + 1, prev_diag + cost)
+            prev_diag = temp
+
+    wer = round(min(1.0, dp[n] / float(m)), 3)
+    hyp_counts = Counter(hyp_words)
+    matched = 0
+    for w in ref_words:
+        if hyp_counts[w] > 0:
+            matched += 1
+            hyp_counts[w] -= 1
+    overlap = round(matched / float(m), 3)
+    return {"transcript_wer": wer, "transcript_word_overlap": overlap}

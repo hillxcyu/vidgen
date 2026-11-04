@@ -16,7 +16,14 @@ from google.adk.workflow import Workflow, FunctionNode, Edge, START
 
 from src.config import Config, get_genai_client
 from src.state import PipelineState, VideoShot, StoryboardEntry
-from src.tools.video_parser import extract_last_frame, create_agentic_video_part
+from src.tools.video_parser import (
+    extract_last_frame,
+    create_agentic_video_part,
+    decode_valid_image_b64,
+    extract_labeled_audit_keyframes,
+    analyze_clip_audio_tail,
+    compute_transcript_metrics,
+)
 from src.tools.omni_client import generate_omni_clip
 from src.tools.stitcher import stitch_videos
 
@@ -210,14 +217,43 @@ class CriterionEvaluation(BaseModel):
     score: float = Field(default=1.0, description="Score for this specific criterion (0.0 to 1.0).")
     comments: str = Field(default="Meets criteria", description="Specific observation or comment for this criterion.")
 
+
+QUALITY_EVALUATION_PROPERTY_ORDER: List[str] = [
+    "opening_environment_observed",
+    "heard_transcript",
+    "speech_end_sec",
+    "detected_internal_cuts",
+    "reason",
+    "score",
+    "verdict",
+    "feedback",
+]
+
+
 class QualityEvaluationResult(BaseModel):
-    score: float = Field(
-        default=0.0,
-        description="Overall aggregated quality score from 0.0 to 1.0 (>= 0.8 is PASS, < 0.8 requires reattempt)."
+    opening_environment_observed: str = Field(
+        default="",
+        description="Factual description of the physical environment, lighting, and subject visible on Frame 0 (t=0.0s).",
+    )
+    heard_transcript: str = Field(
+        default="",
+        description="Exact verbatim words spoken audibly in the clip (empty string if no speech is heard).",
+    )
+    speech_end_sec: Optional[float] = Field(
+        default=None,
+        description="Approximate timestamp in seconds where spoken dialogue concludes (null if no speech).",
+    )
+    detected_internal_cuts: int = Field(
+        default=0,
+        description="Count of abrupt internal camera jump-cuts inside this single clip (0 if continuous single take).",
     )
     reason: List[CriterionEvaluation] = Field(
         default_factory=list,
         description="Detailed list evaluating each individual consolidated criterion with its specific score and findings."
+    )
+    score: float = Field(
+        default=0.0,
+        description="Overall aggregated quality score from 0.0 to 1.0 (>= 0.8 is PASS, < 0.8 requires reattempt)."
     )
     verdict: str = Field(
         default="REATTEMPT_REQUIRED",
@@ -227,9 +263,57 @@ class QualityEvaluationResult(BaseModel):
         default="",
         description="Actionable summary feedback for downstream PromptOptimizerAgent."
     )
+    transcript_wer: Optional[float] = Field(default=None)
+    transcript_word_overlap: Optional[float] = Field(default=None)
+    audit_status: str = Field(default="OK")
+    deterministic_telemetry: Dict[str, Any] = Field(default_factory=dict)
 
-def consolidate_evaluation_rubric_fallback(evaluation_criteria: Optional[str] = None) -> List[str]:
-    """Fallback static rubric consolidation if LLM step fails."""
+
+def build_quality_evaluation_schema() -> types.Schema:
+    """Builds explicit Google GenAI Schema enforcing observation-first property_ordering before score."""
+    return types.Schema(
+        type=types.Type.OBJECT,
+        property_ordering=list(QUALITY_EVALUATION_PROPERTY_ORDER),
+        properties={
+            "opening_environment_observed": types.Schema(type=types.Type.STRING),
+            "heard_transcript": types.Schema(type=types.Type.STRING),
+            "speech_end_sec": types.Schema(type=types.Type.NUMBER, nullable=True),
+            "detected_internal_cuts": types.Schema(type=types.Type.INTEGER),
+            "reason": types.Schema(
+                type=types.Type.ARRAY,
+                items=types.Schema(
+                    type=types.Type.OBJECT,
+                    property_ordering=["criterion_name", "score", "comments"],
+                    properties={
+                        "criterion_name": types.Schema(type=types.Type.STRING),
+                        "score": types.Schema(type=types.Type.NUMBER),
+                        "comments": types.Schema(type=types.Type.STRING),
+                    },
+                    required=["criterion_name", "score", "comments"],
+                ),
+            ),
+            "score": types.Schema(type=types.Type.NUMBER),
+            "verdict": types.Schema(type=types.Type.STRING),
+            "feedback": types.Schema(type=types.Type.STRING),
+        },
+        required=[
+            "opening_environment_observed",
+            "heard_transcript",
+            "detected_internal_cuts",
+            "reason",
+            "score",
+            "verdict",
+            "feedback",
+        ],
+    )
+
+
+def consolidate_evaluation_rubric_fallback(
+    evaluation_criteria: Optional[str] = None,
+    spoken_dialogue: Optional[str] = None,
+    has_reference_anchor: bool = False,
+) -> List[str]:
+    """Deterministic zero-extra-hop evaluation rubric builder."""
     rubric = []
     if evaluation_criteria and evaluation_criteria.strip():
         rubric.append(f"Scene Goal: {evaluation_criteria.strip()}")
@@ -239,9 +323,16 @@ def consolidate_evaluation_rubric_fallback(evaluation_criteria: Optional[str] = 
         "Product & Object Locking: Product shape, branding, color, and object continuity.",
         "Wardrobe & Clothing Locking: Garment style, color, texture, and outfit stability.",
         "Accessories & Props Locking: Handheld items, jewelry, glasses, or props to prevent vanishing.",
-        "Background & Environment Locking: Background setting, lighting direction, and camera angle coherence."
+        "Single-Take & Background Coherence: Unbroken continuous camera take inside target setting (zero internal cuts; no studio #FFFFFF backdrop echo)."
+        if has_reference_anchor
+        else "Single-Take & Background Coherence: Unbroken continuous camera take with lighting and camera angle coherence."
     ])
+    if spoken_dialogue and spoken_dialogue.strip():
+        rubric.append(
+            f"Spoken Dialogue & Audio Completion: Exact spoken line ('{spoken_dialogue.strip()}') articulated cleanly and completed before clip end."
+        )
     return rubric
+
 
 async def consolidate_rubric_with_llm(
     shot_index: int,
@@ -250,68 +341,36 @@ async def consolidate_rubric_with_llm(
     session_service: Optional[InMemorySessionService] = None,
     session_id: Optional[str] = None
 ) -> Tuple[List[str], str]:
-    """Uses LLM to consolidate Orchestrator scene criteria with 5-Category Subject Drift parameters and draft an evaluation prompt."""
-    config = Config()
-    agents = create_adk_agents(config)
-    rater = agents["quality_rater"]
+    """Backwards-compatible rubric builder returning deterministic consolidated rubric without extra LLM latency."""
+    rubric = consolidate_evaluation_rubric_fallback(evaluation_criteria=evaluation_criteria)
+    drafted = f"Inspect shot #{shot_index} high-res stills and full video clip against consolidated rubrics."
+    return rubric, drafted
 
-    criteria_str = f"Orchestrator Scene Goal: '{evaluation_criteria}'" if evaluation_criteria else "No specific scene goal provided."
-
-    consolidation_prompt = (
-        f"You are the Lead Quality Auditor preparing an evaluation rubric for shot #{shot_index}.\n"
-        f"Shot Prompt: '{prompt}'\n"
-        f"{criteria_str}\n\n"
-        "Consolidate the Orchestrator scene goal with standard 5-Category Subject Drift parameters:\n"
-        "1. Face Identity Locking\n"
-        "2. Product & Object Continuity\n"
-        "3. Wardrobe & Clothing Locking\n"
-        "4. Accessories & Props Locking\n"
-        "5. Background & Environment Coherence\n\n"
-        "Output ONLY a JSON object formatted as:\n"
-        "{\n"
-        '  "consolidated_rubric": ["Criterion 1: description", "Criterion 2: description", ...],\n'
-        '  "drafted_eval_prompt": "Tailored step-by-step instructions for inspecting candidate video clip keyframes."\n'
-        "}"
-    )
-
-    try:
-        import re
-        text = await run_adk_agent(rater, consolidation_prompt, session_service=session_service, session_id=session_id)
-        json_match = re.search(r"\{.*\}", text, re.DOTALL)
-        clean_text = json_match.group(0) if json_match else text
-        data = json.loads(clean_text)
-        rubric = data.get("consolidated_rubric", [])
-        drafted_prompt = data.get("drafted_eval_prompt", f"Visually inspect shot #{shot_index} keyframes against consolidated rubrics.")
-        if not rubric:
-            rubric = consolidate_evaluation_rubric_fallback(evaluation_criteria)
-        return rubric, drafted_prompt
-    except Exception as e:
-        print(f"[LLM RUBRIC CONSOLIDATION NOTICE]: {e}. Using default fallback rubric.")
-        default_rubric = consolidate_evaluation_rubric_fallback(evaluation_criteria)
-        default_drafted = f"Visually inspect shot #{shot_index} keyframes against consolidated rubrics."
-        return default_rubric, default_drafted
 
 async def evaluate_clip_quality(
     shot_index: int,
     prompt: str,
     video_path: str,
     evaluation_criteria: Optional[str] = None,
+    spoken_dialogue: Optional[str] = None,
+    reference_images_b64: Optional[List[str]] = None,
+    prev_last_frame_b64: Optional[str] = None,
     session_service: Optional[InMemorySessionService] = None,
     session_id: Optional[str] = None,
     client: Optional[genai.Client] = None
 ) -> Dict[str, Any]:
-    """Quality Rater Agent: Consolidates rubrics via LLM, then evaluates clip returning structured score and per-criterion reason breakdown."""
+    """Quality Rater Agent v2: Observation-first schema + hybrid high-res stills + deterministic audio/WER telemetry."""
     config = Config()
     agents = create_adk_agents(config)
     rater = agents["quality_rater"]
 
-    # Step 1: LLM Rubric Consolidation & Prompt Drafting
-    consolidated_rubric, drafted_eval_prompt = await consolidate_rubric_with_llm(
-        shot_index=shot_index,
-        prompt=prompt,
+    ref_anchor = decode_valid_image_b64(reference_images_b64[0]) if reference_images_b64 else None
+    prev_frame_img = decode_valid_image_b64(prev_last_frame_b64) if prev_last_frame_b64 else None
+
+    consolidated_rubric = consolidate_evaluation_rubric_fallback(
         evaluation_criteria=evaluation_criteria,
-        session_service=session_service,
-        session_id=session_id
+        spoken_dialogue=spoken_dialogue,
+        has_reference_anchor=ref_anchor is not None,
     )
 
     # Check for missing or empty file
@@ -320,80 +379,99 @@ async def evaluate_clip_quality(
             score=0.0,
             reason=[CriterionEvaluation(criterion_name="Video File Integrity", score=0.0, comments="File missing or 0 bytes")],
             verdict="REATTEMPT_REQUIRED",
-            feedback=f"FAILED: Video shot #{shot_index} generation failed or output file is empty (0 bytes)."
+            feedback=f"FAILED: Video shot #{shot_index} generation failed or output file is empty (0 bytes).",
+            audit_status="FILE_MISSING",
         )
         res_dict = res.model_dump()
         res_dict["consolidated_rubric"] = consolidated_rubric
         return res_dict
 
-    media_parts = []
+    media_parts: List[types.Part] = []
     try:
         with open(video_path, "rb") as f:
             video_bytes = f.read()
-        if not video_bytes or len(video_bytes) == 0:
+        if not video_bytes:
             res = QualityEvaluationResult(
                 score=0.0,
                 reason=[CriterionEvaluation(criterion_name="Video File Integrity", score=0.0, comments="File contains 0 bytes")],
                 verdict="REATTEMPT_REQUIRED",
-                feedback=f"FAILED: Video shot #{shot_index} contains 0 bytes."
+                feedback=f"FAILED: Video shot #{shot_index} contains 0 bytes.",
+                audit_status="FILE_EMPTY",
             )
             res_dict = res.model_dump()
             res_dict["consolidated_rubric"] = consolidated_rubric
             return res_dict
-        config = Config()
         media_parts.append(create_agentic_video_part(video_path_or_uri=video_path, video_bytes=video_bytes, media_processing=config.MEDIA_PROCESSING))
     except Exception as e:
         res = QualityEvaluationResult(
             score=0.0,
             reason=[CriterionEvaluation(criterion_name="Video File Access", score=0.0, comments=str(e))],
             verdict="REATTEMPT_REQUIRED",
-            feedback=f"FAILED: Could not read video file at {video_path}: {e}"
+            feedback=f"FAILED: Could not read video file at {video_path}: {e}",
+            audit_status="FILE_READ_ERROR",
         )
         res_dict = res.model_dump()
         res_dict["consolidated_rubric"] = consolidated_rubric
         return res_dict
 
-    # Step 2: Evaluation using drafted prompt and native GenAI SDK response_schema JSON enforcement
+    audit_keyframes = await asyncio.to_thread(extract_labeled_audit_keyframes, video_path)
+    audio_telemetry = await asyncio.to_thread(analyze_clip_audio_tail, video_path, 0.2)
+
     rubric_str = "\n".join(f"- {r}" for r in consolidated_rubric)
+    dialogue_line = f"\nExpected Spoken Dialogue: '{spoken_dialogue}'" if spoken_dialogue else ""
     eval_instructions = (
-        f"You are the QualityRaterAgent performing a strict visual quality audit on shot #{shot_index}.\n"
-        f"{drafted_eval_prompt}\n\n"
+        f"You are the QualityRaterAgent performing an observation-first visual & audio quality audit on shot #{shot_index}.\n"
+        f"Target Shot Prompt: '{prompt}'{dialogue_line}\n"
+        f"Measured Duration: {audio_telemetry.get('clip_duration_sec', 0.0)}s | "
+        f"Trailing 0.2s RMS: {audio_telemetry.get('trailing_rms_db', -90.0)} dBFS\n\n"
         f"CONSOLIDATED EVALUATION RUBRIC:\n{rubric_str}\n\n"
-        "Visually inspect the MP4 clip keyframes against this consolidated rubric.\n"
-        "Assess each criterion in the rubric, assign a score (0.0 to 1.0) and specific comments for each.\n"
-        "Calculate the overall score (0.0 to 1.0). If score < 0.8 on any criterion, set verdict='REATTEMPT_REQUIRED'."
+        "Extract opening_environment_observed, heard_transcript, speech_end_sec, and detected_internal_cuts BEFORE scoring.\n"
+        "If score < 0.8 on any criterion, set verdict='REATTEMPT_REQUIRED'."
     )
 
     eval_res = None
     last_error = None
+    schema_obj = build_quality_evaluation_schema()
     for retry_attempt in range(2):
-        # 1. Native GenAI SDK call with strict response_schema JSON decoding
         if client:
             try:
-                genai_contents = [
-                    eval_instructions,
-                    types.Part.from_bytes(data=video_bytes, mime_type="video/mp4")
-                ]
+                genai_contents: List[Any] = [eval_instructions]
+                if ref_anchor is not None:
+                    ref_bytes, ref_mime = ref_anchor
+                    genai_contents.append("CANONICAL REFERENCE ANCHOR (#FFFFFF):")
+                    genai_contents.append(types.Part.from_bytes(data=ref_bytes, mime_type=ref_mime))
+                if prev_frame_img is not None:
+                    pf_bytes, pf_mime = prev_frame_img
+                    genai_contents.append("PRIOR SHOT TERMINAL FRAME:")
+                    genai_contents.append(types.Part.from_bytes(data=pf_bytes, mime_type=pf_mime))
+                for kf_label, kf_png in audit_keyframes:
+                    genai_contents.append(f"CANDIDATE HIGH-RES STILL [{kf_label}]:")
+                    genai_contents.append(types.Part.from_bytes(data=kf_png, mime_type="image/png"))
+                genai_contents.append("CANDIDATE FULL VIDEO CLIP:")
+                genai_contents.extend(media_parts)
+
                 resp = await asyncio.to_thread(
                     client.models.generate_content,
                     model=config.ORCHESTRATOR_MODEL,
                     contents=genai_contents,
                     config=types.GenerateContentConfig(
                         response_mime_type="application/json",
-                        response_schema=QualityEvaluationResult,
-                        temperature=0.2
+                        response_schema=schema_obj,
+                        temperature=0.1,
                     )
                 )
-                if resp and resp.text:
+                if resp and isinstance(resp.text, str) and resp.text.strip():
                     eval_res = QualityEvaluationResult.model_validate_json(resp.text)
                     break
             except Exception as sdk_err:
                 last_error = sdk_err
                 print(f"[QUALITY RATER SDK ATTEMPT {retry_attempt+1} NOTICE]: {sdk_err}")
 
-        # 2. ADK Runner fallback if SDK is unavailable
         try:
-            text = await run_adk_agent(rater, eval_instructions, media_parts=media_parts, session_service=session_service, session_id=session_id)
+            adk_kwargs: Dict[str, Any] = {"media_parts": media_parts, "session_service": session_service}
+            if session_id is not None:
+                adk_kwargs["session_id"] = session_id
+            text = await run_adk_agent(rater, eval_instructions, **adk_kwargs)
             import re
             json_match = re.search(r"\{.*\}", text, re.DOTALL)
             clean_text = json_match.group(0) if json_match else text
@@ -404,16 +482,28 @@ async def evaluate_clip_quality(
             print(f"[QUALITY RATER ADK ATTEMPT {retry_attempt+1} NOTICE]: {adk_err}")
 
     if eval_res:
-        # Minimum score across individual criteria determines overall score & verdict
         min_criterion_score = min([item.score for item in eval_res.reason], default=eval_res.score)
         eval_res.score = min(eval_res.score, min_criterion_score)
+        eval_res.deterministic_telemetry = audio_telemetry
+        if spoken_dialogue and spoken_dialogue.strip():
+            tx = compute_transcript_metrics(spoken_dialogue, eval_res.heard_transcript)
+            eval_res.transcript_wer = tx["transcript_wer"]
+            eval_res.transcript_word_overlap = tx["transcript_word_overlap"]
+            if (eval_res.heard_transcript.strip() or audio_telemetry.get("has_audio")) and tx["transcript_wer"] is not None and tx["transcript_wer"] > 0.35:
+                eval_res.score = min(eval_res.score, 0.65)
+        if audio_telemetry.get("speech_cutoff_detected"):
+            eval_res.score = min(eval_res.score, 0.65)
+        if eval_res.detected_internal_cuts > 0:
+            eval_res.score = min(eval_res.score, 0.60)
         eval_res.verdict = "PASSED" if eval_res.score >= 0.8 else "REATTEMPT_REQUIRED"
     else:
         eval_res = QualityEvaluationResult(
             score=0.5,
             reason=[CriterionEvaluation(criterion_name="Visual Audit Execution", score=0.5, comments=f"Audit parsing notice: {last_error}")],
             verdict="REATTEMPT_REQUIRED",
-            feedback=f"REATTEMPT REQUIRED: Quality audit encountered parsing error ({last_error}). Requesting prompt refinement."
+            feedback=f"REATTEMPT REQUIRED: Quality audit encountered timeout/parsing error ({last_error}). Requesting prompt refinement.",
+            audit_status="AUDIT_TIMEOUT_DEGRADED",
+            deterministic_telemetry=audio_telemetry,
         )
 
     res_dict = eval_res.model_dump()

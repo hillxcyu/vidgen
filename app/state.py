@@ -7,8 +7,10 @@ class VideoShot(BaseModel):
     prompt: str
     spoken_dialogue: Optional[str] = None
     evaluation_criteria: Optional[str] = None
+    mode_override: Optional[Literal["reference", "i2v_chaining", "video_extend"]] = None
     video_path: Optional[str] = None
     extracted_last_frame_b64: Optional[str] = None
+    quality_score: Optional[float] = None
     status: str = "pending"
 
 
@@ -18,13 +20,14 @@ class StoryboardEntry(BaseModel):
     camera_angle: str = "medium"
     spoken_dialogue: Optional[str] = None
     evaluation_criteria: Optional[str] = None
+    mode_override: Optional[Literal["reference", "i2v_chaining", "video_extend"]] = None
     visual_elements: List[str] = Field(default_factory=list)
 
 
 class PipelineState(BaseModel):
     original_intent: str
     num_shots: int = Field(default=3, ge=1, le=10)
-    mode: Literal["reference", "i2v_chaining", "video_extend"] = "i2v_chaining"
+    mode: Literal["reference", "i2v_chaining", "video_extend", "hybrid"] = "i2v_chaining"
     aspect_ratio: str = "16:9"
     resolution: str = "720p"
     duration: int = 10
@@ -37,6 +40,7 @@ class PipelineState(BaseModel):
     shots: List[VideoShot] = Field(default_factory=list)
     stitched_video_path: Optional[str] = None
     quality_rating: Optional[float] = None
+    master_quality_report: Optional[Dict[str, Any]] = None
     attempt_counter: int = 0
     trajectory_logs: List[Dict[str, Any]] = Field(default_factory=list)
 
