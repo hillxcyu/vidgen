@@ -505,3 +505,57 @@
      - `opening_environment_observed` verified, `heard_transcript = "Crafted to shield against freezing winter wind."`, `speech_end_sec = 4.8`, `detected_internal_cuts = 0`, `transcript_wer = 0.0`, `transcript_word_overlap = 1.0`, `trailing_rms_db = -39.0 dBFS` (`speech_cutoff_detected = False`), `seam_mae = 3.81` -> **`score = 0.96` (`verdict = "PASSED"`)**.
   3. **Post-Stitch Master Seam Critic (`task-6398` on `output_stitched_30s.mp4`):**
      - Audited `[8.5s - 11.5s]` (`seam_timestamp_sec = 10.0`, `seam_score = 0.95`) and `[18.5s - 21.5s]` (`seam_timestamp_sec = 20.0`, `seam_score = 0.95`) -> **`score = 0.95` (`verdict = "PASSED"`, `voice_timbre_consistent = True`, `loudness_continuity_ok = True`, `visual_xfade_smooth = True`)**.
+
+
+---
+
+## [2026-11-07T14:28:35Z] Stage 3 (ACT): Live 30s `mode="hybrid"` UC1 Apparel E2E Run & Auto-Rater v1 vs. v2 Head-to-Head Benchmark (`feat/autorater-v2-pipeline`)
+
+### 1. Execution Command & Environment
+* **Runner Script:** `/usr/local/google/home/xcyu/.gemini/jetski/brain/dd460239-badd-49d0-b6be-d6d51eca5766/scratch/run_e2e_hybrid_autorater_v2.py`
+* **Command:**
+  ```bash
+  uv run --no-sync python /usr/local/google/home/xcyu/.gemini/jetski/brain/dd460239-badd-49d0-b6be-d6d51eca5766/scratch/run_e2e_hybrid_autorater_v2.py
+  ```
+* **Environment:** `GOOGLE_CLOUD_PROJECT=vital-octagon-19612`, `GOOGLE_CLOUD_LOCATION=global`, `ORCHESTRATOR_MODEL=gemini-3.7-flash`, `VIDEO_GEN_MODEL=gemini-omni-1.1-flash-preview`, `VIDEO_EXTEND_MODEL=macaron-cookie` (fallback `gemini-omni-flash-preview`).
+* **Exit Status:** `0` (`ALL PHASES COMPLETE`).
+
+### 2. Direct Authenticated GCS MP4 & Telemetry Links (`gs://vital-octagon-19612-vidgen-showcase/showcase/retail_uc1_apparel_hybrid_v2_30s/`)
+* **Stitched 30s Hybrid Master (`29.92s`, `10,268,697 bytes`):** https://storage.cloud.google.com/vital-octagon-19612-vidgen-showcase/showcase/retail_uc1_apparel_hybrid_v2_30s/output_stitched_30s.mp4
+* **Shot 1 (`0–10s`, `mode_override="reference"` R2V, `10.03s`, `4,184,467 bytes`):** https://storage.cloud.google.com/vital-octagon-19612-vidgen-showcase/showcase/retail_uc1_apparel_hybrid_v2_30s/shot_1.mp4
+* **Shot 2 (`10–20s`, `mode_override="video_extend"`, `10.08s`, `3,629,161 bytes`):** https://storage.cloud.google.com/vital-octagon-19612-vidgen-showcase/showcase/retail_uc1_apparel_hybrid_v2_30s/shot_2.mp4
+* **Shot 3 (`20–30s`, `mode_override="reference"` Act-Break Re-Anchor, `10.03s`, `3,704,629 bytes`):** https://storage.cloud.google.com/vital-octagon-19612-vidgen-showcase/showcase/retail_uc1_apparel_hybrid_v2_30s/shot_3.mp4
+* **Canonical `#FFFFFF` Reference Anchor (`reference_anchor.png`):** https://storage.cloud.google.com/vital-octagon-19612-vidgen-showcase/showcase/retail_uc1_apparel_hybrid_v2_30s/reference_anchor.png
+* **Full JSON Telemetry Report (`e2e_autorater_v2_telemetry.json`):** https://storage.cloud.google.com/vital-octagon-19612-vidgen-showcase/showcase/retail_uc1_apparel_hybrid_v2_30s/e2e_autorater_v2_telemetry.json
+
+### 3. Phase 1 Controlled 4-Case Stress Audit: Auto-Rater v1 (`main`) vs. Auto-Rater v2 (`feat/autorater-v2-pipeline`)
+
+| Diagnostic Case | Expected Verdict | Auto-Rater v1 (`main`) | Auto-Rater v2 (`feat/autorater-v2-pipeline`) | Key Delta / Grounding Signal |
+| :--- | :---: | :---: | :---: | :--- |
+| **1. Clean Matching Clip** (`shot_2.mp4`) | `PASSED` | `0.95` (`PASSED`) · `25,046 ms` | **`0.98` (`PASSED`) · `19,741 ms`** | **`-21.2%` latency**; extracted `heard_transcript`, `WER=0.0`, `speech_end=4.6s`, `tail_rms=-39.0 dBFS` |
+| **2. Spoken Copy Drift** (Summer copy vs. Winter speech) | `REATTEMPT_REQUIRED` | `0.00` (`REATTEMPT_REQUIRED`) · `26,861 ms` | **`0.00` (`REATTEMPT_REQUIRED`) · `21,313 ms`** | **`-20.7%` latency**; deterministic `transcript_wer=1.00` (`overlap=0.00`) |
+| **3. Mid-Sentence Speech Cutoff** (`3.12s` trim) | `REATTEMPT_REQUIRED` | `0.15` (`REATTEMPT_REQUIRED`) · `22,439 ms` | **`0.20` (`REATTEMPT_REQUIRED`) · `16,600 ms`** | **`-26.0%` latency**; physical `trailing_rms_db=-22.4 dBFS` (`speech_cutoff_detected=True`), `WER=0.571` (`heard="Crafted to shield"`) |
+| **4. `#FFFFFF` SKU Color Drift** (Cobalt Anchor vs. Terracotta Video) | `REATTEMPT_REQUIRED` | **`0.95` (`PASSED` — FALSE PASS)** · `22,448 ms` | **`0.40` (`REATTEMPT_REQUIRED` — CAUGHT)** · `26,602 ms` | **v1 is 100% blind to `#FFFFFF` SKU drift** when prompt omits color; **v2 compares against `CANONICAL REFERENCE ANCHOR`** and catches royal-blue vs. burnt-orange mismatch |
+
+### 4. Phase 2 & Phase 4 Live 30s `mode="hybrid"` Shot-by-Shot Results (v1 vs. v2)
+* `StoryboarderAgent` autonomously planned `storyboarder_initial_mode_overrides = ["reference", "video_extend", "reference"]`.
+* All 3 shots passed `Auto-Rater v2` on **Attempt 1** with `score = 1.00`, `transcript_wer = 0.0`, `detected_internal_cuts = 0`, and zero `9.8s–10.0s` audio cutoffs:
+  * **Shot 1 (`reference` R2V — Urban Espresso Boutique):**
+    * OpenCV `frame0_vs_anchor_mae = 107.8` (`locked_to_white_anchor = False`); `trailing_rms_db = -32.4 dBFS`.
+    * **Auto-Rater v2:** `score = 1.00` (`PASSED`, `18,214 ms`), `heard_transcript = "Engineered for crisp mornings on the city street."` (`WER = 0.0`, `speech_end_sec = 6.8s`).
+    * **Auto-Rater v1:** `score = 0.95` (`PASSED`, `24,052 ms` — `+32%` slower).
+  * **Shot 2 (`video_extend` — Seamless Doorway Push onto Misty Winter Sidewalk):**
+    * OpenCV `seam_mae_vs_prev_shot = 6.06` (`peak_early_mae = 16.89`, `has_jump_cut = False`); `trailing_rms_db = -37.8 dBFS`.
+    * **Auto-Rater v2:** `score = 1.00` (`PASSED`, `27,595 ms`), `heard_transcript = "Crafted to shield against freezing winter wind."` (`WER = 0.0`, `speech_end_sec = 6.8s`).
+    * **Auto-Rater v1:** `score = 0.95` (`PASSED`, `27,072 ms`).
+  * **Shot 3 (`reference` R2V Re-Anchor — Snow-Dusted Alpine Timber Chalet Deck at Twilight):**
+    * OpenCV `frame0_vs_anchor_mae = 176.57` (`locked_to_white_anchor = False`); `trailing_rms_db = -43.7 dBFS`; `APEX` chest logo, vertical zip, gold hoop earrings, and cream ribbed turtleneck locked `1:1` to `reference_anchor.png` at `20–30s`.
+    * **Auto-Rater v2:** **`score = 1.00` (`PASSED`, `17,687 ms`)**, `heard_transcript = "Ready for every alpine winter horizon."` (`WER = 0.0`, `speech_end_sec = 8.1s`).
+    * **Auto-Rater v1:** **`score = 0.65` (`REATTEMPT_REQUIRED` — FALSE REJECT, `22,146 ms`)**! Because the user prompt casually wrote *"charcoal turtleneck"* while the actual `#FFFFFF` SKU anchor (`uc1_apparel_anchor.png`) wears a **cream/ivory ribbed turtleneck**, prompt-only v1 penalized Omni for faithfully matching the reference image—which in production would have wasted a ~60s regeneration cycle and forced wardrobe drift away from the ground-truth product photo.
+
+### 5. Phase 3 Post-Stitch Master Seam Critic (`EVALUATE_MASTER_SEAMS`)
+* **Overall Score & Verdict:** **`0.95` (`PASSED`)** (`voice_timbre_consistent=True`, `loudness_continuity_ok=True`, `visual_xfade_smooth=True`).
+* **Seam `10.0s` (`[8.5s–11.5s]`, `reference` -> `video_extend`):** `seam_score = 0.95` — Seamless tracking push from boutique interior to misty street exterior with smooth room-tone crossfade and zero xfade ghosting.
+* **Seam `20.0s` (`[18.5s–21.5s]`, `video_extend` -> `reference` act-break):** `seam_score = 0.96` — Clean act-break cut into twilight alpine firepit tilt-up, re-anchoring Character A and exact matte rust-terracotta puffer SKU with consistent voiceover timbre and loudness.
+
+* **[2026-11-07T14:36:00Z]** User confirmed results (`looks good`). Marked all Run 2 tasks `[x]` in `PLAN.md` and committed updated workflow logs on `feat/autorater-v2-pipeline`.
