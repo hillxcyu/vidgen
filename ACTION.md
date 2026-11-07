@@ -559,3 +559,43 @@
 * **Seam `20.0s` (`[18.5s–21.5s]`, `video_extend` -> `reference` act-break):** `seam_score = 0.96` — Clean act-break cut into twilight alpine firepit tilt-up, re-anchoring Character A and exact matte rust-terracotta puffer SKU with consistent voiceover timbre and loudness.
 
 * **[2026-11-07T14:36:00Z]** User confirmed results (`looks good`). Marked all Run 2 tasks `[x]` in `PLAN.md` and committed updated workflow logs on `feat/autorater-v2-pipeline`.
+
+
+---
+
+## [2026-11-07T15:06:30Z] Stage 3 (ACT — Run 3): Merge `feat/autorater-v2-pipeline` to `main`, Deploy Cloud Run `vidgen-frontend`, Regenerate All 9 Showcase Videos & Update Bilingual Decks
+
+### Phase 1: Pipeline Hardening, Pre-Merge Tests & Merge to `main` (COMPLETED)
+* **[2026-11-07T14:52:41Z]** Full test suite (`uv run --no-sync pytest tests/unit tests/integration tests/test_pipeline.py -v`): **`70 passed, 0 failed in 122.47s`**.
+* **[2026-11-07T14:55:56Z]** Hardened `get_saved_runs()` in `app/tools/gcs_storage.py` and `src/tools/gcs_storage.py` so GCS `showcase/{run_id}/run_manifest.json` entries with newer `pinned_at` timestamps supersede `/app/output/saved_runs.json` container seeds, and cleaned `output/saved_runs.json` to strictly keep only the 9 canonical retail runs (leaving ad-hoc `retail_uc1_apparel_hybrid_v2_30s` unpinned). Re-ran targeted storage & Auto-Rater v2 unit tests: **`12 passed`**.
+* **[2026-11-07T14:57:06Z]** Committed `c068be0` on `feat/autorater-v2-pipeline` and fast-forward merged `feat/autorater-v2-pipeline` into `main`.
+
+### Phase 2: Deploy `main` (`c068be0`) to Cloud Run `vidgen-frontend` (COMPLETED)
+* **[2026-11-07T14:57:28Z]** Validated syntax via `gcloud help beta run deploy` and executed `--dry-run` against `vidgen-frontend` (`Service [vidgen-frontend] has been validated`).
+* **[2026-11-07T15:04:03Z]** Deployed `main` to Cloud Run `vidgen-frontend` (`project=vital-octagon-19612`, `region=asia-east1`, `--iap`, `2 CPU`, `4Gi`, `--no-cpu-throttling`, `--session-affinity`, `--cpu-boost`, `--timeout=1800`, Cloud Build `4da218e2-27f9-4aa8-970b-433044f859e2`):
+  * **Deployed Revision:** `vidgen-frontend-00011-hlp` (serving `100%` of traffic).
+  * **Live URL:** https://vidgen-frontend-440790012685.asia-east1.run.app
+
+### Phase 3: Regenerated & Pinned All 9 Canonical 30s (`3 × 10s`, 720p) Showcase Runs with Auto-Rater v2 (COMPLETED)
+* **[2026-11-07T15:18:10Z – 15:57:36Z]** Executed `/usr/local/google/home/xcyu/.gemini/jetski/brain/dd460239-badd-49d0-b6be-d6d51eca5766/scratch/regenerate_all_9_showcase_v2.py --concurrency 2` (`task-6854`, exit code `0`) using the deployed `main` (`c068be0`) pipeline (`Auto-Rater v2` + `Best-of-K` retries + parallel Mode A + Post-Stitch `Master Seam Critic`), uploading and pinning all 9 runs to `gs://vital-octagon-19612-vidgen-showcase/showcase/{run_id}/` and `output/saved_runs.json` (with `retail_uc1_apparel_hybrid_v2_30s` kept unpinned):
+
+| Pin # | Run ID | Mode | Duration | OpenCV Continuity Metrics | Shot Scores (`S1 / S2 / S3`) & WER | Master Seam Critic | Direct GCS MP4 |
+| :---: | :--- | :--- | :---: | :--- | :--- | :---: | :--- |
+| **#1** | `retail_uc1_apparel_extend_30s` | `video_extend` | `29.71s` | Seam MAE `5.55 / 8.50` (`0%` white) | `1.00 / 1.00 / 0.97` (`WER=0.0/0.0/0.0`) | **`0.95` (`PASSED`)** | https://storage.cloud.google.com/vital-octagon-19612-vidgen-showcase/showcase/retail_uc1_apparel_extend_30s/output_stitched_30s.mp4 |
+| **#2** | `retail_uc2_footwear_extend_30s` | `video_extend` | `29.71s` | Seam MAE `3.60 / 4.38` (`0%` white) | `0.98 / 0.65 / 0.65` (`WER=0.0/0.14/0.0`) | **`0.975` (`PASSED`)** | https://storage.cloud.google.com/vital-octagon-19612-vidgen-showcase/showcase/retail_uc2_footwear_extend_30s/output_stitched_30s.mp4 |
+| **#3** | `retail_uc3_beauty_extend_30s` | `video_extend` | `30.00s` | Seam MAE `3.26 / 2.29` (`0%` white) | `0.65 / 1.00 / 1.00` (`WER=0.0/0.0/0.0`) | **`0.95` (`PASSED`)** | https://storage.cloud.google.com/vital-octagon-19612-vidgen-showcase/showcase/retail_uc3_beauty_extend_30s/output_stitched_30s.mp4 |
+| **#4** | `retail_uc1_apparel_lookbook_30s` | `i2v_chaining` | `29.83s` | Cut MAE `3.13 / 2.29` (`0%` white S1) | `1.00 / 0.30 / 0.80` (`WER=0.0/0.0/0.0`) | **`0.95` (`PASSED`)** | https://storage.cloud.google.com/vital-octagon-19612-vidgen-showcase/showcase/retail_uc1_apparel_lookbook_30s/output_stitched_30s.mp4 |
+| **#5** | `retail_uc2_footwear_hero_30s` | `i2v_chaining` | `29.83s` | Cut MAE `4.53 / 3.09` (`0%` white S1) | `0.65 / 0.95 / 0.90` (`WER=0.0/0.0/0.0`) | **`0.95` (`PASSED`)** | https://storage.cloud.google.com/vital-octagon-19612-vidgen-showcase/showcase/retail_uc2_footwear_hero_30s/output_stitched_30s.mp4 |
+| **#6** | `retail_uc3_beauty_regional_30s` | `i2v_chaining` | `29.83s` | Cut MAE `2.20 / 1.97` (`0%` white S1) | `1.00 / 1.00 / 0.98` (`WER=0.0/0.0/0.0`) | **`0.94` (`PASSED`)** | https://storage.cloud.google.com/vital-octagon-19612-vidgen-showcase/showcase/retail_uc3_beauty_regional_30s/output_stitched_30s.mp4 |
+| **#7** | `retail_uc1_apparel_r2v_30s` | `reference` | `29.83s` | Anchor MAE `127 / 82 / 146` (`0%` white) | `1.00 / 1.00 / 0.97` (`WER=0.0/0.0/0.0`) | **`0.94` (`PASSED`)** | https://storage.cloud.google.com/vital-octagon-19612-vidgen-showcase/showcase/retail_uc1_apparel_r2v_30s/output_stitched_30s.mp4 |
+| **#8** | `retail_uc2_footwear_r2v_30s` | `reference` | `29.83s` | Anchor MAE `207 / 88 / 164` (`0%` white) | `0.65 / 0.97 / 1.00` (`WER=0.0/0.0/0.0`) | **`0.76` (`SEAM_WARNING`)** | https://storage.cloud.google.com/vital-octagon-19612-vidgen-showcase/showcase/retail_uc2_footwear_r2v_30s/output_stitched_30s.mp4 |
+| **#9** | `retail_uc3_beauty_r2v_30s` | `reference` | `29.83s` | Anchor MAE `74 / 89 / 111` (`0%` white) | `0.98 / 1.00 / 0.95` (`WER=0.0/0.0/0.0`) | **`0.78` (`SEAM_WARNING`)** | https://storage.cloud.google.com/vital-octagon-19612-vidgen-showcase/showcase/retail_uc3_beauty_r2v_30s/output_stitched_30s.mp4 |
+
+* **[2026-11-07T15:58:24Z]** Verified `get_saved_runs()` returns `#1..#9` in exact canonical order from GCS (`pinned_at` `2026-11-07 15:54:54 .. 15:57:17`) so live Cloud Run `vidgen-frontend-00011-hlp` immediately serves the refreshed 9-run showcase, Auto-Rater v2 telemetry, and `master_quality_report` without container rebuild.
+
+### Phase 4: Rebuilt 18 Bilingual Composite Strips, Updated Both 11-Slide GTM Decks (`EN` & `ZH-CN`) & Completed 4-Quadrant Active Vision Audit (COMPLETED)
+* **[2026-11-07T15:59:21Z]** Executed `build_all_composites_v12.py` (`task-6922`, exit code `0`): generated all 18 bilingual `2×2` storyboard strips (`uc{1,2,3}_{r2v_strip,strip,extend_strip}_{en,zh}.png`) from the freshly rendered frames and uploaded them to `gs://vital-octagon-19612-vidgen-showcase/showcase/composites/`.
+* **[2026-11-07T16:05:12Z]** Executed `update_decks_11_slides_v12.py` (`task-6930`, exit code `0`, `v12_` element IDs) across both presentations:
+  * **English (`EN`) Deck:** https://docs.google.com/presentation/d/1b5jlgCWk3Q2LFr5tDYAZZps6Pw_N2_EaIfbAwk9M_3A/edit
+  * **Simplified Chinese (`ZH-CN`) Deck:** https://docs.google.com/presentation/d/12zy4XxPt7sllLsNF3nMIroPRhZSvCGsdEW3UwKnAdj0/edit
+* **[2026-11-07T16:06:51Z]** Exported both decks to PDF (`gdrive readonly export --format pdf`), rasterized all 22 slides (`en_slide-01..11.png` & `zh_slide-01..11.png`) at 150 DPI via `pdftoppm`, and visually audited Slides 1, 3, 4, 5, 6, 7, 8, 9, 10, and 11 in both `EN` and `ZH-CN`: **100% pass** — zero text overflow, zero card collisions, crisp composite visuals, accurate live Auto-Rater v2 / MAE metrics, and clickable links to all 9 GCS MP4s and the Cloud Run Web Studio.
