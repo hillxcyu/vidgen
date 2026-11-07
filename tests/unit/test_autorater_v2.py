@@ -465,3 +465,48 @@ async def test_hybrid_per_shot_mode_override_choreography():
         # Shot 3: re-anchored reference_to_video with #FFFFFF image anchor
         assert calls[2].kwargs["generation_config"] == {"video_config": {"task": "reference_to_video"}}
         assert [p["type"] for p in calls[2].kwargs["input"]] == ["text", "image"]
+
+
+@pytest.mark.asyncio
+async def test_isolated_subagent_fallback_prevents_parent_transfer(monkeypatch):
+    from app.agents.pipeline import create_pipeline_agents, run_adk_agent
+    from app.config import Config
+    from app.fast_api_app import GenerateRequest
+
+    captured_agents = []
+
+    class DummyRunner:
+        def __init__(self, app, session_service):
+            captured_agents.append(app.root_agent)
+
+        async def run_async(self, **kwargs):
+            if False:
+                yield None
+
+    monkeypatch.setattr("app.agents.pipeline.Runner", DummyRunner)
+
+    failing_client = MagicMock()
+    failing_client.models.generate_content.side_effect = [
+        TimeoutError("Initial 60s timeout"),
+        MagicMock(text="Clean isolated fallback prompt"),
+    ]
+
+    agents = create_pipeline_agents(Config())
+    out = await run_adk_agent(agents["prompt_optimizer"], "Optimize shot 1", client=failing_client)
+    assert out == "Clean isolated fallback prompt"
+    assert len(captured_agents) == 1
+    isolated = captured_agents[0]
+    assert isolated.disallow_transfer_to_parent is True
+    assert isolated.disallow_transfer_to_peers is True
+    assert list(isolated.tools or []) == []
+    assert "transfer_to_agent" not in (isolated.instruction or "")
+
+    req = GenerateRequest(
+        prompt="30s showcase test",
+        mode="reference",
+        run_id="retail_uc1_apparel_r2v_30s",
+        storyboard=[{"scene_number": 1, "description": "Scene 1", "camera_angle": "wide"}],
+    )
+    assert req.run_id == "retail_uc1_apparel_r2v_30s"
+    assert len(req.storyboard) == 1
+

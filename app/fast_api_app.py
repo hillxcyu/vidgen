@@ -38,11 +38,13 @@ from app.app_utils.reasoning_engine_adapter import attach_reasoning_engine_route
 from app.config import Config, get_genai_client
 from app.state import PipelineState, VideoShot, StoryboardEntry
 from app.tools.video_parser import (
+    extract_first_frame,
     extract_last_frame,
     extract_video_tail,
     trim_video_prefix,
     detect_seam_jump_cut,
     detect_r2v_first_frame_lock,
+    decode_valid_image_b64,
 )
 from app.tools.omni_client import generate_omni_clip, build_omni_control_string
 from app.tools.stitcher import stitch_videos
@@ -144,6 +146,8 @@ class GenerateRequest(BaseModel):
     voice_transcript: Optional[str] = None
     reference_assets_b64: Optional[List[str]] = None
     reference_audio_b64: Optional[List[str]] = None
+    storyboard: Optional[List[Dict[str, Any]]] = None
+    run_id: Optional[str] = None
     session_id: Optional[str] = None
 
 
@@ -363,6 +367,8 @@ async def start_pipeline_endpoint(req: GenerateRequest):
             "voice_transcript": req.voice_transcript,
             "reference_assets_b64": req.reference_assets_b64 or [],
             "reference_audio_b64": req.reference_audio_b64 or [],
+            "storyboard": req.storyboard or [],
+            "target_run_id": req.run_id,
             "status": "running",
             "step": 0,
             "trajectory_logs": [],
@@ -484,6 +490,8 @@ async def run_adk_pipeline_background(adk_session: Session):
     voice_transcript = state_dict.get("voice_transcript")
     reference_assets_b64 = state_dict.get("reference_assets_b64", [])
     reference_audio_b64 = state_dict.get("reference_audio_b64", [])
+    raw_storyboard = state_dict.get("storyboard", [])
+    target_run_id = state_dict.get("target_run_id") or session_id
 
     action_step_map: Dict[str, int] = {
         "INITIATE_PIPELINE": 1,
@@ -509,7 +517,26 @@ async def run_adk_pipeline_background(adk_session: Session):
             if mode in ["reference", "i2v_chaining", "video_extend", "hybrid"]
             else "i2v_chaining"
         )
+        parsed_sb: List[StoryboardEntry] = []
+        if isinstance(raw_storyboard, list) and raw_storyboard:
+            for idx, sb_item in enumerate(raw_storyboard[:num_shots]):
+                if isinstance(sb_item, dict):
+                    parsed_sb.append(
+                        StoryboardEntry(
+                            scene_number=sb_item.get("scene_number", idx + 1),
+                            description=sb_item.get("description", f"Scene {idx + 1}"),
+                            camera_angle=sb_item.get("camera_angle", "medium"),
+                            spoken_dialogue=sb_item.get("spoken_dialogue"),
+                            evaluation_criteria=sb_item.get(
+                                "evaluation_criteria",
+                                "Check character identity lock, smooth motion, and object persistence.",
+                            ),
+                            mode_override=sb_item.get("mode_override"),
+                        )
+                    )
+
         pipeline_state = PipelineState(
+            run_id=target_run_id,
             original_intent=prompt,
             num_shots=num_shots,
             mode=valid_mode,
@@ -520,6 +547,7 @@ async def run_adk_pipeline_background(adk_session: Session):
             voice_transcript=voice_transcript,
             reference_assets_b64=reference_assets_b64,
             reference_audio_b64=reference_audio_b64,
+            storyboard=parsed_sb,
         )
 
         def _on_pipeline_event(ev: Dict[str, Any]) -> None:
@@ -552,11 +580,31 @@ async def run_adk_pipeline_background(adk_session: Session):
 
         completed_shots = [s for s in pipeline_state.shots if s.status == "completed" and s.video_path]
         if state_dict.get("status") != "stopped" and pipeline_state.stitched_video_path and completed_shots:
+            if reference_assets_b64:
+                decoded_ref = decode_valid_image_b64(reference_assets_b64[0])
+                if decoded_ref:
+                    try:
+                        with open(os.path.join(OUTPUT_DIR, "reference_anchor.png"), "wb") as rf:
+                            rf.write(decoded_ref[0])
+                    except Exception:
+                        pass
+            for s in pipeline_state.shots:
+                if s.video_path and os.path.exists(s.video_path):
+                    try:
+                        await asyncio.to_thread(
+                            extract_first_frame,
+                            s.video_path,
+                            os.path.join(OUTPUT_DIR, f"shot_{s.shot_index}_first_frame.png"),
+                        )
+                    except Exception:
+                        pass
+
             stitched_filename = os.path.basename(pipeline_state.stitched_video_path)
             shots_data = [
                 {
                     "shot_index": s.shot_index,
                     "prompt": s.prompt,
+                    "spoken_dialogue": s.spoken_dialogue,
                     "evaluation_criteria": s.evaluation_criteria,
                     "mode_override": s.mode_override,
                     "quality_score": s.quality_score,
@@ -571,6 +619,7 @@ async def run_adk_pipeline_background(adk_session: Session):
 
             result_summary = {
                 "status": "completed",
+                "run_id": target_run_id,
                 "stitched_video": f"/output/{stitched_filename}",
                 "stitched_video_url": f"/output/{stitched_filename}",
                 "stitched_video_path": f"/output/{stitched_filename}",
@@ -594,7 +643,7 @@ async def run_adk_pipeline_background(adk_session: Session):
 
             await asyncio.to_thread(
                 save_run,
-                run_id=session_id,
+                run_id=target_run_id,
                 original_intent=prompt,
                 num_shots=num_shots,
                 mode=valid_mode,
@@ -606,6 +655,7 @@ async def run_adk_pipeline_background(adk_session: Session):
                 resolution=resolution,
                 duration=duration,
                 output_dir=OUTPUT_DIR,
+                master_quality_report=pipeline_state.master_quality_report,
             )
 
     except Exception as e:

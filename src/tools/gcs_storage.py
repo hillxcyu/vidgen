@@ -101,7 +101,8 @@ def save_run(
     aspect_ratio: str = "16:9",
     resolution: str = "720p",
     duration: int = 10,
-    output_dir: str = "output"
+    output_dir: str = "output",
+    master_quality_report: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Saves a run to showcase, uploading media files to GCS and updating manifest index."""
     timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
@@ -120,13 +121,20 @@ def save_run(
         if url:
             gcs_urls["stitched_video_url"] = url
 
-    # 2. Upload shot MP4 clips and last frames
+    local_anchor = os.path.join(output_dir, "reference_anchor.png")
+    if os.path.exists(local_anchor):
+        anchor_url = upload_file_to_gcs(bucket, local_anchor, f"showcase/{run_id}/reference_anchor.png")
+        if anchor_url:
+            gcs_urls["reference_anchor_url"] = anchor_url
+
+    # 2. Upload shot MP4 clips and first/last frames
     processed_shots = []
     if shots:
         for shot in shots:
             shot_copy = dict(shot)
             s_idx = shot.get("shot_index", 1)
             local_clip = os.path.join(output_dir, f"shot_{s_idx}.mp4")
+            local_first_frame = os.path.join(output_dir, f"shot_{s_idx}_first_frame.png")
             local_frame = os.path.join(output_dir, f"shot_{s_idx}_last_frame.png")
 
             # Guarantee valid local fallback paths for static web serving
@@ -139,6 +147,11 @@ def save_run(
                 url = upload_file_to_gcs(bucket, local_clip, f"showcase/{run_id}/shot_{s_idx}.mp4")
                 if url:
                     shot_copy["gcs_video_url"] = url
+
+            if os.path.exists(local_first_frame):
+                f0_url = upload_file_to_gcs(bucket, local_first_frame, f"showcase/{run_id}/shot_{s_idx}_first_frame.png")
+                if f0_url:
+                    shot_copy["gcs_first_frame_url"] = f0_url
 
             if os.path.exists(local_frame):
                 url = upload_file_to_gcs(bucket, local_frame, f"showcase/{run_id}/shot_{s_idx}_last_frame.png")
@@ -159,9 +172,11 @@ def save_run(
         "voice_transcript": voice_transcript,
         "stitched_video_path": stitched_video_path,
         "stitched_video_url": gcs_urls.get("stitched_video_url", f"/output/{os.path.basename(stitched_video_path)}" if stitched_video_path else None),
+        "reference_anchor_url": gcs_urls.get("reference_anchor_url"),
         "gcs_bucket": bucket.name if bucket else None,
         "gcs_synced": bool(gcs_urls.get("stitched_video_url")),
         "shots": processed_shots,
+        "master_quality_report": master_quality_report,
         "trajectory_logs": trajectory_logs or []
     }
 
@@ -238,8 +253,10 @@ def get_saved_runs(output_dir: str = "output") -> List[Dict[str, Any]]:
                                 content = blob.download_as_text()
                                 entry = json.loads(content)
                                 run_id = entry.get("run_id")
-                                if run_id and run_id not in runs_by_id:
-                                    runs_by_id[run_id] = entry
+                                if run_id:
+                                    existing = runs_by_id.get(run_id)
+                                    if not existing or entry.get("pinned_at", "") >= existing.get("pinned_at", ""):
+                                        runs_by_id[run_id] = entry
                             except Exception as manifest_err:
                                 print(f"[NOTICE] Error reading GCS manifest {blob.name}: {manifest_err}")
                 except Exception as bucket_err:

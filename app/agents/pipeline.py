@@ -325,7 +325,25 @@ async def run_adk_agent(
         )
         session_id = session.id
 
-    target_agent = root_agent or agent
+    if root_agent is not None:
+        target_agent = root_agent
+    else:
+        raw_inst = agent.instruction if isinstance(agent.instruction, str) else ""
+        clean_inst = re.sub(
+            r"After [^\n]*transfer_to_agent\([^\n]*\)\.?",
+            "",
+            raw_inst,
+            flags=re.IGNORECASE,
+        ).strip()
+        target_agent = Agent(
+            name=agent.name,
+            model=agent.model,
+            instruction=clean_inst or raw_inst,
+            description=getattr(agent, "description", ""),
+            tools=[],
+            disallow_transfer_to_peers=True,
+            disallow_transfer_to_parent=True,
+        )
     from google.adk.apps import App
     adk_app = App(name="vidgen-omni", root_agent=target_agent)
     runner = Runner(app=adk_app, session_service=session_service)
