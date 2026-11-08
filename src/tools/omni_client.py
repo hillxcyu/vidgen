@@ -77,9 +77,21 @@ def build_omni_control_string(
     prompt_content = prompt
     if ref_imgs and len(ref_imgs) > 0 and "Character A" not in prompt_content:
         prompt_content = f"Character A, {prompt_content[0].lower() + prompt_content[1:] if len(prompt_content) > 1 else prompt_content}"
-    elif (input_image_b64 or input_video_b64) and "Character A" in prompt_content:
+    elif (input_image_b64 or input_video_b64):
         import re
-        prompt_content = re.sub(r"\bCharacter A\b,?\s*", "The subject ", prompt_content).strip()
+        if "Character A" in prompt_content:
+            prompt_content = re.sub(r"\bCharacter A\b,?\s*", "The subject ", prompt_content).strip()
+        prompt_content = re.sub(
+            r"\b(?:from|in)\s+the\s+reference\s+image\b",
+            "from the starting frame",
+            prompt_content,
+            flags=re.IGNORECASE,
+        )
+
+    if input_image_b64 and not input_video_b64:
+        low_p = prompt_content.lower()
+        if "use this image as the starting frame" not in low_p:
+            prompt_content = f"Use this image as the starting frame. {prompt_content}"
 
     if task == "extend" and input_video_b64 and not prompt_content.lower().startswith("extend this video"):
         prompt_content = (
@@ -160,7 +172,14 @@ def generate_omni_clip(
 
     raw_refs = reference_images_b64 if reference_images_b64 is not None else reference_assets_b64
     ref_imgs = None if (input_image_b64 or input_video_b64) else raw_refs
-    effective_task = task or ("reference_to_video" if (ref_imgs and len(ref_imgs) > 0) else None)
+    if task:
+        effective_task = task
+    elif input_image_b64 and not input_video_b64:
+        effective_task = "image_to_video"
+    elif ref_imgs and len(ref_imgs) > 0:
+        effective_task = "reference_to_video"
+    else:
+        effective_task = None
     ref_auds = reference_audio_b64 or []
 
     # Format full control string according to Google Omni / Video Station specification
@@ -215,8 +234,8 @@ def generate_omni_clip(
         "input": payload,
         "timeout": 600.0,
     }
-    if effective_task == "reference_to_video":
-        create_kwargs["generation_config"] = {"video_config": {"task": "reference_to_video"}}
+    if effective_task in ("reference_to_video", "image_to_video"):
+        create_kwargs["generation_config"] = {"video_config": {"task": effective_task}}
         create_kwargs["response_format"] = {
             "type": "video",
             "aspect_ratio": aspect_ratio,

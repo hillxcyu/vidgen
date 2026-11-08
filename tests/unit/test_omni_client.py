@@ -219,9 +219,16 @@ def test_generate_omni_clip_i2v_shot2_omits_r2v_task_and_refs():
     )
     assert clip_bytes == b"i2v_shot2_mp4_bytes"
     call_kwargs = mock_client.interactions.create.call_args.kwargs
-    assert "generation_config" not in call_kwargs
+    assert call_kwargs["generation_config"] == {"video_config": {"task": "image_to_video"}}
+    assert call_kwargs["response_format"] == {
+        "type": "video",
+        "aspect_ratio": "16:9",
+        "duration": "10s",
+        "resolution": "720p",
+    }
     sent_text = call_kwargs["input"][0]["text"]
     assert "# Sources <FIRST_FRAME>image_0.png" in sent_text
+    assert "Use this image as the starting frame." in sent_text
     assert "# References" not in sent_text
 
 

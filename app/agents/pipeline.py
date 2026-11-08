@@ -447,6 +447,7 @@ async def optimize_prompt(
     feedback: Optional[str] = None,
     is_extend_shot: bool = False,
     is_r2v_shot: bool = False,
+    is_i2v_shot: bool = False,
     session_service: Optional[InMemorySessionService] = None,
     session_id: Optional[str] = None,
     client: Optional[genai.Client] = None
@@ -467,6 +468,11 @@ async def optimize_prompt(
         "Maintain the exact starting environment, lighting, and subject pose from the previous shot and progress via one unbroken single-take camera movement (smooth dolly, tracking, pan, or push-in) with ZERO scene cuts or location teleports."
         if is_extend_shot else ""
     )
+    i2v_context = (
+        "\nCRITICAL FIRST-FRAME I2V RULE: This shot uses Image-to-Video (task='image_to_video') chained directly from the attached starting frame. "
+        "Begin with 'Use this image as the starting frame.' and evolve camera and subject motion smoothly from that exact frame—NEVER refer to a 'reference image' or 'Character A'."
+        if is_i2v_shot else ""
+    )
     r2v_context = (
         "\nCRITICAL R2V SCENE-OPENING RULE: This shot uses Reference-to-Video (task='reference_to_video') with a studio-white subject/product reference image. "
         "Open immediately on Frame 0 inside the rich target environment described in the shot—NEVER depict, mention, or transition/dissolve out of a white studio backdrop."
@@ -474,9 +480,10 @@ async def optimize_prompt(
     )
 
     full_prompt = (
-        f"Raw Shot Description: '{raw_prompt}'.{feedback_context}{transcript_context}{extend_context}{r2v_context}\n"
+        f"Raw Shot Description: '{raw_prompt}'.{feedback_context}{transcript_context}{extend_context}{i2v_context}{r2v_context}\n"
         "Generate an enhanced, highly-detailed cinematic prompt optimized for Gemini Omni Flash video generation. "
         "Keep it concise, under 60 words, focusing on lighting, continuous camera motion, visual clarity, and object persistence. "
+        "STRICT BRAND & META RULE: NEVER invent third-party brand names (such as Nike, Adidas, ASICS, Apple, etc.) unless explicitly present in the Raw Shot Description, and NEVER output word-count annotations like '(49 words)'. "
         "STRICT SINGLE-SHOT RULE: The clip MUST be a single, continuous, uninterrupted camera take. Explicitly specify a single continuous camera motion (e.g. 'continuous single take', 'smooth tracking shot') and strictly forbid internal cuts, scene switches, jump cuts, or multi-angle edits."
     )
 
@@ -487,6 +494,8 @@ async def optimize_prompt(
                 re.search(r'>\s*\*?"([^"]+)"\*?', optimized)
                 or re.search(r'>\s*\*([^*]+)\*', optimized)
                 or re.search(r'Optimized Visual Prompt\*\*:\s*`([^`]+)`', optimized)
+                or re.search(r'Optimized Visual Prompt\*\*:\s*\n+\s*([^\n*-][^\n]+)', optimized)
+                or re.search(r'Optimized Visual Prompt\*\*:\s*([^\n`]+)', optimized)
                 or re.search(r'^\s*>\s*(.+)$', optimized, re.MULTILINE)
             )
             if quote_match:
@@ -494,6 +503,7 @@ async def optimize_prompt(
             else:
                 optimized = re.sub(r"\*?\*?Transferring control back to[^\n]*", "", optimized).strip()
                 optimized = re.sub(r"Transferred control back to[^\n]*", "", optimized).strip()
+            optimized = re.sub(r"\s*\*?\(\d+\s*words?\)\*?", "", optimized, flags=re.IGNORECASE).strip()
         return optimized if optimized else raw_prompt
     except Exception:
         return raw_prompt
@@ -786,22 +796,29 @@ async def evaluate_clip_quality(
     eval_res: Optional[QualityEvaluationResult] = None
     rater_client = client if client is not None else get_genai_client(timeout_ms=config.RATER_TIMEOUT_MS)
 
-    try:
-        resp = await asyncio.to_thread(
-            rater_client.models.generate_content,
-            model=config.ORCHESTRATOR_MODEL,
-            contents=multimodal_contents,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_schema=build_quality_evaluation_schema(),
-                temperature=0.2,
-            ),
-        )
-        merged_telemetry.update(extract_avu_usage_telemetry(resp))
-        if resp and resp.text:
-            eval_res = QualityEvaluationResult.model_validate_json(resp.text)
-    except Exception as sdk_err:
-        print(f"[QualityRater SDK Notice on shot #{shot_index}]: {sdk_err}")
+    for rater_try in range(2):
+        try:
+            resp = await asyncio.to_thread(
+                rater_client.models.generate_content,
+                model=config.ORCHESTRATOR_MODEL,
+                contents=multimodal_contents,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_schema=build_quality_evaluation_schema(),
+                    temperature=0.2,
+                ),
+            )
+            merged_telemetry.update(extract_avu_usage_telemetry(resp))
+            if resp and resp.text:
+                eval_res = QualityEvaluationResult.model_validate_json(resp.text)
+                break
+        except Exception as sdk_err:
+            err_s = str(sdk_err)
+            print(f"[QualityRater SDK Notice on shot #{shot_index} (try {rater_try + 1}/2)]: {err_s}")
+            if rater_try == 0 and any(k in err_s for k in ("429", "503", "504", "RESOURCE_EXHAUSTED", "DEADLINE_EXCEEDED", "timed out")):
+                await asyncio.sleep(8.0)
+            else:
+                break
 
     if not eval_res:
         try:
@@ -967,25 +984,31 @@ async def evaluate_stitched_master(
     )
 
     rater_client = client if client is not None else get_genai_client(timeout_ms=config.RATER_TIMEOUT_MS)
-    try:
-        resp = await asyncio.to_thread(
-            rater_client.models.generate_content,
-            model=config.ORCHESTRATOR_MODEL,
-            contents=contents,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_schema=build_master_seam_evaluation_schema(),
-                temperature=0.2,
-            ),
-        )
-        if resp and resp.text:
-            parsed = MasterSeamEvaluationResult.model_validate_json(resp.text)
-            parsed.audit_status = "OK"
-            parsed.verdict = "PASSED" if parsed.score >= 0.8 else "SEAM_WARNING"
-            parsed.deterministic_telemetry = extract_avu_usage_telemetry(resp)
-            return parsed.model_dump()
-    except Exception as err:
-        print(f"[MasterSeamRater Notice]: {err}")
+    for seam_try in range(2):
+        try:
+            resp = await asyncio.to_thread(
+                rater_client.models.generate_content,
+                model=config.ORCHESTRATOR_MODEL,
+                contents=contents,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_schema=build_master_seam_evaluation_schema(),
+                    temperature=0.2,
+                ),
+            )
+            if resp and resp.text:
+                parsed = MasterSeamEvaluationResult.model_validate_json(resp.text)
+                parsed.audit_status = "OK"
+                parsed.verdict = "PASSED" if parsed.score >= 0.8 else "SEAM_WARNING"
+                parsed.deterministic_telemetry = extract_avu_usage_telemetry(resp)
+                return parsed.model_dump()
+        except Exception as err:
+            err_s = str(err)
+            print(f"[MasterSeamRater Notice (try {seam_try + 1}/2)]: {err_s}")
+            if seam_try == 0 and any(k in err_s for k in ("429", "503", "504", "RESOURCE_EXHAUSTED", "DEADLINE_EXCEEDED", "timed out")):
+                await asyncio.sleep(8.0)
+            else:
+                break
 
     return MasterSeamEvaluationResult(
         score=0.85,
@@ -1240,6 +1263,7 @@ async def _execute_single_shot(
             feedback=feedback,
             is_extend_shot=is_extend_shot,
             is_r2v_shot=is_r2v_shot,
+            is_i2v_shot=is_i2v_shot,
             client=client,
         )
         state.log_event(

@@ -10,7 +10,10 @@ def test_build_omni_control_string_i2v():
         resolution="720p",
         duration=10
     )
-    assert ctrl_str == "[# Sources <FIRST_FRAME>image_0.png] [aspect_ratio=16:9] [resolution=720p] [duration=10s] A panda skiing down a hill"
+    assert ctrl_str == (
+        "[# Sources <FIRST_FRAME>image_0.png] [aspect_ratio=16:9] [resolution=720p] [duration=10s] "
+        "Use this image as the starting frame. A panda skiing down a hill"
+    )
 
 def test_build_omni_control_string_reference_mode():
     ctrl_str = build_omni_control_string(
@@ -31,7 +34,10 @@ def test_build_omni_control_string_hybrid_mode():
         resolution="720p",
         duration=10
     )
-    assert ctrl_str == "[# Sources <FIRST_FRAME>image_0.png] [aspect_ratio=16:9] [resolution=720p] [duration=10s] A panda skiing past a branded snow sign"
+    assert ctrl_str == (
+        "[# Sources <FIRST_FRAME>image_0.png] [aspect_ratio=16:9] [resolution=720p] [duration=10s] "
+        "Use this image as the starting frame. A panda skiing past a branded snow sign"
+    )
 
 def test_build_omni_control_string_voice_transcript():
     ctrl_str = build_omni_control_string(
@@ -68,10 +74,14 @@ def test_generate_omni_clip_i2v_mode():
     mock_client.interactions.create.assert_called_once()
     call_args = mock_client.interactions.create.call_args[1]
     assert call_args["model"] == "gemini-omni-1.2-flash"
+    assert call_args["generation_config"] == {"video_config": {"task": "image_to_video"}}
     assert len(call_args["input"]) == 2
     assert call_args["input"][0]["type"] == "text"
     assert call_args["input"][1]["type"] == "image"
-    assert call_args["input"][0]["text"] == "[# Sources <FIRST_FRAME>image_0.png] [aspect_ratio=16:9] [resolution=720p] [duration=10s] A panda skiing down a hill"
+    assert call_args["input"][0]["text"] == (
+        "[# Sources <FIRST_FRAME>image_0.png] [aspect_ratio=16:9] [resolution=720p] [duration=10s] "
+        "Use this image as the starting frame. A panda skiing down a hill"
+    )
 
 def test_generate_omni_clip_reference_mode():
     mock_client = MagicMock()
