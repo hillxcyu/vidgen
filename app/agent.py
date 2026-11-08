@@ -31,6 +31,7 @@ from app.tools.video_parser import (
     extract_last_frame,
     extract_keyframes,
     create_agentic_video_part,
+    extract_avu_usage_telemetry,
     extract_labeled_audit_keyframes,
     analyze_clip_audio_tail,
     compute_transcript_metrics,
@@ -40,7 +41,7 @@ from app.tools.stitcher import stitch_videos
 from app.state import PipelineState, VideoShot, StoryboardEntry
 
 
-MODEL = os.getenv("ORCHESTRATOR_MODEL", "gemini-3.7-flash")
+MODEL = os.getenv("ORCHESTRATOR_MODEL", "gemini-3.8-flash")
 OUTPUT_DIR = os.getenv("VIDGEN_OUTPUT_DIR", "/tmp/vidgen_output")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
@@ -500,7 +501,7 @@ UNIFIED_BASE_SYSTEM_INSTRUCTION = (
     "System Architecture & Pipeline Roles:\n"
     "- ScreenwriterAgent: Expands narrative ideas into structured multi-scene screenplays with clear scene headings, maintaining visual continuity with recurrent universe lore from user:character_bible and user:cinematic_style.\n"
     "- StoryboarderAgent: Converts screenplays into shot breakdown tables with camera angles, visual descriptions, character actions, and rubrics.\n"
-    "- PromptOptimizerAgent: Enhances visual prompts for Gemini Omni Flash (`gemini-omni-1.1-flash-preview`), enforcing single-shot continuous motion without cuts, incorporating previous QualityRater feedback on retries/modifications, and preserving dialogue.\n"
+    "- PromptOptimizerAgent: Enhances visual prompts for Gemini Omni Flash (`gemini-omni-1.2-flash`), enforcing single-shot continuous motion without cuts, incorporating previous QualityRater feedback on retries/modifications, and preserving dialogue.\n"
     "- HealthCheckerAgent: Audits candidate prompts for content safety, policy compliance, and visual feasibility.\n"
     "- generate_video_shot_clip (Tool): Renders a video clip from prompt with optional start and end frame anchors (`input_image_path`, `end_image_path`).\n"
     "- parse_initial_frame (Tool): Extracts the initial (first) frame of a video clip for dual-anchor visual continuity.\n"
@@ -865,7 +866,7 @@ async def evaluate_video_clip_quality(
     try:
         resp = await asyncio.to_thread(
             client.models.generate_content,
-            model="gemini-3.7-flash",
+            model=MODEL,
             contents=contents,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
@@ -873,6 +874,7 @@ async def evaluate_video_clip_quality(
                 temperature=0.1,
             )
         )
+        audio_telemetry.update(extract_avu_usage_telemetry(resp))
         if resp and resp.text:
             text = resp.text
             json_match = re.search(r"\{.*\}", text, re.DOTALL)

@@ -107,7 +107,7 @@ def test_generate_omni_clip_video_extend_fallback():
         "data": _b64.b64encode(b"extended_mp4_bytes").decode("utf-8"),
     }
     mock_client.interactions.create.side_effect = [
-        RuntimeError("404 Publisher model macaron-cookie not_found"),
+        RuntimeError("404 Publisher model gemini-omni-1.2-flash not_found"),
         mock_interaction,
     ]
 

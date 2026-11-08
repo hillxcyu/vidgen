@@ -19,6 +19,7 @@ from app.tools.video_parser import (
     extract_last_frame,
     extract_keyframes,
     create_agentic_video_part,
+    extract_avu_usage_telemetry,
     extract_video_tail,
     trim_video_prefix,
     detect_seam_jump_cut,
@@ -80,7 +81,7 @@ class QualityEvaluationResult(BaseModel):
     )
     detected_internal_cuts: int = Field(
         default=0,
-        description="Count of abrupt internal camera jump-cuts or scene teleports inside this single clip (0 if continuous single take).",
+        description="Count of internal camera jump-cuts, soft cross-dissolves, or multi-shot edits inside this single clip (0 if unbroken continuous single take).",
     )
     reason: List[CriterionEvaluation] = Field(
         default_factory=list,
@@ -126,7 +127,7 @@ def build_quality_evaluation_schema() -> types.Schema:
             ),
             "detected_internal_cuts": types.Schema(
                 type=types.Type.INTEGER,
-                description="Count of abrupt internal camera jump-cuts inside this clip (0 if unbroken single take).",
+                description="Count of internal camera jump-cuts, soft cross-dissolves, or multi-angle transitions inside this clip (0 if unbroken single take).",
             ),
             "reason": types.Schema(
                 type=types.Type.ARRAY,
@@ -182,6 +183,7 @@ class MasterSeamEvaluationResult(BaseModel):
     verdict: str = Field(default="PASSED")
     feedback: str = Field(default="")
     audit_status: str = Field(default="OK")
+    deterministic_telemetry: Dict[str, Any] = Field(default_factory=dict)
 
 
 def build_master_seam_evaluation_schema() -> types.Schema:
@@ -746,7 +748,7 @@ async def evaluate_clip_quality(
         f"{telemetry_block}\n\n"
         f"CONSOLIDATED EVALUATION RUBRIC:\n{rubric_str}\n\n"
         "OBSERVATION-FIRST AUDIT PROTOCOL (MANDATORY):\n"
-        "1. First record 'opening_environment_observed' from KEY FRAME A (t=0.00s), 'heard_transcript' (exact spoken words heard in the audio stream), 'speech_end_sec', and 'detected_internal_cuts' (0 if unbroken single camera take, >=1 if internal jump-cuts occur).\n"
+        "1. Use agentic video & audio inspection across the FULL 0.0s-to-end timeline to record 'opening_environment_observed' from KEY FRAME A (t=0.00s), 'heard_transcript' (exact spoken words heard in the audio stream), 'speech_end_sec', and 'detected_internal_cuts' (0 ONLY if one unbroken single camera take from 0.0s to clip end; >=1 if ANY internal hard jump-cut OR soft cross-dissolve/fade between different camera framings occurs inside the clip).\n"
         "2. Compare subject identity, wardrobe colors, and SKU geometry in KEY FRAME A/M/B and the MP4 video directly against CANONICAL REFERENCE ANCHOR (if attached) and boundary alignment against PRIOR SHOT TERMINAL FRAME (if attached).\n"
         "3. Score each rubric criterion (0.0 to 1.0) and compute overall 'score'. If identity/SKU drifts, Frame 0 opens on a white studio backdrop, internal jump-cuts occur, or dialogue cuts off at clip end, set score < 0.8 and verdict='REATTEMPT_REQUIRED' with concrete prompt fix instructions in 'feedback'."
     )
@@ -795,6 +797,7 @@ async def evaluate_clip_quality(
                 temperature=0.2,
             ),
         )
+        merged_telemetry.update(extract_avu_usage_telemetry(resp))
         if resp and resp.text:
             eval_res = QualityEvaluationResult.model_validate_json(resp.text)
     except Exception as sdk_err:
@@ -979,6 +982,7 @@ async def evaluate_stitched_master(
             parsed = MasterSeamEvaluationResult.model_validate_json(resp.text)
             parsed.audit_status = "OK"
             parsed.verdict = "PASSED" if parsed.score >= 0.8 else "SEAM_WARNING"
+            parsed.deterministic_telemetry = extract_avu_usage_telemetry(resp)
             return parsed.model_dump()
     except Exception as err:
         print(f"[MasterSeamRater Notice]: {err}")
@@ -1503,6 +1507,7 @@ async def _execute_single_shot(
             "audit_status": eval_result.get("audit_status", "OK"),
             "feedback": eval_result.get("feedback", "Good visual quality"),
             "verdict": eval_result.get("verdict", "PASSED"),
+            "deterministic_telemetry": eval_result.get("deterministic_telemetry", {}),
         }
         state.log_event(
             agent="QualityRaterAgent",

@@ -2,7 +2,7 @@ import base64
 import os
 import subprocess
 import tempfile
-from typing import Optional, List
+from typing import Optional, List, Any, Dict
 import cv2
 
 def extract_last_frame(video_path: str, output_image_path: Optional[str] = None) -> str:
@@ -109,33 +109,72 @@ def extract_audio_reference(video_path: str, output_wav_path: Optional[str] = No
     return None
 
 
+def _resolve_media_processing_enum(media_processing: Any):
+    """Normalizes string or enum media_processing values to Google GenAI MediaProcessing enum."""
+    from google.genai import types
+
+    if isinstance(media_processing, types.MediaProcessing):
+        return media_processing
+    norm = str(media_processing or "agentic").strip().upper()
+    if norm in ("AGENTIC", "MEDIAPROCESSING.AGENTIC"):
+        return types.MediaProcessing.AGENTIC
+    if norm in ("STATIC", "MEDIAPROCESSING.STATIC"):
+        return types.MediaProcessing.STATIC
+    return media_processing
+
+
+def extract_avu_usage_telemetry(resp: Any) -> Dict[str, Any]:
+    """Extracts Agentic Video Understanding (google:load_video) token telemetry from GenerateContentResponse."""
+    um = getattr(resp, "usage_metadata", None) if resp is not None else None
+    if um is None:
+        return {}
+    raw_tool = getattr(um, "tool_use_prompt_token_count", None)
+    raw_prompt = getattr(um, "prompt_token_count", None)
+    raw_total = getattr(um, "total_token_count", None)
+    tool_tokens = int(raw_tool) if isinstance(raw_tool, (int, float)) else 0
+    prompt_tokens = int(raw_prompt) if isinstance(raw_prompt, (int, float)) else 0
+    total_tokens = int(raw_total) if isinstance(raw_total, (int, float)) else 0
+    if tool_tokens == 0 and prompt_tokens == 0 and total_tokens == 0:
+        return {}
+    return {
+        "avu_active": tool_tokens > 0,
+        "avu_tool_use_tokens": tool_tokens,
+        "avu_prompt_tokens": prompt_tokens,
+        "avu_total_tokens": total_tokens,
+    }
+
+
 def create_agentic_video_part(
     video_path_or_uri: str,
     video_bytes: Optional[bytes] = None,
-    media_processing: str = "agentic"
+    media_processing: Any = "agentic"
 ):
-    """Builds a Google GenAI Part with explicit media_processing ('agentic' or 'static')
-    for advanced multimodal video understanding.
+    """Builds a Google GenAI Part with explicit media_processing (types.MediaProcessing.AGENTIC or STATIC)
+    for advanced multimodal video understanding (invoking server-side google:load_video on Gemini 3.8 Flash).
 
     Supports:
     - GCS file URIs: gs://bucket/path/to/clip.mp4
-    - GCS HTTPS showcase URLs: https://storage.googleapis.com/bucket/path/to/clip.mp4 (converted to gs://)
+    - GCS HTTPS showcase URLs: https://storage.googleapis.com/... or https://storage.cloud.google.com/... (converted to gs://)
     - Raw byte buffers (inline_data Blob with media_processing)
     - Local file paths (reads bytes into inline_data Blob with media_processing)
     """
     from google.genai import types
+
+    resolved_mp = _resolve_media_processing_enum(media_processing)
 
     # 1. Normalize GCS HTTPS showcase URLs to native gs:// URI
     file_uri = None
     if video_path_or_uri.startswith("gs://"):
         file_uri = video_path_or_uri
     elif video_path_or_uri.startswith("https://storage.googleapis.com/"):
-        file_uri = "gs://" + video_path_or_uri.removeprefix("https://storage.googleapis.com/")
+        file_uri = "gs://" + video_path_or_uri.removeprefix("https://storage.googleapis.com/").split("?", 1)[0]
+    elif video_path_or_uri.startswith("https://storage.cloud.google.com/"):
+        file_uri = "gs://" + video_path_or_uri.removeprefix("https://storage.cloud.google.com/").split("?", 1)[0]
 
     if file_uri:
         return types.Part(
             file_data=types.FileData(file_uri=file_uri, mime_type="video/mp4"),
-            media_processing=media_processing
+            media_processing=resolved_mp
         )
 
     # 2. Local bytes or file
@@ -150,13 +189,13 @@ def create_agentic_video_part(
     if data:
         return types.Part(
             inline_data=types.Blob(data=data, mime_type="video/mp4"),
-            media_processing=media_processing
+            media_processing=resolved_mp
         )
 
     # 3. Fallback to file_data with original URI
     return types.Part(
         file_data=types.FileData(file_uri=video_path_or_uri, mime_type="video/mp4"),
-        media_processing=media_processing
+        media_processing=resolved_mp
     )
 
 

@@ -157,7 +157,7 @@ def generate_omni_clip(
     - MMC Control Strings formatting (MMC mode tags, audio reference tags & FC argument tokens)
     - Mode A (Reference Mode): Image references + voice audio references + text prompt.
     - Mode B (Sequential I2V Mode): Terminal frame base64 input + optional end frame base64 + text motion prompt.
-    - Mode C (Video Extend Mode): Trailing video clip base64 input + task='extend' (Omni 1.5 macaron-cookie with automatic fallback).
+    - Mode C (Video Extend Mode): Trailing video clip base64 input + task='extend' (gemini-omni-1.2-flash GA with automatic fallback).
     """
     config = Config()
     if client is None or type(client) is genai.Client:

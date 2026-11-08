@@ -31,7 +31,7 @@ def test_build_omni_control_string_hybrid_mode():
         resolution="720p",
         duration=10
     )
-    assert ctrl_str == "[# Sources <FIRST_FRAME>image_0.png # References <IMAGE_REF_0>[Character A]image_1.png <IMAGE_REF_1>[no_character]image_2.png] [aspect_ratio=16:9] [resolution=720p] [duration=10s] Character A, a panda skiing past a branded snow sign"
+    assert ctrl_str == "[# Sources <FIRST_FRAME>image_0.png] [aspect_ratio=16:9] [resolution=720p] [duration=10s] A panda skiing past a branded snow sign"
 
 def test_build_omni_control_string_voice_transcript():
     ctrl_str = build_omni_control_string(
@@ -49,7 +49,13 @@ def test_generate_omni_clip_i2v_mode():
     mock_client = MagicMock()
     mock_interaction = MagicMock()
     fake_mp4_bytes = b"fake_mp4_video_data"
-    mock_interaction.output_video.data = base64.b64encode(fake_mp4_bytes).decode("utf-8")
+    mock_interaction.output = None
+    mock_interaction.outputs = None
+    mock_interaction.output_video = {
+        "type": "video",
+        "mime_type": "video/mp4",
+        "data": base64.b64encode(fake_mp4_bytes).decode("utf-8"),
+    }
     mock_client.interactions.create.return_value = mock_interaction
 
     result = generate_omni_clip(
@@ -61,17 +67,23 @@ def test_generate_omni_clip_i2v_mode():
     assert result == fake_mp4_bytes
     mock_client.interactions.create.assert_called_once()
     call_args = mock_client.interactions.create.call_args[1]
-    assert call_args["model"] == "gemini-omni-1.1-flash-preview"
+    assert call_args["model"] == "gemini-omni-1.2-flash"
     assert len(call_args["input"]) == 2
-    assert call_args["input"][0]["type"] == "image"
-    assert call_args["input"][1]["type"] == "text"
-    assert call_args["input"][1]["text"] == "[# Sources <FIRST_FRAME>image_0.png] [aspect_ratio=16:9] [resolution=720p] [duration=10s] A panda skiing down a hill"
+    assert call_args["input"][0]["type"] == "text"
+    assert call_args["input"][1]["type"] == "image"
+    assert call_args["input"][0]["text"] == "[# Sources <FIRST_FRAME>image_0.png] [aspect_ratio=16:9] [resolution=720p] [duration=10s] A panda skiing down a hill"
 
 def test_generate_omni_clip_reference_mode():
     mock_client = MagicMock()
     mock_interaction = MagicMock()
     fake_mp4_bytes = b"fake_mp4_reference_video"
-    mock_interaction.output_video.data = base64.b64encode(fake_mp4_bytes).decode("utf-8")
+    mock_interaction.output = None
+    mock_interaction.outputs = None
+    mock_interaction.output_video = {
+        "type": "video",
+        "mime_type": "video/mp4",
+        "data": base64.b64encode(fake_mp4_bytes).decode("utf-8"),
+    }
     mock_client.interactions.create.return_value = mock_interaction
 
     result = generate_omni_clip(
@@ -83,7 +95,7 @@ def test_generate_omni_clip_reference_mode():
     assert result == fake_mp4_bytes
     call_args = mock_client.interactions.create.call_args[1]
     assert len(call_args["input"]) == 3
-    assert call_args["input"][0]["type"] == "image"
+    assert call_args["input"][0]["type"] == "text"
     assert call_args["input"][1]["type"] == "image"
-    assert call_args["input"][2]["type"] == "text"
-    assert call_args["input"][2]["text"] == "[# References <IMAGE_REF_0>[Character A]image_0.png <IMAGE_REF_1>[no_character]image_1.png] [aspect_ratio=16:9] [resolution=720p] [duration=10s] Character A, a panda riding a skateboard"
+    assert call_args["input"][2]["type"] == "image"
+    assert "Character A, a panda riding a skateboard" in call_args["input"][0]["text"]

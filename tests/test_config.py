@@ -4,8 +4,9 @@ def test_config_defaults():
     config = Config()
     assert config.PROJECT_ID is not None
     assert config.LOCATION == "global"
-    assert config.ORCHESTRATOR_MODEL == "gemini-3.7-flash"
-    assert config.VIDEO_GEN_MODEL == "gemini-omni-1.1-flash-preview"
+    assert config.ORCHESTRATOR_MODEL == "gemini-3.8-flash"
+    assert config.VIDEO_GEN_MODEL == "gemini-omni-1.2-flash"
+    assert config.VIDEO_EXTEND_MODEL == "gemini-omni-1.2-flash"
 
 def test_genai_client_init():
     client = get_genai_client()

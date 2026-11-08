@@ -12,9 +12,9 @@ os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "true"
 class Config:
     PROJECT_ID: str = os.getenv("GOOGLE_CLOUD_PROJECT", "vital-octagon-19612")
     LOCATION: str = os.getenv("GOOGLE_CLOUD_LOCATION", "global")
-    ORCHESTRATOR_MODEL: str = os.getenv("ORCHESTRATOR_MODEL", "gemini-3.7-flash")
-    VIDEO_GEN_MODEL: str = os.getenv("VIDEO_GEN_MODEL", "gemini-omni-1.1-flash-preview")
-    VIDEO_EXTEND_MODEL: str = os.getenv("VIDEO_EXTEND_MODEL", "macaron-cookie")
+    ORCHESTRATOR_MODEL: str = os.getenv("ORCHESTRATOR_MODEL", "gemini-3.8-flash")
+    VIDEO_GEN_MODEL: str = os.getenv("VIDEO_GEN_MODEL", "gemini-omni-1.2-flash")
+    VIDEO_EXTEND_MODEL: str = os.getenv("VIDEO_EXTEND_MODEL", "gemini-omni-1.2-flash")
     VIDEO_EXTEND_FALLBACK_MODEL: str = os.getenv("VIDEO_EXTEND_FALLBACK_MODEL", "gemini-omni-flash-preview")
     VIDEO_EXTEND_INPUT_SECONDS: float = float(os.getenv("VIDEO_EXTEND_INPUT_SECONDS", "5.0"))
     MEDIA_PROCESSING: str = os.getenv("MEDIA_PROCESSING", "agentic")

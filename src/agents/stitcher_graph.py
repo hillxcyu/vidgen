@@ -19,6 +19,7 @@ from src.state import PipelineState, VideoShot, StoryboardEntry
 from src.tools.video_parser import (
     extract_last_frame,
     create_agentic_video_part,
+    extract_avu_usage_telemetry,
     decode_valid_image_b64,
     extract_labeled_audit_keyframes,
     analyze_clip_audio_tail,
@@ -245,7 +246,7 @@ class QualityEvaluationResult(BaseModel):
     )
     detected_internal_cuts: int = Field(
         default=0,
-        description="Count of abrupt internal camera jump-cuts inside this single clip (0 if continuous single take).",
+        description="Count of internal camera jump-cuts, soft cross-dissolves, or multi-shot edits inside this single clip (0 if unbroken continuous single take).",
     )
     reason: List[CriterionEvaluation] = Field(
         default_factory=list,
@@ -460,6 +461,7 @@ async def evaluate_clip_quality(
                         temperature=0.1,
                     )
                 )
+                audio_telemetry.update(extract_avu_usage_telemetry(resp))
                 if resp and isinstance(resp.text, str) and resp.text.strip():
                     eval_res = QualityEvaluationResult.model_validate_json(resp.text)
                     break

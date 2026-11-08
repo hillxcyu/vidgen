@@ -134,7 +134,7 @@ async def attach_a2a_routes(
         AgentSkill(
             id="multimodal_video_quality_rating",
             name="Multimodal Video Quality Inspection",
-            description="Audits MP4 video clips and stitched videos using Gemini 3.7 Flash multimodal vision across Subject Identity, Motion Smoothness, Prompt Adherence, and Temporal Persistence.",
+            description="Audits MP4 video clips and stitched videos using Gemini 3.8 Flash Agentic Video Understanding across Subject Identity, Motion Smoothness, Prompt Adherence, and Temporal Persistence.",
         ),
     ])
 
