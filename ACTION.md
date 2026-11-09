@@ -1006,3 +1006,75 @@
 ### 3. 4-Quadrant Active Vision Audit (`[qa]` `[delivery]`)
 - Exported `en_slide-17.png`, `en_slide-18.png`, `zh_slide-17.png`, and `zh_slide-18.png` to `/usr/local/google/home/xcyu/.gemini/jetski/brain/dd460239-badd-49d0-b6be-d6d51eca5766/scratch/showcase_omni12/run11_audit/` and visually audited all 4 PNGs via `read_file`: **100% pass** — single-line eyebrows and assertive headlines in both `EN` and `ZH-CN`, crisp native-vector flowchart arrows with zero collision between `<0.80 Retry / Heal @ 360p` and `≥0.80 PASS`, generous interior padding across all 3 left M3 cards and flowchart nodes, and verified `17 / 18` & `18 / 18` footers.
 - **Status:** COMPLETED (awaiting user confirmation to mark Run 11 `[x]` in `PLAN.md`).
+
+
+---
+
+## [2026-11-09 07:58 UTC] Stage 3 (`ACT`): Run 12 (`/btw`) — Upgrade `vidgen-long-video` Skill with Draft Mode (`360p -> Agentic Loop -> Standalone Upscale`) & Benchmark Speed on the 4-Act `90s` Beauty Commercial
+
+### 1. Skill Upgrade & Automated Unit Tests (`[skill]` `[docs]` `[test]`)
+- **Upgraded `Skill/vidgen-long-video/scripts/omni_direct.py`:**
+  - Added `SUPPORTED_UPSCALE_TRANSITIONS`, `validate_upscale_transition`, `_extract_interaction_usage_telemetry`, `upscale_omni_clip_direct` (`generation_config={"video_config": {"task": "upscale"}}`, `response_format={"type": "video", "resolution": tgt_res}`), and the `upscale-clip` CLI subcommand.
+  - Updated `generate_omni_clip_direct` so `effective_task == "extend"` explicitly includes `"duration": f"{eff_duration}s"` and `"resolution": norm_resolution` in `response_format` (ensuring `video_extend` shots natively render at `360p` during Draft Mode rather than defaulting to `720p`), and bumped `RATER_TIMEOUT_MS` default from `120000` to `240000`.
+- **Upgraded `Skill/vidgen-long-video/scripts/run_vidgen_workflow.py`:**
+  - Added `--draft-mode`, `--draft-resolution` (`360p` default), and `--max-parallel-upscales` (`3` default) plus `_upscale_manifest_shots_async(...)` and fine-grained per-shot/per-scene/multi-scene stage timers (`render_sec`, `avu_sec`, `upscale_sec`, `draft_and_avu_sec`, `interpolation_repair_sec`, `stitch_and_seam_audit_sec`, `elapsed_sec`).
+  - Updated `Skill/vidgen-long-video/SKILL.md` and `references/storyboard_spec.md` with `--draft-mode` & `upscale-clip` workflows and empirical guardrails.
+- **Automated Unit Tests (`task-8742`, exit code `0`):**
+  - Extended `tests/unit/test_standalone_skill.py` with `test_standalone_upscale_and_draft_mode_multi_scene_workflow`: **`5 passed in 16.28s`**.
+
+### 2. Live Single-Clip Smoke Check & Full 4-Act `90s` Draft-Mode Execution via Skill CLI (`[benchmark]` `[skill]`)
+- **Live Vertex AI Smoke Check (`task-8762`, `vital-octagon-19612`, exit code `0`):**
+  - Rendered `smoke_360p.mp4` (`640×360 @ 24fps`, `5.00s`) via `.agents/skills/vidgen-long-video/scripts/omni_direct.py generate-clip --resolution 360p`, then promoted via `omni_direct.py upscale-clip --source-resolution 360p --target-resolution 720p`: verified `1280×720 @ 24fps` + `48kHz` stereo AAC in **`31.2s`** (`total_input_tokens = 0`, `total_output_tokens = 14,480` = `5s × 2,896 tok/s`).
+- **Full 4-Act `90s` Beauty Commercial Draft-Mode Run (`task-8768`, exit code `0`):**
+  - Executed `GOOGLE_CLOUD_PROJECT=vital-octagon-19612 GOOGLE_CLOUD_LOCATION=global uv run .agents/skills/vidgen-long-video/scripts/run_vidgen_workflow.py --scenes-json output/retail_uc3_beauty_arc_90s/scenes_storyboard.json --draft-mode --draft-resolution 360p --resolution 720p --max-parallel-scenes 2 --max-parallel-upscales 3 --quality-threshold 0.80 --output-dir output/retail_uc3_beauty_arc_90s_draft` (leaving `output/retail_uc3_beauty_arc_90s/` untouched):
+  - **Master Video:** `output/retail_uc3_beauty_arc_90s_draft/output_master_90s.mp4` (`1280×720`, `24fps`, `48kHz` stereo AAC, **`90.33s`**, **`9 / 9` shots `PASSED >= 0.80`**, mean shot AVU = **`0.921`**, **`9 / 9` shots `WER = 0.0`**).
+  - **End-to-End Total Wall-Clock:** **`937.10s` (`15m 37s`)** across **`16` candidate `10s` generations (`9` winners + `7` discarded `360p` retries)** + **`9` concurrent standalone `720p` upscales** (`total_upscale_output_tokens = 262,813`, `0` input tokens):
+    1. **Act 1 (`Hook`, `20.0s`):** `elapsed = 488.56s` (`draft+AVU = 418.25s` across `5` takes [`S1: 3 att -> 1.00`, `S2: 2 att -> 1.00`], concurrent `upscale = 39.18s`).
+    2. **Act 2 (`SKU Hero`, `20.29s`, Product-Only):** `elapsed = 280.79s` (`draft+AVU = 196.96s` across `3` takes [`S1: 2 att -> 0.82`, `S2: 1 att -> 1.00`], concurrent `upscale = 41.79s`) — vs. **`308.78s`** (`2` takes) and **`540.89s`** (retried) in Standard `720p`.
+    3. **Act 3 (`Lifestyle Proof`, `30.08s`):** `elapsed = 520.20s` (`draft+AVU = 430.11s` across `5` takes [`S1: 1 att -> 0.80`, `S2: 3 att -> 0.95`, `S3: 1 att -> 0.95`], `0` post-scene heals needed, concurrent `upscale = 50.60s`).
+    4. **Act 4 (`CTA`, `19.96s`):** `elapsed = 344.72s` (`draft+AVU = 233.72s` across `3` takes [`S1: 1 att -> 0.81`, `S2: 2 att -> 0.96`], `upscale = 72.11s` queued behind shared 3-way semaphore).
+
+### 3. Active Vision Audit & Quantitative Speed Comparison (`[qa]` `[delivery]`)
+- Rendered `output/retail_uc3_beauty_arc_90s_draft/contact_sheet_arc_90s_draft.png` and verified via `read_file` alongside baseline `contact_sheet_arc_90s.png` + `ffprobe`: exact spokesperson/blazer/bottle identity across Acts 1, 3, and 4, crisp human-free `AURORA ESSENCE / BOTANICAL SERUM / 30 ml` typography on the upscaled `720p` Act 2 bottle macro shots, and `10.0s` `640×360` archived drafts (`shot_k_draft_360p.mp4`) promoted cleanly to `1280×720` (`shot_k.mp4`).
+- **Key Speed Findings:**
+  - **Per-Clip Render Speedup (`360p` vs. `720p`):** R2V dropped from `~82s` (`720p`) to **`24.1s` mean** (`22.1s–26.5s` at `360p` — **`3.4×` faster**); `video_extend` dropped from `~108s` (`720p`) to **`52.0s` mean** (`42.0s–56.8s` at `360p` — **`2.1×` faster**); standalone `task="upscale"` averaged **`40.96s`/clip** (`35.6s–49.7s`) and ran concurrently across winning shots (`39.2s–50.6s` per entire act).
+  - **Total Wall-Clock Speedup:** **`937.10s` (`15m 37s`)** for `16` candidate takes + `9` upscales — **`10.0%` (`102.7s`) faster** in raw wall-clock than the recorded `1,039.76s` (`17m 20s`) `720p` 9-shot run (`13` takes), and **`~1.45×–1.50×` faster (`~31%–33.5%` wall-clock reduction: `~9.6m` vs. `~14.0m` at `9` takes; `15.6m` vs. `~23.5m` at `16` takes)** on an equal-retry basis, while cutting retry waste **`3.5×`** (`720p` target) to **`5.0×`** (`1080p` target).
+- **Status:** COMPLETED (awaiting user confirmation to mark Run 12 tasks `[x]` in `PLAN.md`).
+
+
+---
+
+## [2026-11-09 08:16 UTC] Stage 3 (`ACT`): Run 13 — Enrich Slide `17 / 19` & Insert Dedicated 4-Act `90s` Draft Mode Benchmark Slide `18 / 19` Across `EN` & `ZH-CN` Decks (`19` Slides Total)
+
+### 1. Clean `3×3` Draft Contact Sheet & GCS Upload (`[assets]` `[gcs]`)
+- Authored and executed `/usr/local/google/home/xcyu/.gemini/jetski/brain/b3df3035-86bc-44c8-8183-f04e27a895b5/scratch/upload_draft_90s_to_gcs.py` (exit code `0`):
+  - Rendered `output/retail_uc3_beauty_arc_90s_draft/contact_sheet_arc_90s_draft_slide.png` (`1440×810` `16:9`, corner badges `H1.1 Hook | 1.00 .. C4.2 CTA | 0.96`), visually verified via `read_file`.
+  - Uploaded all `10` Draft Mode deliverables (`output_master_90s.mp4`, `act_{1..4}_*.mp4`, `shot_2_1_draft_360p.mp4`, `shot_2_1_upscaled_720p.mp4`, `contact_sheet_arc_90s_draft_slide.png`, `contact_sheet_arc_90s_draft.png`, `run_manifest.json`) with `cache_control="no-cache, max-age=0"` to `gs://vital-octagon-19612-vidgen-showcase/showcase/retail_uc3_beauty_arc_90s_draft/`.
+
+### 2. Bilingual Google Slides Update (`Slide 17 / 19` + `Slide 18 / 19`, `392` Requests/Deck) (`[slides]` `[diagram]` `[footers]` `[notes]`)
+- Authored and executed `/usr/local/google/home/xcyu/.gemini/jetski/brain/b3df3035-86bc-44c8-8183-f04e27a895b5/scratch/update_s17_and_insert_s18_benchmark.py` (`task-8839`, exit code `0`, `0` fit warnings) across **EN (`1b5jlgCWk3Q2LFr5tDYAZZps6Pw_N2_EaIfbAwk9M_3A`)** and **ZH-CN (`12zy4XxPt7sllLsNF3nMIroPRhZSvCGsdEW3UwKnAdj0`)**:
+  1. **Enriched `Slide 17 / 19` (`v18_s17_draft_upscale_{en,zh}`):** Updated Phase Cards 1 & 3, Flowchart Nodes ① (`24.1s R2V | 52.0s Extend`), ② (`~31.9s AVU`), and ③ (`~41s Parallel · 0 In Tok`), plus the `Live 90s Ad (16 Takes → 9 Winners)` economics box (`720p: ~$7.70 vs $11.20 (-31%) | 1080p: ~$10.40 vs $16.00 (5× less waste)`).
+  2. **Inserted Dedicated Benchmark Proof `Slide 18 / 19` (`v19_s18_draft_bench_{en,zh}`, `insertionIndex = 17`):**
+     - **Left Visual & Playback Hub (`42%`):** Embedded `contact_sheet_arc_90s_draft_slide.png` (`44, 91, 278 × 156.4 pt`), QA badge (`Mean AVU 0.921 · WER 0.0 (9/9) · 262.8k Out / 0 In Tok`), solid blue `▶ Watch 90.33s Draft→Upscale Master MP4 (720p)`, side-by-side `▶ S2.1 Draft (360p)` & `▶ S2.1 Upscaled (720p)` comparison buttons, and `🔍 Open High-Res 3×3 Draft Contact Sheet (PNG)`.
+     - **Right KPI + Comparison Grid (`58%`):** 3 M3 KPI Callout Cards (`3.4× / 2.1× Faster`, `~1.50× Total Speed`, `3.5×–5× Less Waste`), 4-column × 7-row empirical comparison table (`R2V Shot`, `Extend Shot`, `Standalone Upscale`, `Raw 90s Wall-Clock`, `Equal-Retry 90s`, `QA & Video Cost`), and Act 2 Measured Proof banner (`280.8s` vs. `308.8s` / `540.9s` — `1.37×` to `1.93×` faster).
+  3. **Pagination & Speaker Notes:** Shifted Closing GTM (`v12_s11_gtm_{en,zh}`) to `Slide 19 / 19`, dynamically synced all `XX / 18` footers across Slides `02..19` to `XX / 19` (`0` stale `/ 18` hits verified), and populated tripartite speaker notes on Slides 17 & 18.
+
+### 3. Blocking 4-Quadrant Active Vision Audit & Deliverable Bookmarks (`[qa]` `[delivery]`)
+- Exported `en_slide-17.png`, `en_slide-18.png`, `en_slide-19.png`, `zh_slide-17.png`, `zh_slide-18.png`, and `zh_slide-19.png` via `gslides readonly export-thumbnail` and visually inspected all 6 PNGs via `read_file`: **100% pass** — single-line eyebrows and assertive headlines in both languages, distortion-free `16:9` `3×3` contact sheet, balanced interior padding across all buttons, KPI cards, and table rows, and exact `17 / 19`, `18 / 19`, `19 / 19` footers.
+- Created actionable `.url.json` deliverable bookmarks (`UserFacing: true`) for both updated 19-slide Google Slides presentations.
+- **Status:** COMPLETED (awaiting user confirmation to mark Run 13 tasks `[x]` in `PLAN.md`).
+
+
+---
+
+## [2026-11-09 09:02 UTC] Stage 3 (`ACT`): Run 14 — Refresh Repository Docs (`README.md`, `doc/features.md`, `interaction_explained.md`), Run `72`-Test Suite, Commit & Push to `origin/main`
+
+### 1. Documentation Refresh (`[docs]`)
+- Updated `README.md` (`72/72` Pytest badge, Dual-Track ADK 2.0 Web Studio + Portable Zero-ADK `Skill/vidgen-long-video` overview, Modes A/B/C/D, Observation-First Auto-Rater v2 `MediaProcessing.AGENTIC`, `--scenes-json` `90s+` `<FIRST_FRAME>+<LAST_FRAME>` self-healing, `--draft-mode` `360p -> 3.8 AVU -> standalone task="upscale"` quickstart, and updated repository tree).
+- Updated `doc/features.md` (16 comprehensive feature entries covering ADK 2.0 Studio, Portable Skill, Modes A/B/C/D, two-frame self-healing, Draft Mode standalone upscaling, Auto-Rater v2, and Master Seam Critic).
+- Updated `interaction_explained.md` to reflect GA `gemini-omni-1.2-flash`, `gemini-3.8-flash` (`MediaProcessing.AGENTIC`), `app/` + `Skill/` stage contracts, and Draft Mode upscaling.
+
+### 2. Full Test Suite & Git Commit / Push (`[test]` `[git]` `[delivery]`)
+- Executed `uv run --no-sync pytest tests/unit tests/integration -v` (`task-8924`, exit code `0`): **`72 passed in 75.65s` (`100%`)**.
+- Staged all modified skill, test, documentation, and workflow tracking files, committed to `main`, and pushed cleanly to `origin/main` (`git@github.com:hillxcyu/vidgen.git`).
+- **Status:** COMPLETED.

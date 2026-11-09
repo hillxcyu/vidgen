@@ -58,6 +58,8 @@ from omni_direct import (  # noqa: E402
     generate_storyboard_direct,
     get_direct_genai_client,
     optimize_shot_prompt_direct,
+    upscale_omni_clip_direct,
+    validate_upscale_transition,
 )
 
 
@@ -71,8 +73,13 @@ class ShotRecord(BaseModel):
     quality_score: Optional[float] = None
     verdict: str = "PENDING"
     video_path: Optional[str] = None
+    draft_video_path: Optional[str] = None
     first_frame_path: Optional[str] = None
     last_frame_path: Optional[str] = None
+    render_sec: float = 0.0
+    avu_sec: float = 0.0
+    upscale_sec: float = 0.0
+    upscale_telemetry: Optional[Dict[str, Any]] = None
     evaluation_report: Optional[Dict[str, Any]] = None
 
 
@@ -113,10 +120,16 @@ class WorkflowManifest(BaseModel):
     duration_per_shot_sec: int = 10
     aspect_ratio: str = "16:9"
     resolution: str = "720p"
+    draft_mode: bool = False
+    draft_resolution: Optional[str] = None
     orchestrator_model: str = DirectConfig.ORCHESTRATOR_MODEL
     video_gen_model: str = DirectConfig.VIDEO_GEN_MODEL
     media_processing: str = DirectConfig.MEDIA_PROCESSING
     elapsed_sec: float = 0.0
+    draft_and_avu_sec: float = 0.0
+    interpolation_repair_sec: float = 0.0
+    upscale_sec: float = 0.0
+    stitch_and_seam_audit_sec: float = 0.0
     output_dir: str
     reference_anchor_path: Optional[str] = None
     stitched_video_path: Optional[str] = None
@@ -132,6 +145,11 @@ class SceneManifestRecord(BaseModel):
     output_dir: str
     scene_video_path: Optional[str] = None
     scene_duration_sec: float = 0.0
+    elapsed_sec: float = 0.0
+    draft_and_avu_sec: float = 0.0
+    interpolation_repair_sec: float = 0.0
+    upscale_sec: float = 0.0
+    stitch_and_seam_audit_sec: float = 0.0
     reference_paths: List[str] = Field(default_factory=list)
     shots: List[ShotRecord] = Field(default_factory=list)
     interpolation_repairs: List[InterpolationRepairRecord] = Field(default_factory=list)
@@ -146,10 +164,16 @@ class MultiSceneWorkflowManifest(BaseModel):
     duration_per_shot_sec: int = 10
     aspect_ratio: str = "16:9"
     resolution: str = "720p"
+    draft_mode: bool = False
+    draft_resolution: Optional[str] = None
     orchestrator_model: str = DirectConfig.ORCHESTRATOR_MODEL
     video_gen_model: str = DirectConfig.VIDEO_GEN_MODEL
     media_processing: str = DirectConfig.MEDIA_PROCESSING
     elapsed_sec: float = 0.0
+    sum_scene_draft_and_avu_sec: float = 0.0
+    sum_scene_repair_sec: float = 0.0
+    sum_scene_upscale_sec: float = 0.0
+    master_stitch_and_seam_audit_sec: float = 0.0
     output_dir: str
     master_video_path: Optional[str] = None
     master_duration_sec: float = 0.0
@@ -255,9 +279,10 @@ async def _execute_single_shot(
 
         print(
             f"[Shot #{shot_idx} | Attempt {attempt + 1}/{max_attempts}] "
-            f"mode={record.effective_mode} task={shot_task or 'i2v/t2v'}"
+            f"mode={record.effective_mode} task={shot_task or 'i2v/t2v'} res={resolution}"
         )
 
+        t_ren0 = time.monotonic()
         video_bytes = await asyncio.to_thread(
             generate_omni_clip_direct,
             prompt=opt_prompt,
@@ -280,6 +305,8 @@ async def _execute_single_shot(
                 float(duration),
                 prev_last_frame_b64,
             )
+        attempt_render_sec = time.monotonic() - t_ren0
+        record.render_sec = round(record.render_sec + attempt_render_sec, 2)
 
         with open(clip_path, "wb") as fp:
             fp.write(video_bytes)
@@ -323,6 +350,7 @@ async def _execute_single_shot(
                     )
                     continue
 
+        t_avu0 = time.monotonic()
         eval_res = await evaluate_clip_quality_direct(
             shot_index=shot_idx,
             prompt=opt_prompt,
@@ -336,11 +364,14 @@ async def _execute_single_shot(
             is_extend_shot=is_extend_shot,
             client=rater_client,
         )
+        attempt_avu_sec = time.monotonic() - t_avu0
+        record.avu_sec = round(record.avu_sec + attempt_avu_sec, 2)
         score = float(eval_res.get("score", 0.0))
         avu_toks = (eval_res.get("deterministic_telemetry") or {}).get("avu_tool_use_tokens")
         print(
             f"  -> Score={score:.2f} ({eval_res.get('verdict')}) | "
-            f"WER={eval_res.get('transcript_wer')} | AVU_tokens={avu_toks}"
+            f"WER={eval_res.get('transcript_wer')} | AVU_tokens={avu_toks} | "
+            f"render={attempt_render_sec:.1f}s avu={attempt_avu_sec:.1f}s"
         )
 
         if score > best_score:
@@ -369,6 +400,82 @@ async def _execute_single_shot(
     return record
 
 
+async def _upscale_manifest_shots_async(
+    manifest: WorkflowManifest,
+    source_resolution: str,
+    target_resolution: str,
+    max_parallel_upscales: int = 3,
+    crossfade_seconds: float = 0.08,
+    upscale_sem: Optional[asyncio.Semaphore] = None,
+    gen_client: Optional[genai.Client] = None,
+) -> WorkflowManifest:
+    """Concurrently upscales winning shots in `manifest` via standalone `task='upscale'` and re-stitches the scene."""
+    src_res, tgt_res = validate_upscale_transition(source_resolution, target_resolution)
+    active_gen_client = gen_client or get_direct_genai_client(timeout_ms=DirectConfig.VIDEO_GEN_TIMEOUT_MS)
+    sem = upscale_sem or asyncio.Semaphore(max(1, max_parallel_upscales))
+    t_up0 = time.monotonic()
+
+    async def _upscale_one(rec: ShotRecord) -> None:
+        if not rec.video_path or not os.path.exists(rec.video_path):
+            return
+        draft_archive = os.path.join(manifest.output_dir, f"shot_{rec.shot_index}_draft_{src_res}.mp4")
+        if os.path.exists(draft_archive) and os.path.getsize(draft_archive) > 10_000:
+            rec.draft_video_path = os.path.abspath(draft_archive)
+            print(f"[Upscale Shot #{rec.shot_index}] Reusing already-upscaled {rec.video_path} (draft={draft_archive})")
+            return
+
+        shutil.copyfile(rec.video_path, draft_archive)
+        rec.draft_video_path = os.path.abspath(draft_archive)
+        async with sem:
+            with open(draft_archive, "rb") as fp:
+                draft_bytes = fp.read()
+            print(f"[Upscale Shot #{rec.shot_index}] Promoting {src_res} -> {tgt_res} via task='upscale'...")
+            up_bytes, telemetry = await asyncio.to_thread(
+                upscale_omni_clip_direct,
+                draft_bytes,
+                tgt_res,
+                src_res,
+                None,
+                True,
+                active_gen_client,
+            )
+            with open(rec.video_path, "wb") as fp:
+                fp.write(up_bytes)
+            if rec.first_frame_path:
+                await asyncio.to_thread(extract_first_frame, rec.video_path, rec.first_frame_path)
+            if rec.last_frame_path:
+                await asyncio.to_thread(extract_last_frame, rec.video_path, rec.last_frame_path)
+            rec.upscale_sec = float(telemetry.get("upscale_sec", 0.0))
+            rec.upscale_telemetry = telemetry
+            print(
+                f"  -> [Upscale Shot #{rec.shot_index} Done] {src_res}->{tgt_res} in {rec.upscale_sec:.2f}s "
+                f"(in_tok={telemetry.get('total_input_tokens')}, out_tok={telemetry.get('total_output_tokens')})"
+            )
+
+    await asyncio.gather(*(_upscale_one(r) for r in manifest.shots))
+    manifest.upscale_sec = round(manifest.upscale_sec + (time.monotonic() - t_up0), 2)
+    manifest.resolution = tgt_res
+    manifest.draft_mode = True
+    manifest.draft_resolution = src_res
+
+    valid_clips = [r.video_path for r in manifest.shots if r.video_path and os.path.exists(r.video_path)]
+    if valid_clips:
+        stitched_name = f"output_stitched_{len(valid_clips) * manifest.duration_per_shot_sec}s.mp4"
+        target_stitched = manifest.stitched_video_path or os.path.join(manifest.output_dir, stitched_name)
+        t_st0 = time.monotonic()
+        stitched_path = await asyncio.to_thread(stitch_videos, valid_clips, target_stitched, crossfade_seconds)
+        manifest.stitch_and_seam_audit_sec = round(
+            manifest.stitch_and_seam_audit_sec + (time.monotonic() - t_st0), 2
+        )
+        manifest.stitched_video_path = stitched_path
+        manifest.stitched_duration_sec = round(get_video_duration(stitched_path), 2)
+
+    manifest_path = os.path.join(manifest.output_dir, "run_manifest.json")
+    with open(manifest_path, "w", encoding="utf-8") as fp:
+        fp.write(manifest.model_dump_json(indent=2))
+    return manifest
+
+
 async def run_standalone_pipeline_async(
     prompt: str,
     output_dir: str,
@@ -383,14 +490,25 @@ async def run_standalone_pipeline_async(
     max_attempts: int = 3,
     max_parallel: int = DirectConfig.MAX_PARALLEL_SHOTS,
     crossfade_seconds: Optional[float] = None,
+    draft_mode: bool = False,
+    draft_resolution: str = "360p",
+    max_parallel_upscales: int = 3,
     resume: bool = False,
     gen_client: Optional[genai.Client] = None,
     rater_client: Optional[genai.Client] = None,
+    _defer_upscale: bool = False,
 ) -> WorkflowManifest:
-    """Runs the complete ADK-free multi-shot generation, rating, and stitching pipeline locally."""
+    """Runs the complete ADK-free multi-shot generation, rating, optional standalone upscaling, and stitching pipeline locally."""
     t0 = time.monotonic()
     abs_out_dir = os.path.abspath(output_dir)
     os.makedirs(abs_out_dir, exist_ok=True)
+
+    tgt_res = str(resolution or "720p").strip().lower()
+    drf_res = str(draft_resolution or "360p").strip().lower()
+    active_draft = bool(draft_mode and drf_res != tgt_res)
+    if active_draft:
+        validate_upscale_transition(drf_res, tgt_res)
+    render_res = drf_res if active_draft else tgt_res
 
     active_gen_client = gen_client or get_direct_genai_client(timeout_ms=DirectConfig.VIDEO_GEN_TIMEOUT_MS)
     active_rater_client = rater_client or get_direct_genai_client(timeout_ms=DirectConfig.RATER_TIMEOUT_MS)
@@ -425,6 +543,7 @@ async def run_standalone_pipeline_async(
     ]
     can_parallel = all(m == "reference" for m in effective_modes) and len(specs) > 1
 
+    t_draft0 = time.monotonic()
     shot_records: List[ShotRecord] = []
     if can_parallel:
         sem = asyncio.Semaphore(max(1, max_parallel))
@@ -437,7 +556,7 @@ async def run_standalone_pipeline_async(
                     effective_mode="reference",
                     reference_images_b64=reference_b64s,
                     aspect_ratio=aspect_ratio,
-                    resolution=resolution,
+                    resolution=render_res,
                     duration=duration,
                     max_attempts=max_attempts,
                     output_dir=abs_out_dir,
@@ -462,6 +581,7 @@ async def run_standalone_pipeline_async(
                     await asyncio.to_thread(extract_first_frame, existing_clip, ff_p)
                 if not os.path.exists(lf_p):
                     await asyncio.to_thread(extract_last_frame, existing_clip, lf_p)
+                t_av = time.monotonic()
                 eval_res = await evaluate_clip_quality_direct(
                     shot_index=i + 1,
                     prompt=sp.description,
@@ -474,6 +594,7 @@ async def run_standalone_pipeline_async(
                     is_extend_shot=(eff_m == "video_extend"),
                     client=active_rater_client,
                 )
+                avu_dt = round(time.monotonic() - t_av, 2)
                 sc_val = round(float(eval_res.get("score", 0.0)), 3)
                 print(f"[Resume Shot #{i + 1}] Reusing saved {existing_clip} -> Score={sc_val:.2f}")
                 rec = ShotRecord(
@@ -488,6 +609,7 @@ async def run_standalone_pipeline_async(
                     video_path=os.path.abspath(existing_clip),
                     first_frame_path=os.path.abspath(ff_p),
                     last_frame_path=os.path.abspath(lf_p),
+                    avu_sec=avu_dt,
                     evaluation_report=eval_res,
                 )
             else:
@@ -497,7 +619,7 @@ async def run_standalone_pipeline_async(
                     effective_mode=eff_m,
                     reference_images_b64=reference_b64s,
                     aspect_ratio=aspect_ratio,
-                    resolution=resolution,
+                    resolution=render_res,
                     duration=duration,
                     max_attempts=max_attempts,
                     output_dir=abs_out_dir,
@@ -522,33 +644,12 @@ async def run_standalone_pipeline_async(
                         False,
                     )
 
-    valid_clips = [r.video_path for r in shot_records if r.video_path and os.path.exists(r.video_path)]
-    stitched_path: Optional[str] = None
-    stitched_dur: float = 0.0
-    master_report: Optional[Dict[str, Any]] = None
-
-    if valid_clips:
-        # Default to 0.0s hard-cut for pure multi-location R2V montages to avoid pose ghosting, else 0.08s xfade
-        resolved_xfade = (
-            crossfade_seconds
-            if crossfade_seconds is not None
-            else (0.0 if all(m == "reference" for m in effective_modes) else 0.08)
-        )
-        stitched_name = f"output_stitched_{len(valid_clips) * duration}s.mp4"
-        target_stitched = os.path.join(abs_out_dir, stitched_name)
-        stitched_path = await asyncio.to_thread(stitch_videos, valid_clips, target_stitched, resolved_xfade)
-        stitched_dur = round(get_video_duration(stitched_path), 2)
-
-        if len(valid_clips) >= 2:
-            master_report = await evaluate_stitched_master_direct(
-                stitched_video_path=stitched_path,
-                num_shots=len(valid_clips),
-                shot_duration_sec=float(duration),
-                original_intent=prompt,
-                voice_transcript=voice_transcript,
-                reference_images_b64=reference_b64s,
-                client=active_rater_client,
-            )
+    draft_and_avu_sec = round(time.monotonic() - t_draft0, 2)
+    resolved_xfade = (
+        crossfade_seconds
+        if crossfade_seconds is not None
+        else (0.0 if all(m == "reference" for m in effective_modes) else 0.08)
+    )
 
     manifest = WorkflowManifest(
         created_at_utc=datetime.now(timezone.utc).isoformat(),
@@ -557,20 +658,72 @@ async def run_standalone_pipeline_async(
         num_shots=len(specs),
         duration_per_shot_sec=duration,
         aspect_ratio=aspect_ratio,
-        resolution=resolution,
-        elapsed_sec=round(time.monotonic() - t0, 2),
+        resolution=render_res,
+        draft_mode=active_draft,
+        draft_resolution=drf_res if active_draft else None,
+        draft_and_avu_sec=draft_and_avu_sec,
         output_dir=abs_out_dir,
         reference_anchor_path=saved_anchor_path,
-        stitched_video_path=stitched_path,
-        stitched_duration_sec=stitched_dur,
         shots=shot_records,
-        master_seam_report=master_report,
     )
+
+    if active_draft and not _defer_upscale:
+        manifest = await _upscale_manifest_shots_async(
+            manifest=manifest,
+            source_resolution=drf_res,
+            target_resolution=tgt_res,
+            max_parallel_upscales=max_parallel_upscales,
+            crossfade_seconds=resolved_xfade,
+            gen_client=active_gen_client,
+        )
+        valid_clips = [r.video_path for r in manifest.shots if r.video_path and os.path.exists(r.video_path)]
+        if len(valid_clips) >= 2 and manifest.stitched_video_path:
+            t_sm0 = time.monotonic()
+            manifest.master_seam_report = await evaluate_stitched_master_direct(
+                stitched_video_path=manifest.stitched_video_path,
+                num_shots=len(valid_clips),
+                shot_duration_sec=float(duration),
+                original_intent=prompt,
+                voice_transcript=voice_transcript,
+                reference_images_b64=reference_b64s,
+                client=active_rater_client,
+            )
+            manifest.stitch_and_seam_audit_sec = round(
+                manifest.stitch_and_seam_audit_sec + (time.monotonic() - t_sm0), 2
+            )
+    else:
+        valid_clips = [r.video_path for r in manifest.shots if r.video_path and os.path.exists(r.video_path)]
+        if valid_clips:
+            stitched_name = f"output_stitched_{len(valid_clips) * duration}s.mp4"
+            target_stitched = os.path.join(abs_out_dir, stitched_name)
+            t_st0 = time.monotonic()
+            stitched_path = await asyncio.to_thread(stitch_videos, valid_clips, target_stitched, resolved_xfade)
+            stitched_dur = round(get_video_duration(stitched_path), 2)
+            master_report: Optional[Dict[str, Any]] = None
+            if len(valid_clips) >= 2:
+                master_report = await evaluate_stitched_master_direct(
+                    stitched_video_path=stitched_path,
+                    num_shots=len(valid_clips),
+                    shot_duration_sec=float(duration),
+                    original_intent=prompt,
+                    voice_transcript=voice_transcript,
+                    reference_images_b64=reference_b64s,
+                    client=active_rater_client,
+                )
+            manifest.stitch_and_seam_audit_sec = round(time.monotonic() - t_st0, 2)
+            manifest.stitched_video_path = stitched_path
+            manifest.stitched_duration_sec = stitched_dur
+            manifest.master_seam_report = master_report
+
+    manifest.elapsed_sec = round(time.monotonic() - t0, 2)
     manifest_path = os.path.join(abs_out_dir, "run_manifest.json")
     with open(manifest_path, "w", encoding="utf-8") as fp:
         fp.write(manifest.model_dump_json(indent=2))
 
-    print(f"[Completed] Stitched Master: {stitched_path} ({stitched_dur}s) | Manifest: {manifest_path}")
+    print(
+        f"[Completed] Stitched Master: {manifest.stitched_video_path} "
+        f"({manifest.stitched_duration_sec}s, res={manifest.resolution}) | Manifest: {manifest_path}"
+    )
     return manifest
 
 
@@ -818,21 +971,32 @@ async def run_multi_scene_pipeline_async(
     quality_threshold: float = 0.80,
     shot_crossfade_seconds: float = 0.08,
     scene_crossfade_seconds: float = 0.0,
+    draft_mode: bool = False,
+    draft_resolution: str = "360p",
+    max_parallel_upscales: int = 3,
     resume: bool = False,
     gen_client: Optional[genai.Client] = None,
     rater_client: Optional[genai.Client] = None,
 ) -> MultiSceneWorkflowManifest:
-    """Executes hierarchical multi-scene generation (e.g., 3x30s -> 90s) with AVU scene rating & `<FIRST_FRAME>+<LAST_FRAME>` self-healing."""
+    """Executes hierarchical multi-scene generation (e.g., 3x30s -> 90s) with AVU scene rating, `<FIRST_FRAME>+<LAST_FRAME>` self-healing, and optional Draft->Upscale."""
     t0 = time.monotonic()
     abs_out_dir = os.path.abspath(output_dir)
     os.makedirs(abs_out_dir, exist_ok=True)
 
+    tgt_res = str(resolution or "720p").strip().lower()
+    drf_res = str(draft_resolution or "360p").strip().lower()
+    active_draft = bool(draft_mode and drf_res != tgt_res)
+    if active_draft:
+        validate_upscale_transition(drf_res, tgt_res)
+
     active_gen_client = gen_client or get_direct_genai_client(timeout_ms=DirectConfig.VIDEO_GEN_TIMEOUT_MS)
     active_rater_client = rater_client or get_direct_genai_client(timeout_ms=DirectConfig.RATER_TIMEOUT_MS)
     sem = asyncio.Semaphore(max(1, max_parallel_scenes))
+    upscale_sem = asyncio.Semaphore(max(1, max_parallel_upscales))
 
     async def _run_one_scene(idx: int, sc: SceneSpec) -> SceneManifestRecord:
         async with sem:
+            t_sc0 = time.monotonic()
             scene_slug = sc.scene_id or f"scene_{idx + 1}"
             scene_dir = os.path.join(abs_out_dir, scene_slug)
             saved_sc_mf = os.path.join(scene_dir, "run_manifest.json")
@@ -846,6 +1010,11 @@ async def run_multi_scene_pipeline_async(
                     output_dir=scene_dir,
                     scene_video_path=top_scene_mp4,
                     scene_duration_sec=sc_manifest.stitched_duration_sec,
+                    elapsed_sec=sc_manifest.elapsed_sec,
+                    draft_and_avu_sec=sc_manifest.draft_and_avu_sec,
+                    interpolation_repair_sec=sc_manifest.interpolation_repair_sec,
+                    upscale_sec=sc_manifest.upscale_sec,
+                    stitch_and_seam_audit_sec=sc_manifest.stitch_and_seam_audit_sec,
                     reference_paths=[os.path.abspath(p) for p in sc.reference_paths if os.path.exists(p)],
                     shots=sc_manifest.shots,
                     interpolation_repairs=sc_manifest.interpolation_repairs,
@@ -856,7 +1025,11 @@ async def run_multi_scene_pipeline_async(
                 s.spoken_dialogue.strip() for s in sc.shots if s.spoken_dialogue and s.spoken_dialogue.strip()
             ) or None
             scene_prompt = sc.title or (" / ".join(s.description for s in sc.shots))
-            print(f"\n=== [{scene_slug}] Starting {len(sc.shots) * duration}s Scene: {sc.title or scene_slug} ===")
+            res_banner = f"{drf_res} draft -> {tgt_res} upscale" if active_draft else tgt_res
+            print(
+                f"\n=== [{scene_slug}] Starting {len(sc.shots) * duration}s Scene ({res_banner}): "
+                f"{sc.title or scene_slug} ==="
+            )
 
             sc_manifest = await run_standalone_pipeline_async(
                 prompt=scene_prompt,
@@ -865,17 +1038,22 @@ async def run_multi_scene_pipeline_async(
                 num_shots=len(sc.shots) or 3,
                 duration=duration,
                 aspect_ratio=aspect_ratio,
-                resolution=resolution,
+                resolution=tgt_res,
                 reference_paths=sc.reference_paths or None,
                 voice_transcript=scene_vo,
                 storyboard_specs=sc.shots or None,
                 max_attempts=max_attempts,
                 crossfade_seconds=shot_crossfade_seconds,
+                draft_mode=active_draft,
+                draft_resolution=drf_res,
+                max_parallel_upscales=max_parallel_upscales,
                 resume=resume,
                 gen_client=active_gen_client,
                 rater_client=active_rater_client,
+                _defer_upscale=active_draft,
             )
 
+            t_rep0 = time.monotonic()
             sc_manifest = await _repair_scene_shots_with_interpolation(
                 scene_spec=sc,
                 manifest=sc_manifest,
@@ -884,6 +1062,22 @@ async def run_multi_scene_pipeline_async(
                 gen_client=active_gen_client,
                 rater_client=active_rater_client,
             )
+            sc_manifest.interpolation_repair_sec = round(time.monotonic() - t_rep0, 2)
+
+            if active_draft:
+                sc_manifest = await _upscale_manifest_shots_async(
+                    manifest=sc_manifest,
+                    source_resolution=drf_res,
+                    target_resolution=tgt_res,
+                    max_parallel_upscales=max_parallel_upscales,
+                    crossfade_seconds=shot_crossfade_seconds,
+                    upscale_sem=upscale_sem,
+                    gen_client=active_gen_client,
+                )
+
+            sc_manifest.elapsed_sec = round(time.monotonic() - t_sc0, 2)
+            with open(saved_sc_mf, "w", encoding="utf-8") as fp:
+                fp.write(sc_manifest.model_dump_json(indent=2))
 
             exported_scene_video: Optional[str] = sc_manifest.stitched_video_path
             if sc_manifest.stitched_video_path and os.path.exists(sc_manifest.stitched_video_path):
@@ -897,6 +1091,11 @@ async def run_multi_scene_pipeline_async(
                 output_dir=scene_dir,
                 scene_video_path=exported_scene_video,
                 scene_duration_sec=sc_manifest.stitched_duration_sec,
+                elapsed_sec=sc_manifest.elapsed_sec,
+                draft_and_avu_sec=sc_manifest.draft_and_avu_sec,
+                interpolation_repair_sec=sc_manifest.interpolation_repair_sec,
+                upscale_sec=sc_manifest.upscale_sec,
+                stitch_and_seam_audit_sec=sc_manifest.stitch_and_seam_audit_sec,
                 reference_paths=[os.path.abspath(p) for p in sc.reference_paths if os.path.exists(p)],
                 shots=sc_manifest.shots,
                 interpolation_repairs=sc_manifest.interpolation_repairs,
@@ -912,8 +1111,10 @@ async def run_multi_scene_pipeline_async(
     master_video_path: Optional[str] = None
     master_dur: float = 0.0
     master_report: Optional[Dict[str, Any]] = None
+    master_stitch_sec: float = 0.0
 
     if scene_videos:
+        t_ms0 = time.monotonic()
         nominal_total_sec = total_shots * duration
         target_master = os.path.join(abs_out_dir, f"output_master_{nominal_total_sec}s.mp4")
         master_video_path = await asyncio.to_thread(
@@ -943,6 +1144,7 @@ async def run_multi_scene_pipeline_async(
                 reference_images_b64=hero_ref_b64s,
                 client=active_rater_client,
             )
+        master_stitch_sec = round(time.monotonic() - t_ms0, 2)
 
     multi_manifest = MultiSceneWorkflowManifest(
         created_at_utc=datetime.now(timezone.utc).isoformat(),
@@ -951,8 +1153,14 @@ async def run_multi_scene_pipeline_async(
         total_shots=total_shots,
         duration_per_shot_sec=duration,
         aspect_ratio=aspect_ratio,
-        resolution=resolution,
+        resolution=tgt_res,
+        draft_mode=active_draft,
+        draft_resolution=drf_res if active_draft else None,
         elapsed_sec=round(time.monotonic() - t0, 2),
+        sum_scene_draft_and_avu_sec=round(sum(sr.draft_and_avu_sec for sr in scene_records), 2),
+        sum_scene_repair_sec=round(sum(sr.interpolation_repair_sec for sr in scene_records), 2),
+        sum_scene_upscale_sec=round(sum(sr.upscale_sec for sr in scene_records), 2),
+        master_stitch_and_seam_audit_sec=master_stitch_sec,
         output_dir=abs_out_dir,
         master_video_path=master_video_path,
         master_duration_sec=master_dur,
@@ -964,8 +1172,8 @@ async def run_multi_scene_pipeline_async(
         fp.write(multi_manifest.model_dump_json(indent=2))
 
     print(
-        f"\n[Multi-Scene Completed] Master Video: {master_video_path} ({master_dur}s) | "
-        f"Manifest: {manifest_path}"
+        f"\n[Multi-Scene Completed] Master Video: {master_video_path} ({master_dur}s, res={tgt_res}, "
+        f"elapsed={multi_manifest.elapsed_sec}s) | Manifest: {manifest_path}"
     )
     return multi_manifest
 
@@ -991,6 +1199,23 @@ def _build_cli_parser() -> argparse.ArgumentParser:
     parser.add_argument("--duration", type=int, default=10, help="Duration per shot in seconds (3-10 for extend/interp).")
     parser.add_argument("--aspect-ratio", default="16:9", choices=["16:9", "9:16"])
     parser.add_argument("--resolution", default="720p", choices=["360p", "720p", "1080p", "4k"])
+    parser.add_argument(
+        "--draft-mode",
+        action="store_true",
+        help="Enable Omni 1.2 Draft Mode: draft, AVU-audit, retry & self-heal at --draft-resolution (360p), then standalone task='upscale' winning clips to --resolution.",
+    )
+    parser.add_argument(
+        "--draft-resolution",
+        default="360p",
+        choices=["360p", "720p"],
+        help="Draft resolution used during candidate generation and AVU agentic loop when --draft-mode is active (default: 360p).",
+    )
+    parser.add_argument(
+        "--max-parallel-upscales",
+        type=int,
+        default=3,
+        help="Max concurrent standalone task='upscale' calls when --draft-mode promotes winning clips (default: 3).",
+    )
     parser.add_argument("--voice-transcript", default=None, help="Optional full spoken voiceover script.")
     parser.add_argument("--max-attempts", type=int, default=3, help="Best-of-K retry budget per shot.")
     parser.add_argument("--max-parallel", type=int, default=3, help="Max concurrent shots in Mode A (reference).")
@@ -1051,6 +1276,9 @@ def main(argv: Optional[List[str]] = None) -> int:
                 quality_threshold=args.quality_threshold,
                 shot_crossfade_seconds=args.crossfade if args.crossfade is not None else 0.08,
                 scene_crossfade_seconds=args.scene_crossfade,
+                draft_mode=args.draft_mode,
+                draft_resolution=args.draft_resolution,
+                max_parallel_upscales=args.max_parallel_upscales,
                 resume=args.resume,
             )
         )
@@ -1058,10 +1286,22 @@ def main(argv: Optional[List[str]] = None) -> int:
             "status": "ok",
             "master_video_path": multi_manifest.master_video_path,
             "master_duration_sec": multi_manifest.master_duration_sec,
+            "resolution": multi_manifest.resolution,
+            "draft_mode": multi_manifest.draft_mode,
+            "draft_resolution": multi_manifest.draft_resolution,
+            "elapsed_sec": multi_manifest.elapsed_sec,
+            "sum_scene_draft_and_avu_sec": multi_manifest.sum_scene_draft_and_avu_sec,
+            "sum_scene_repair_sec": multi_manifest.sum_scene_repair_sec,
+            "sum_scene_upscale_sec": multi_manifest.sum_scene_upscale_sec,
+            "master_stitch_and_seam_audit_sec": multi_manifest.master_stitch_and_seam_audit_sec,
             "manifest_path": os.path.join(multi_manifest.output_dir, "run_manifest.json"),
             "scene_scores": [
                 {
                     "scene_id": s.scene_id,
+                    "elapsed_sec": s.elapsed_sec,
+                    "draft_and_avu_sec": s.draft_and_avu_sec,
+                    "interpolation_repair_sec": s.interpolation_repair_sec,
+                    "upscale_sec": s.upscale_sec,
                     "shot_scores": [sh.quality_score for sh in s.shots],
                     "repairs": len(s.interpolation_repairs),
                     "scene_seam_score": (s.scene_seam_report or {}).get("score"),
@@ -1098,12 +1338,22 @@ def main(argv: Optional[List[str]] = None) -> int:
             max_attempts=args.max_attempts,
             max_parallel=args.max_parallel,
             crossfade_seconds=args.crossfade,
+            draft_mode=args.draft_mode,
+            draft_resolution=args.draft_resolution,
+            max_parallel_upscales=args.max_parallel_upscales,
+            resume=args.resume,
         )
     )
     print(json.dumps({
         "status": "ok",
         "stitched_video_path": manifest.stitched_video_path,
         "stitched_duration_sec": manifest.stitched_duration_sec,
+        "resolution": manifest.resolution,
+        "draft_mode": manifest.draft_mode,
+        "draft_resolution": manifest.draft_resolution,
+        "elapsed_sec": manifest.elapsed_sec,
+        "draft_and_avu_sec": manifest.draft_and_avu_sec,
+        "upscale_sec": manifest.upscale_sec,
         "manifest_path": os.path.join(manifest.output_dir, "run_manifest.json"),
         "shot_scores": [s.quality_score for s in manifest.shots],
         "master_score": (manifest.master_seam_report or {}).get("score"),

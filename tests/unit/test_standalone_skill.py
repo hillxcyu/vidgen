@@ -533,3 +533,193 @@ def test_multi_scene_workflow_and_first_last_interpolation_repair(tmp_path: Path
     assert len(interp_calls) == 2
     assert interp_calls[0]["response_format"]["duration"] == "3s"
     assert "generation_config" not in interp_calls[0]
+
+
+def test_standalone_upscale_and_draft_mode_multi_scene_workflow(tmp_path: Path, monkeypatch):
+    omni_direct = _load_skill_module("omni_direct")
+    workflow = _load_skill_module("run_vidgen_workflow")
+
+    # 1. Verify GA upscale transition guardrails (360p -> 4k and 1080p -> 4k rejected)
+    assert omni_direct.validate_upscale_transition("360p", "720p") == ("360p", "720p")
+    assert omni_direct.validate_upscale_transition("360p", "1080p") == ("360p", "1080p")
+    assert omni_direct.validate_upscale_transition("720p", "4K") == ("720p", "4k")
+    try:
+        omni_direct.validate_upscale_transition("360p", "4k")
+        raise AssertionError("Expected ValueError for unsupported single-hop 360p -> 4k")
+    except ValueError as err:
+        assert "360p" in str(err) and "4k" in str(err)
+
+    draft_mp4 = tmp_path / "draft_360p.mp4"
+    _make_test_mp4_with_audio(draft_mp4, duration_sec=2.0, start_bgr=(50, 110, 180), end_bgr=(50, 110, 180))
+    draft_bytes = draft_mp4.read_bytes()
+    b64_draft = base64.b64encode(draft_bytes).decode("utf-8")
+
+    upscaled_mp4 = tmp_path / "upscaled_720p.mp4"
+    _make_test_mp4_with_audio(upscaled_mp4, duration_sec=2.0, start_bgr=(80, 150, 225), end_bgr=(80, 150, 225))
+    upscaled_bytes = upscaled_mp4.read_bytes()
+    b64_upscaled = base64.b64encode(upscaled_bytes).decode("utf-8")
+
+    png_ok, png_arr = cv2.imencode(".png", np.full((180, 320, 3), (210, 225, 240), dtype=np.uint8))
+    assert png_ok
+    scene_plate = tmp_path / "plate.png"
+    scene_plate.write_bytes(png_arr.tobytes())
+    hero_anchor = tmp_path / "anchor.png"
+    cv2.imwrite(str(hero_anchor), np.full((180, 320, 3), 255, dtype=np.uint8))
+
+    captured_calls: list = []
+
+    class _FakeInteractions:
+        def create(self, **kwargs):
+            captured_calls.append(kwargs)
+            gen_cfg = kwargs.get("generation_config") or {}
+            v_task = (gen_cfg.get("video_config") or {}).get("task")
+            if v_task == "upscale":
+                usage = SimpleNamespace(total_input_tokens=0, total_output_tokens=5792, total_thought_tokens=0)
+                return SimpleNamespace(outputs=[{"data": b64_upscaled}], usage=usage)
+            return SimpleNamespace(outputs=[{"data": b64_draft}])
+
+    class _FakeModels:
+        def generate_content(self, *, model: str, contents: Any, config: Any = None):
+            schema = getattr(config, "response_schema", None)
+            usage = SimpleNamespace(tool_use_prompt_token_count=2800, prompt_token_count=490)
+            if schema is None:
+                return SimpleNamespace(text="Continuous single-take shot in sunlit studio.", usage_metadata=usage)
+            props = getattr(schema, "properties", None) or {}
+            if "opening_environment_observed" in props:
+                prompt_blob = str(contents[0])
+                is_shot2 = "Shot #2" in prompt_blob
+                is_interp = "first_last_frame" in prompt_blob
+                sc = (0.98 if is_interp else 0.62) if is_shot2 else 0.94
+                payload = {
+                    "opening_environment_observed": "Sunlit studio.",
+                    "heard_transcript": "Pure botanical care.",
+                    "speech_end_sec": 1.1,
+                    "detected_internal_cuts": 0,
+                    "reason": [{"criterion_name": "SKU Lock", "score": sc, "comments": "Checked"}],
+                    "score": sc,
+                    "verdict": "PASSED" if sc >= 0.8 else "REATTEMPT_REQUIRED",
+                    "feedback": "Retry bridge." if sc < 0.8 else "Clean.",
+                }
+                return SimpleNamespace(text=json.dumps(payload), usage_metadata=usage)
+            payload = {
+                "seam_observations": [
+                    {"seam_index": 1, "window_sec": "0.5s-3.5s", "continuity_score": 0.93, "notes": "Smooth"}
+                ],
+                "voice_timbre_consistent": True,
+                "loudness_continuity_ok": True,
+                "visual_xfade_smooth": True,
+                "score": 0.93,
+                "verdict": "PASSED",
+                "feedback": "Clean seams.",
+            }
+            return SimpleNamespace(text=json.dumps(payload), usage_metadata=usage)
+
+    fake_client = SimpleNamespace(interactions=_FakeInteractions(), models=_FakeModels())
+
+    # 2. Direct upscale_omni_clip_direct test
+    up_out, up_tel = omni_direct.upscale_omni_clip_direct(
+        draft_bytes,
+        target_resolution="720p",
+        source_resolution="360p",
+        return_telemetry=True,
+        client=fake_client,
+    )
+    assert up_out == upscaled_bytes
+    assert up_tel["total_input_tokens"] == 0
+    assert up_tel["total_output_tokens"] == 5792
+    assert captured_calls[-1]["generation_config"] == {"video_config": {"task": "upscale"}}
+    assert captured_calls[-1]["response_format"] == {"type": "video", "resolution": "720p"}
+
+    # 3. End-to-end --draft-mode multi-scene workflow (360p draft + 360p <FIRST_FRAME>+<LAST_FRAME> heal + concurrent 720p upscale)
+    captured_calls.clear()
+    monkeypatch.setattr(workflow, "evaluate_clip_quality_direct", omni_direct.evaluate_clip_quality_direct)
+    monkeypatch.setattr(workflow, "evaluate_stitched_master_direct", omni_direct.evaluate_stitched_master_direct)
+    monkeypatch.setattr(workflow, "generate_omni_clip_direct", omni_direct.generate_omni_clip_direct)
+    monkeypatch.setattr(workflow, "upscale_omni_clip_direct", omni_direct.upscale_omni_clip_direct)
+    monkeypatch.setattr(omni_direct, "analyze_clip_audio_tail", lambda *a, **kw: {
+        "clip_duration_sec": 2.0,
+        "has_audio": True,
+        "mid_rms_db": -19.0,
+        "trailing_rms_db": -41.0,
+        "tail_window_sec": 0.2,
+        "speech_cutoff_detected": False,
+    })
+
+    scenes = [
+        workflow.SceneSpec(
+            scene_id="act_1",
+            title="Act 1 Draft->Upscale Test",
+            mode="video_extend",
+            reference_paths=[str(hero_anchor), str(scene_plate)],
+            shots=[
+                workflow.StoryboardEntrySpec(
+                    scene_number=1,
+                    description="Spokesperson holds serum bottle",
+                    camera_angle="medium tracking",
+                    evaluation_criteria="Verify bottle",
+                    spoken_dialogue="Pure botanical care.",
+                ),
+                workflow.StoryboardEntrySpec(
+                    scene_number=2,
+                    description="Camera pushes in on serum drop",
+                    camera_angle="close-up push-in",
+                    evaluation_criteria="Verify smooth continuation",
+                    spoken_dialogue="Pure botanical care.",
+                ),
+                workflow.StoryboardEntrySpec(
+                    scene_number=3,
+                    description="Bottle rests on sunlit stone plinth",
+                    camera_angle="macro dolly",
+                    evaluation_criteria="Verify plinth close",
+                    spoken_dialogue="Pure botanical care.",
+                ),
+            ],
+        )
+    ]
+
+    draft_out_dir = tmp_path / "draft_multi_out"
+    manifest = asyncio.run(
+        workflow.run_multi_scene_pipeline_async(
+            scenes=scenes,
+            output_dir=str(draft_out_dir),
+            original_intent="Draft mode test",
+            duration=3,
+            resolution="720p",
+            draft_mode=True,
+            draft_resolution="360p",
+            max_attempts=1,
+            max_parallel_scenes=1,
+            max_parallel_upscales=3,
+            quality_threshold=0.80,
+            gen_client=fake_client,
+            rater_client=fake_client,
+        )
+    )
+
+    assert manifest.draft_mode is True
+    assert manifest.draft_resolution == "360p"
+    assert manifest.resolution == "720p"
+    assert manifest.master_video_path and os.path.exists(manifest.master_video_path)
+
+    # Verify all generation & interpolation calls ran at 360p, and ONLY the 3 winning clips were upscaled to 720p!
+    non_upscale_calls = [
+        c for c in captured_calls
+        if ((c.get("generation_config") or {}).get("video_config") or {}).get("task") != "upscale"
+    ]
+    upscale_calls = [
+        c for c in captured_calls
+        if ((c.get("generation_config") or {}).get("video_config") or {}).get("task") == "upscale"
+    ]
+    assert len(non_upscale_calls) == 4  # 3 draft shots + 1 <FIRST_FRAME>+<LAST_FRAME> heal, all at 360p!
+    assert all(c["response_format"]["resolution"] == "360p" for c in non_upscale_calls)
+    assert len(upscale_calls) == 3  # Only the 3 final winning clips upscaled!
+    assert all(c["response_format"] == {"type": "video", "resolution": "720p"} for c in upscale_calls)
+
+    sc_rec = manifest.scenes[0]
+    assert len(sc_rec.interpolation_repairs) == 1
+    assert sc_rec.interpolation_repairs[0].accepted is True
+    for sh in sc_rec.shots:
+        assert sh.draft_video_path and sh.draft_video_path.endswith("_draft_360p.mp4")
+        assert os.path.exists(sh.draft_video_path)
+        assert Path(sh.video_path).read_bytes() == upscaled_bytes
+        assert sh.upscale_telemetry["total_input_tokens"] == 0

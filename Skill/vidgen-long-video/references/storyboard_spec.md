@@ -113,3 +113,13 @@ For `60s–90s+` multi-scene commercials, pass `--scenes-json path/to/scenes_sto
   ]
 }
 ```
+
+
+---
+
+## 4. Draft Mode (`--draft-mode`: `360p` Draft → Agentic Loop → Standalone Upscale)
+
+When iterating on multi-shot or `90s+` multi-scene commercials, pass `--draft-mode` (`--draft-resolution 360p --resolution 720p` or `1080p`) to `scripts/run_vidgen_workflow.py`:
+- **Candidate Drafting & Closed-Loop QA at `360p` (`$0.02/s`):** All `reference_to_video`, `image_to_video`, `extend`, and `<FIRST_FRAME> + <LAST_FRAME>` interpolation candidates execute on the fast `360p` LDM (`$0.20` per `10s` take), and failed takes (`< 0.80` on `gemini-3.8-flash` AVU) are discarded cheaply.
+- **Concurrent Zero-Reasoning Promotion (`task="upscale"`):** Once a scene's `10s` prefix-trimmed shots pass the Agentic Loop, `_upscale_manifest_shots_async` archives `shot_k_draft_360p.mp4` and upscales all winning `10s` clips in parallel (`--max-parallel-upscales 3`, `total_input_tokens: 0`, `2,896` output tok/s for `360p -> 720p`, `5,792` tok/s for `360p -> 1080p`) before `80ms` scene and master stitching.
+- **Supported Resolution Pairs:** `360p -> 720p | 1080p` and `720p -> 1080p | 4k` (`<= 15s` per clip; single-hop `360p -> 4k` is rejected upfront by `validate_upscale_transition`).

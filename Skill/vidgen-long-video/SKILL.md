@@ -1,11 +1,12 @@
 ---
 name: vidgen-long-video
 description: >-
-  Generates, chains, audits, repairs, and stitches multi-shot and hierarchical multi-scene
+  Generates, chains, audits, repairs, upscales, and stitches multi-shot and hierarchical multi-scene
   long-form commercials (`20s–90s+`, including Mode A parallel #FFFFFF Reference-to-Video,
   Mode B <FIRST_FRAME> I2V chaining, Mode C 5.0s audio-intact video_extend, Mode D hybrid
-  choreography, and `--scenes-json` hierarchical 3x30s scenes with `<FIRST_FRAME>+<LAST_FRAME>`
-  two-frame interpolation self-healing) using direct Google GenAI SDK calls
+  choreography, `--scenes-json` hierarchical multi-act scenes with `<FIRST_FRAME>+<LAST_FRAME>`
+  two-frame interpolation self-healing, and `--draft-mode` `360p` Draft -> Agentic Loop ->
+  standalone `task="upscale"` to `720p`/`1080p`/`4k`) using direct Google GenAI SDK calls
   (gemini-omni-1.2-flash + gemini-3.8-flash with Agentic Video Understanding +
   gemini-nano-banana-2.1 reference plates) and deterministic OpenCV/FFMPEG seam & audio tools—without ADK.
 ---
@@ -102,11 +103,25 @@ uv run "$SKILL_DIR/scripts/run_vidgen_workflow.py" \
   --output-dir ./output/beauty_90s
 ```
 
+### E. Fast Low-Cost Draft Mode (`--draft-mode`: `360p` Draft → Agentic Loop → Standalone `task="upscale"`)
+Pass `--draft-mode` (default `--draft-resolution 360p`) to execute all candidate renders (`R2V`, `i2v_chaining`, `5.0s` `video_extend` + prefix trim), `gemini-3.8-flash` AVU evaluations, Best-of-$K$ retries, and `<FIRST_FRAME>+<LAST_FRAME>` self-heals at **`360p` (`$0.02/s`)**, then concurrently promote **only** the winning `10s` clips via zero-reasoning standalone `task="upscale"` (`total_input_tokens: 0`) to `--resolution 720p` or `1080p` (`--draft-resolution 720p --resolution 4k` for `4K`):
+```bash
+uv run "$SKILL_DIR/scripts/run_vidgen_workflow.py" \
+  --scenes-json path/to/scenes_storyboard.json \
+  --draft-mode \
+  --draft-resolution 360p \
+  --resolution 720p \
+  --max-parallel-scenes 2 \
+  --max-parallel-upscales 3 \
+  --quality-threshold 0.80 \
+  --output-dir ./output/beauty_90s_draft
+```
+
 ### Output Deliverables in `--output-dir`
-- `shot_1.mp4 .. shot_N.mp4`: Best-of-$K$ winning clips (already prefix-trimmed on `video_extend` shots).
+- `shot_1.mp4 .. shot_N.mp4`: Best-of-$K$ winning clips at target `--resolution` (plus `shot_1_draft_360p.mp4 ..` archived alongside when `--draft-mode` is active).
 - `shot_1_first_frame.png`, `shot_1_last_frame.png ..`: Boundary stills for visual inspection or downstream chaining.
-- `output_stitched_<Total>s.mp4`: Final duration-locked, audio-normalized master MP4.
-- `run_manifest.json`: Full per-shot scores, `transcript_wer`, `seam_mae`, `avu_tool_use_tokens`, and `master_seam_report`.
+- `output_stitched_<Total>s.mp4` / `output_master_<Total>s.mp4`: Final duration-locked, audio-normalized master MP4.
+- `run_manifest.json`: Full per-shot scores, `transcript_wer`, `seam_mae`, `avu_tool_use_tokens`, stage timing breakdown (`draft_and_avu_sec`, `interpolation_repair_sec`, `upscale_sec`, `stitch_and_seam_audit_sec`, `elapsed_sec`), and `master_seam_report`.
 
 ---
 
@@ -135,6 +150,13 @@ uv run "$SKILL_DIR/scripts/omni_direct.py" rate-master \
   --video ./output/beauty_extend_30s/output_stitched_30s.mp4 \
   --shots 3 \
   --reference path/to/anchor.png
+
+# 4. Standalone zero-reasoning video upscale (360p -> 720p/1080p, or 720p -> 1080p/4k; <= 15s)
+uv run "$SKILL_DIR/scripts/omni_direct.py" upscale-clip \
+  --video ./output/single_shot_360p.mp4 \
+  --source-resolution 360p \
+  --target-resolution 720p \
+  --output ./output/single_shot_720p.mp4
 ```
 
 ### Deterministic OpenCV & FFMPEG CLI (`scripts/media_ops.py`)
@@ -170,3 +192,5 @@ uv run "$SKILL_DIR/scripts/media_ops.py" stitch --videos shot_1.mp4 shot_2.mp4 s
    - Pacing each `10s` shot's line under `12` words ensures speech completes before `8.0s` (`analyze_clip_audio_tail` flags cutoffs when trailing `0.20s` `trailing_rms_db > -26 dBFS`). Keeping `strip_audio=False` on `<VIDEO_0>` preserves speaker voice timbre across shots; if earlier speech triggers `"unable to process speech edits"`, `omni_direct.py` automatically loops the tail's final `1.4s` ambient room tone before retrying.
 5. **Verify AVU Execution via `avu_tool_use_tokens`:**
    - On `gemini-3.8-flash`, `create_agentic_video_part(..., media_processing="AGENTIC")` triggers server-side `google:load_video` coarse-to-fine inspection while captioned `KEY FRAME A/M/B` PNG stills overcome low-token video spatial quantization for fine SKU/logo checks. Confirm `deterministic_telemetry.avu_tool_use_tokens > 0` in `run_manifest.json` on live runs.
+6. **Standalone Upscale (`task="upscale"`) Resolution Hops & `15s` Trim Rule:**
+   - `gemini-omni-1.2-flash` standalone upscaling (`generation_config={"video_config": {"task": "upscale"}}`, `total_input_tokens: 0`) supports `360p -> 720p | 1080p` and `720p -> 1080p | 4k` (`<= 15s` input duration; single-hop `360p -> 4k` and `1080p -> 4k` are unsupported). In `--draft-mode`, `run_vidgen_workflow.py` always upscales **prefix-trimmed `~10s` winning clips** rather than untrimmed `15s` raw `video_extend` outputs—saving `33%` upscale output tokens while staying safely below the `15.0s` cap.

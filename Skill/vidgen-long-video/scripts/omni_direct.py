@@ -4,7 +4,7 @@
 Wraps `google.genai.Client` directly (supporting both Vertex AI ADC with `location='global'`
 and `GEMINI_API_KEY`) for:
 1. Storyboard generation & single-take prompt optimization via `gemini-3.8-flash`.
-2. Video generation (`reference_to_video`, `<FIRST_FRAME>` I2V, and `extend`) via `gemini-omni-1.2-flash`.
+2. Video generation (`reference_to_video`, `<FIRST_FRAME>` I2V, `extend`, and standalone `upscale`) via `gemini-omni-1.2-flash`.
 3. Observation-first Auto-Rater v2 & Post-Stitch Master Seam Critic via `gemini-3.8-flash`
    with server-side Agentic Video Understanding (`MediaProcessing.AGENTIC` / `google:load_video`).
 """
@@ -64,7 +64,7 @@ class DirectConfig:
     VIDEO_EXTEND_INPUT_SECONDS: float = float(os.getenv("VIDEO_EXTEND_INPUT_SECONDS", "5.0"))
     MEDIA_PROCESSING: str = os.getenv("MEDIA_PROCESSING", "AGENTIC")
     VIDEO_GEN_TIMEOUT_MS: int = int(os.getenv("VIDEO_GEN_TIMEOUT_MS", "600000"))
-    RATER_TIMEOUT_MS: int = int(os.getenv("RATER_TIMEOUT_MS", "120000"))
+    RATER_TIMEOUT_MS: int = int(os.getenv("RATER_TIMEOUT_MS", "240000"))
     MAX_PARALLEL_SHOTS: int = int(os.getenv("MAX_PARALLEL_SHOTS", "3"))
 
 
@@ -776,6 +776,7 @@ def generate_omni_clip_direct(
         DirectConfig.VIDEO_EXTEND_MODEL if effective_task == "extend" else DirectConfig.VIDEO_GEN_MODEL
     )
 
+    norm_resolution = str(resolution or "720p").strip().lower()
     create_kwargs: Dict[str, Any] = {
         "model": target_model,
         "input": payload,
@@ -787,7 +788,14 @@ def generate_omni_clip_direct(
             "type": "video",
             "aspect_ratio": aspect_ratio,
             "duration": f"{eff_duration}s",
-            "resolution": resolution,
+            "resolution": norm_resolution,
+        }
+    elif effective_task == "extend":
+        create_kwargs["generation_config"] = {"video_config": {"task": "extend"}}
+        create_kwargs["response_format"] = {
+            "type": "video",
+            "duration": f"{eff_duration}s",
+            "resolution": norm_resolution,
         }
     elif effective_task:
         create_kwargs["generation_config"] = {"video_config": {"task": effective_task}}
@@ -797,7 +805,7 @@ def generate_omni_clip_direct(
             "type": "video",
             "aspect_ratio": aspect_ratio,
             "duration": f"{eff_duration}s",
-            "resolution": resolution,
+            "resolution": norm_resolution,
         }
 
     def _invoke_safe(kwargs_dict: Dict[str, Any]) -> Any:
@@ -880,6 +888,103 @@ def generate_omni_clip_direct(
     video_bytes = _extract_video_bytes_from_interaction(interaction)
     if not video_bytes:
         raise RuntimeError("Gemini Omni returned an interaction without video bytes (check regional/input limits).")
+    return video_bytes
+
+
+SUPPORTED_UPSCALE_TRANSITIONS: Dict[str, tuple] = {
+    "360p": ("720p", "1080p"),
+    "720p": ("1080p", "4k"),
+}
+
+
+def validate_upscale_transition(source_resolution: str, target_resolution: str) -> tuple:
+    """Validates GA `gemini-omni-1.2-flash` standalone video upscale hops (`360p->720p/1080p`, `720p->1080p/4k`)."""
+    src = str(source_resolution or "").strip().lower()
+    tgt = str(target_resolution or "").strip().lower()
+    allowed = SUPPORTED_UPSCALE_TRANSITIONS.get(src)
+    if not allowed or tgt not in allowed:
+        raise ValueError(
+            f"Unsupported standalone upscale transition '{source_resolution}' -> '{target_resolution}'. "
+            "Supported GA transitions: 360p -> 720p | 1080p, and 720p -> 1080p | 4k "
+            "(single-hop 360p -> 4k and 1080p -> 4k are not supported)."
+        )
+    return src, tgt
+
+
+def _extract_interaction_usage_telemetry(interaction: Any) -> Dict[str, Any]:
+    """Extracts token usage metadata from an Interactions API response (`total_input_tokens: 0` on `task='upscale'`)."""
+    telemetry: Dict[str, Any] = {}
+    usage = getattr(interaction, "usage", None) or getattr(interaction, "usage_metadata", None)
+    if usage is None and hasattr(interaction, "model_dump") and callable(interaction.model_dump):
+        try:
+            dumped = interaction.model_dump()
+            if isinstance(dumped, dict):
+                usage = dumped.get("usage") or dumped.get("usage_metadata")
+        except Exception:
+            usage = None
+    if usage is None:
+        return telemetry
+
+    for key in (
+        "total_input_tokens",
+        "total_output_tokens",
+        "total_thought_tokens",
+        "total_tokens",
+        "prompt_token_count",
+        "candidates_token_count",
+    ):
+        val = usage.get(key) if isinstance(usage, dict) else getattr(usage, key, None)
+        if val is not None:
+            telemetry[key] = int(val)
+    return telemetry
+
+
+def upscale_omni_clip_direct(
+    video_bytes_or_b64: Any,
+    target_resolution: str = "720p",
+    source_resolution: str = "360p",
+    model_override: Optional[str] = None,
+    return_telemetry: bool = False,
+    client: Optional[genai.Client] = None,
+) -> Any:
+    """Upscales an MP4 clip (<= 15s) via standalone `task='upscale'` on `gemini-omni-1.2-flash` (`total_input_tokens: 0`)."""
+    src_res, tgt_res = validate_upscale_transition(source_resolution, target_resolution)
+    if isinstance(video_bytes_or_b64, (bytes, bytearray)):
+        if len(video_bytes_or_b64) == 0:
+            raise ValueError("Cannot upscale empty video bytes.")
+        video_b64 = base64.b64encode(bytes(video_bytes_or_b64)).decode("utf-8")
+    elif isinstance(video_bytes_or_b64, str) and video_bytes_or_b64.strip():
+        video_b64 = video_bytes_or_b64.strip()
+    else:
+        raise ValueError("Provide non-empty MP4 bytes or base64 string to upscale_omni_clip_direct.")
+
+    active_client = client or get_direct_genai_client(timeout_ms=DirectConfig.VIDEO_GEN_TIMEOUT_MS)
+    create_kwargs: Dict[str, Any] = {
+        "model": model_override or DirectConfig.VIDEO_GEN_MODEL,
+        "input": [{"type": "video", "data": video_b64, "mime_type": "video/mp4"}],
+        "generation_config": {"video_config": {"task": "upscale"}},
+        "response_format": {"type": "video", "resolution": tgt_res},
+        "timeout": float(DirectConfig.VIDEO_GEN_TIMEOUT_MS) / 1000.0,
+    }
+
+    t_up0 = time.monotonic()
+    interaction = _call_with_backoff_sync(active_client.interactions.create, **create_kwargs)
+    upscale_sec = round(time.monotonic() - t_up0, 2)
+
+    video_bytes = _extract_video_bytes_from_interaction(interaction)
+    if not video_bytes:
+        raise RuntimeError(
+            f"Gemini Omni standalone upscale ({src_res} -> {tgt_res}) returned no video bytes."
+        )
+
+    telemetry: Dict[str, Any] = {
+        "source_resolution": src_res,
+        "target_resolution": tgt_res,
+        "upscale_sec": upscale_sec,
+        **_extract_interaction_usage_telemetry(interaction),
+    }
+    if return_telemetry:
+        return video_bytes, telemetry
     return video_bytes
 
 
@@ -1223,6 +1328,15 @@ def _build_cli_parser() -> argparse.ArgumentParser:
     p_master.add_argument("--dialogue", default=None)
     p_master.add_argument("--reference", default=None)
 
+    p_up = sub.add_parser(
+        "upscale-clip",
+        help="Upscale an MP4 clip (<= 15s) via standalone task='upscale' on gemini-omni-1.2-flash.",
+    )
+    p_up.add_argument("--video", required=True, help="Input draft MP4 path (360p or 720p, <= 15s).")
+    p_up.add_argument("--output", required=True, help="Output upscaled MP4 path.")
+    p_up.add_argument("--target-resolution", default="720p", choices=["720p", "1080p", "4k"])
+    p_up.add_argument("--source-resolution", default="360p", choices=["360p", "720p"])
+
     return parser
 
 
@@ -1305,6 +1419,31 @@ def main(argv: Optional[List[str]] = None) -> int:
             )
         )
         print(json.dumps(res, indent=2))
+        return 0
+
+    if args.command == "upscale-clip":
+        with open(args.video, "rb") as fp:
+            in_bytes = fp.read()
+        up_bytes, telemetry = upscale_omni_clip_direct(
+            video_bytes_or_b64=in_bytes,
+            target_resolution=args.target_resolution,
+            source_resolution=args.source_resolution,
+            return_telemetry=True,
+        )
+        os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)
+        with open(args.output, "wb") as fp:
+            fp.write(up_bytes)
+        print(
+            json.dumps(
+                {
+                    "status": "ok",
+                    "output": os.path.abspath(args.output),
+                    "bytes": len(up_bytes),
+                    **telemetry,
+                },
+                indent=2,
+            )
+        )
         return 0
 
     return 1

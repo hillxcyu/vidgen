@@ -489,10 +489,57 @@ Use the standalone ADK-free skill (`Skill/vidgen-long-video/`)—extending it na
    - **Stage C — Fine-Grained Stage Timing Telemetry (`run_manifest.json`):**
      - Record `draft_mode`, `draft_resolution`, `draft_and_avu_sec`, `interpolation_repair_sec`, `upscale_sec`, `stitch_and_seam_audit_sec`, and `elapsed_sec` at both scene and multi-scene levels (plus per-shot `render_sec`, `avu_sec`, `upscale_sec`).
 
-### Confirmed Step-by-Step Plan
-- [ ] **Step 1 — Upgrade `Skill/vidgen-long-video` (`omni_direct.py`, `run_vidgen_workflow.py`, `SKILL.md`, `references/storyboard_spec.md`) & Unit Tests:**
+### Confirmed Step-by-Step Plan (COMPLETED)
+- [x] **Step 1 — Upgrade `Skill/vidgen-long-video` (`omni_direct.py`, `run_vidgen_workflow.py`, `SKILL.md`, `references/storyboard_spec.md`) & Unit Tests:**
   - Implement `upscale_omni_clip_direct` (`upscale-clip` subcommand), `--draft-mode` orchestration + stage timing telemetry in `run_vidgen_workflow.py`, update skill docs, and verify `100%` pass on `uv run --no-sync pytest tests/unit/test_standalone_skill.py -v` + live `10s` `360p -> 720p` smoke check.
-- [ ] **Step 2 — Run the 4-Act `90s` Beauty Commercial in Draft Mode via `.agents/skills/vidgen-long-video/scripts/run_vidgen_workflow.py`:**
+- [x] **Step 2 — Run the 4-Act `90s` Beauty Commercial in Draft Mode via `.agents/skills/vidgen-long-video/scripts/run_vidgen_workflow.py`:**
   - Execute the 4-act `90s` beauty storyboard (`scenes_storyboard.json`, `9 × 10s` shots, `--max-parallel-scenes 2`, `--quality-threshold 0.80`) with `--draft-mode --resolution 720p` into `output/retail_uc3_beauty_arc_90s_draft/` (leaving `output/retail_uc3_beauty_arc_90s/` untouched).
-- [ ] **Step 3 — Visual Verification (`ffprobe` + `3×3` Contact Sheet) & Total Generation Speed / Cost / Quality Comparison Report:**
+- [x] **Step 3 — Visual Verification (`ffprobe` + `3×3` Contact Sheet) & Total Generation Speed / Cost / Quality Comparison Report:**
   - Verify `1280x720 @ 24fps` + intact stereo AAC audio via `ffprobe`, inspect `contact_sheet_arc_90s_draft.png` via `read_file`, log full CLI outputs & stage timings in `ACTION.md`, and present the head-to-head total speed, per-stage breakdown, retry/heal count, AVU quality score, and cost comparison against our recorded `720p` baseline logs.
+
+
+---
+
+## [2026-11-09 08:07 UTC] Stage 1: Confirmed Final Plan (Run 13) — Add 4-Act `90s` Beauty Draft Mode Speed, Quality & Cost Benchmark to Bilingual GTM Decks (`EN` & `ZH-CN`, `19` Slides Total)
+
+### Confirmed Decisions (`ask_question` `A1` & `A2`)
+- **Slide Presentation Strategy (`A1`):** **Both** — (1) enrich **Slide 17 (`17 / 19`, `v18_s17_draft_upscale_{en,zh}`)** in-place with our live measured per-clip latencies (`24.1s` R2V `3.4×` faster, `52.0s` Extend `2.1×` faster, `41.0s` `task="upscale"` `0` input tokens) & updated Unit Economics box, **AND** (2) insert a dedicated **Benchmark Proof Slide (`Slide 18 / 19`, `v19_s18_draft_bench_{en,zh}`)** immediately after Slide 17 pairing the `3×3` Draft-Mode Contact Sheet + clickable MP4 links on the left with the empirical Speed, Per-Stage Latency & Cost Comparison Table on the right (shifting Closing GTM `v12_s11_gtm_{en,zh}` to `Slide 19 / 19` and updating all `XX / 18` counters to `XX / 19`).
+- **Stage 1 Plan Approval (`A2`):** Approved -> proceed to Stage 2 (`DEFINE.md`).
+
+### Goal & Scope
+- Upload the new Draft Mode 4-Act `90.33s` deliverables (`output_master_90s.mp4`, `act_{1..4}_*.mp4`, `act_2_sku_hero/shot_1_draft_360p.mp4` + `act_2_sku_hero/shot_1.mp4` `360p vs. 720p` pair, clean `contact_sheet_arc_90s_draft.png`, and `run_manifest.json`) to `gs://vital-octagon-19612-vidgen-showcase/showcase/retail_uc3_beauty_arc_90s_draft/` so clickable links work directly from Google Slides.
+- Enrich `Slide 17 / 19` and insert `Slide 18 / 19` across both **English (`1b5jlgCWk3Q2LFr5tDYAZZps6Pw_N2_EaIfbAwk9M_3A`)** and **Simplified Chinese (`12zy4XxPt7sllLsNF3nMIroPRhZSvCGsdEW3UwKnAdj0`)** GTM decks, sync all `02 / 19 .. 19 / 19` footers + tripartite speaker notes, and pass the 4-Quadrant Active Vision Audit.
+
+### Confirmed Step-by-Step Plan (COMPLETED)
+- [x] **Step 1 — Upload Draft-Mode 4-Act `90s` Assets & Clean `3×3` Contact Sheet to GCS (`vital-octagon-19612-vidgen-showcase`):**
+  - Render a clean zero-header-text `3×3` contact sheet (`H1.1..C4.2` matching Slide 16's clean aesthetic) and upload `output_master_90s.mp4`, all 4 act MP4s, `act_2_sku_hero/shot_1_draft_360p.mp4` (`360p` draft) + `act_2_sku_hero/shot_1.mp4` (`720p` upscaled), `contact_sheet_arc_90s_draft.png`, and `run_manifest.json` to `gs://vital-octagon-19612-vidgen-showcase/showcase/retail_uc3_beauty_arc_90s_draft/`.
+- [x] **Step 2 — Enrich `Slide 17 / 19` & Insert Dedicated Benchmark Slide `18 / 19` Across `EN` & `ZH-CN` Decks:**
+  - Rebuild `v18_s17_draft_upscale_{en,zh}` (`17 / 19`) with live measured latencies (`24.1s` R2V / `52.0s` Extend / `41.0s` Upscale) and insert `v19_s18_draft_bench_{en,zh}` at `insertionIndex = 17` (`18 / 19`, shifting Closing GTM to `19 / 19`), embedding `contact_sheet_arc_90s_draft.png`, clickable MP4 buttons (`90.33s` Draft Master, `360p` Draft vs. `720p` Upscaled Bottle Macro pair, High-Res Contact Sheet), 3 top KPI pills (`3.4×` R2V · `~1.5×` Total Speedup · `3.5×–5×` Lower Retry Waste), and the 7-row empirical comparison table, syncing all `XX / 19` footers & tripartite speaker notes.
+- [x] **Step 3 — Blocking 4-Quadrant Active Vision Audit (`Slides 17, 18, 19` in `EN` & `ZH-CN`) & URL Deliverable Sync:**
+  - Export PNG thumbnails (`en_slide-17.png`, `en_slide-18.png`, `en_slide-19.png`, `zh_slide-17.png`, `zh_slide-18.png`, `zh_slide-19.png`) via `gslides readonly export-thumbnail`, inspect via `read_file` to verify single-line headlines, clean padding, working links, and zero text overflow/collision, and create/update `.url.json` deliverable bookmarks (`UserFacing: true`).
+
+
+---
+
+## [2026-11-09 08:57 UTC] Stage 1: Confirmed Final Plan (Run 14) — Update Documentation (`README.md`, `doc/features.md`, `interaction_explained.md`), Run Full `72`-Test Suite, Commit & Push to `origin/main`
+
+### Confirmed Decisions (`ask_question` `A1` & `A2`)
+- **Documentation Scope (`A1`):** Update `README.md`, `doc/features.md`, and `interaction_explained.md`, run all `72` unit & integration tests, commit to `main`, and push to `origin/main`.
+- **Stage 1 Plan Approval (`A2`):** Approved -> proceed to Stage 2 (`DEFINE.md`).
+
+### Audit of Outdated Repository Docs & Current Git State
+- **Git Branch & Modified Files (`main` tracking `origin/main` `git@github.com:hillxcyu/vidgen.git`):**
+  - `Skill/vidgen-long-video/SKILL.md`, `Skill/vidgen-long-video/references/storyboard_spec.md`, `Skill/vidgen-long-video/scripts/omni_direct.py`, `Skill/vidgen-long-video/scripts/run_vidgen_workflow.py`, `tests/unit/test_standalone_skill.py`, plus `PLAN.md`, `DEFINE.md`, `ACTION.md`.
+- **Documentation Gaps Identified:**
+  1. **`README.md`:** Still shows early I2V-only architecture & stale `23/23 Passed` badge (now **`72/72` unit + integration tests**). Missing **Dual Delivery Tracks** (`Hosted ADK 2.0 Web Studio` Modes A/B/C/Hybrid + Auto-Rater v2 + Master Seam Critic **and** `Portable Zero-ADK Skill` in `Skill/vidgen-long-video` / `.agents/skills/vidgen-long-video` with `--scenes-json` `90s+` multi-act orchestration, `<FIRST_FRAME>+<LAST_FRAME>` self-healing, `--resume`, and `--draft-mode` `360p -> 3.8 AVU -> standalone task="upscale"`), plus `Skill/` in the repository tree.
+  2. **`doc/features.md`:** Still lists only 12 early prototype features — missing Modes A/B/C/Hybrid (`#FFFFFF` `reference_to_video`, `5.0s` audio-intact `video_extend` + OpenCV pixel-MAE prefix trim, `80ms` `xfade`/`acrossfade`), Observation-First Auto-Rater v2 (`gemini-3.8-flash` `MediaProcessing.AGENTIC`, `WER` + `trailing_rms_db` guardrails, Best-of-$K$, Master Seam Critic), and the Standalone Zero-ADK Skill (`--scenes-json`, `<FIRST_FRAME>+<LAST_FRAME>` auto-heal, `--draft-mode` `task="upscale"`).
+  3. **`interaction_explained.md`:** Still cites legacy `gemini-3.7-flash` and `gemini-omni-1.1-flash-preview` instead of GA `gemini-3.8-flash` (`MediaProcessing.AGENTIC`) and `gemini-omni-1.2-flash` (`R2V`, `<FIRST_FRAME>`, `5.0s` `extend`, `<FIRST_FRAME>+<LAST_FRAME>`, and `task="upscale"`).
+
+### Confirmed Step-by-Step Plan
+- [ ] **Step 1 — Refresh Repository Documentation (`README.md`, `doc/features.md`, `interaction_explained.md`):**
+  - Update `README.md` (`72/72` Pytest badge, Dual-Track ADK 2.0 Studio + Portable Zero-ADK Skill overview, Modes A/B/C/Hybrid, Auto-Rater v2 `MediaProcessing.AGENTIC`, `--scenes-json` `90s+` auto-healing, `--draft-mode` `360p -> AVU -> task="upscale"` quickstart, and updated repo tree).
+  - Update `doc/features.md` and `interaction_explained.md` to reflect GA `gemini-omni-1.2-flash`, `gemini-3.8-flash` (`MediaProcessing.AGENTIC`), Modes A/B/C/Hybrid, Auto-Rater v2, and Draft Mode upscaling (keeping all public-repo docs free of internal corp URLs or secrets).
+- [ ] **Step 2 — Run Full Pre-Commit Test Suite (`72` Unit + Integration Tests) & Hygiene Audit:**
+  - Execute `uv run --no-sync pytest tests/unit tests/integration -v` and confirm `72/72` pass (`100%`), plus inspect `git diff --staged` to verify zero untracked media/secrets.
+- [ ] **Step 3 — Commit with Comprehensive Commit Message & Push to `origin/main`:**
+  - Stage all updated skill, test, doc, and workflow files, create a detailed commit (`Done by: gemini-cli`, `TEST=uv run pytest tests/unit tests/integration`, problem & solution summary per `<RULE[user_global]>`), and push cleanly to `origin main`.
