@@ -1,0 +1,6 @@
+# Standalone dependencies for vidgen-long-video skill (zero google-adk / zero cloud storage deps)
+# System prerequisites: ffmpeg and ffprobe on PATH, Python >= 3.10
+google-genai>=2.21.0
+opencv-python-headless>=4.8.0
+numpy>=1.24.0
+pydantic>=2.6.0
