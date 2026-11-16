@@ -44,7 +44,16 @@ def encode_image_file_b64(image_path: str) -> str:
 
 
 def decode_valid_image_b64(b64_str: Optional[str]) -> Optional[Tuple[bytes, str]]:
-    """Decodes a base64 image string and validates PNG/JPEG/WebP magic bytes."""
+    """Decodes a base64 image string and validates PNG/JPEG/WebP magic bytes.
+
+    Args:
+        b64_str: Base64-encoded image payload or `data:image/...;base64,...` URI.
+
+    Returns:
+        `(image_bytes, mime_type)` when valid PNG, JPEG, or WebP bytes are decoded;
+        `None` if `b64_str` is empty, invalid base64, shorter than 12 bytes, or has
+        an unrecognized image header.
+    """
     if not b64_str or not isinstance(b64_str, str):
         return None
     cleaned = b64_str.strip()
@@ -78,6 +87,18 @@ def get_video_duration(video_path: str) -> float:
     if fps <= 0 or frames <= 0:
         return 0.0
     return float(frames / fps)
+
+
+def get_video_height(video_path: str) -> int:
+    """Returns the pixel height of an MP4 video file via OpenCV, or 0 if unreadable."""
+    if not os.path.exists(video_path) or os.path.getsize(video_path) == 0:
+        return 0
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        return 0
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
+    cap.release()
+    return height
 
 
 def extract_first_frame(video_path: str, output_image_path: Optional[str] = None) -> str:
@@ -168,7 +189,7 @@ def create_agentic_video_part(
     video_path_or_uri: str,
     video_bytes: Optional[bytes] = None,
     media_processing: str = "AGENTIC",
-) -> Any:
+) -> "types.Part":
     """Builds a Google GenAI Part with MediaProcessing.AGENTIC (triggers server-side google:load_video on Gemini 3.8 Flash)."""
     from google.genai import types
 
@@ -318,14 +339,12 @@ def trim_video_prefix(
     if not video_bytes or trim_seconds <= 0:
         return video_bytes
 
-    in_tmp = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
-    out_tmp = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
-    in_path, out_path = in_tmp.name, out_tmp.name
-    in_tmp.write(video_bytes)
-    in_tmp.close()
-    out_tmp.close()
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        in_path = os.path.join(tmp_dir, "in.mp4")
+        out_path = os.path.join(tmp_dir, "out.mp4")
+        with open(in_path, "wb") as fp:
+            fp.write(video_bytes)
 
-    try:
         total_dur = get_video_duration(in_path)
         threshold = (
             expected_extension_seconds + (0.5 * trim_seconds)
@@ -373,10 +392,6 @@ def trim_video_prefix(
             with open(out_path, "rb") as fp:
                 return fp.read()
         return video_bytes
-    finally:
-        for p in (in_path, out_path):
-            if os.path.exists(p):
-                os.remove(p)
 
 
 def detect_seam_jump_cut(
@@ -446,6 +461,27 @@ def detect_r2v_first_frame_lock(
     return mae < mae_threshold, round(mae, 2)
 
 
+_WORD_RE = re.compile(r"[a-z0-9']+")
+
+
+def _rms_db(chunk: Tuple[int, ...]) -> float:
+    """Computes RMS energy in dBFS for 16-bit signed PCM samples."""
+    if not chunk:
+        return -90.0
+    mean_sq = sum(s * s for s in chunk) / float(len(chunk))
+    rms = math.sqrt(mean_sq) / 32768.0
+    if rms <= 1e-9:
+        return -90.0
+    return round(20.0 * math.log10(rms), 1)
+
+
+def _tokenize_words(text: Optional[str]) -> List[str]:
+    """Extracts lowercase alphanumeric word tokens for WER computation."""
+    if not text:
+        return []
+    return _WORD_RE.findall(text.lower())
+
+
 def analyze_clip_audio_tail(video_path: str, tail_sec: float = 0.20) -> Dict[str, Any]:
     """Computes clip duration, mid-shot RMS dBFS, trailing 0.20s RMS dBFS, and speech-cutoff detection."""
     clip_duration = round(get_video_duration(video_path), 2)
@@ -489,15 +525,6 @@ def analyze_clip_audio_tail(video_path: str, tail_sec: float = 0.20) -> Dict[str
         if clip_duration <= 0.0:
             telemetry["clip_duration_sec"] = round(n_frames / float(sr), 2)
 
-        def _rms_db(chunk: Tuple[int, ...]) -> float:
-            if not chunk:
-                return -90.0
-            mean_sq = sum(s * s for s in chunk) / float(len(chunk))
-            rms = math.sqrt(mean_sq) / 32768.0
-            if rms <= 1e-9:
-                return -90.0
-            return round(20.0 * math.log10(rms), 1)
-
         tail_count = max(1, int(round(tail_sec * sr)))
         trailing_db = _rms_db(samples[-tail_count:])
         mid_start = min(len(samples), int(round(0.5 * sr)))
@@ -523,16 +550,11 @@ def compute_transcript_metrics(
     heard_transcript: Optional[str],
 ) -> Dict[str, Optional[float]]:
     """Computes word-level Levenshtein WER and recall word-overlap between expected and heard dialogue."""
-    def _tokenize(text: Optional[str]) -> List[str]:
-        if not text:
-            return []
-        return re.findall(r"[a-z0-9']+", text.lower())
-
-    ref_words = _tokenize(expected_dialogue)
+    ref_words = _tokenize_words(expected_dialogue)
     if not ref_words:
         return {"transcript_wer": None, "transcript_word_overlap": None}
 
-    hyp_words = _tokenize(heard_transcript)
+    hyp_words = _tokenize_words(heard_transcript)
     if not hyp_words:
         return {"transcript_wer": 1.0, "transcript_word_overlap": 0.0}
 
@@ -1080,9 +1102,8 @@ def _build_cli_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: Optional[List[str]] = None) -> int:
-    parser = _build_cli_parser()
-    args = parser.parse_args(argv)
+def _dispatch_cli_command(args: argparse.Namespace) -> int:
+    """Executes the selected media_ops CLI subcommand."""
 
     if args.command == "extract-frame":
         fn = extract_first_frame if args.position == "first" else extract_last_frame
@@ -1218,6 +1239,13 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 0
 
     return 1
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+    """CLI entrypoint for standalone OpenCV and FFMPEG media utilities."""
+    parser = _build_cli_parser()
+    args = parser.parse_args(argv)
+    return _dispatch_cli_command(args)
 
 
 if __name__ == "__main__":

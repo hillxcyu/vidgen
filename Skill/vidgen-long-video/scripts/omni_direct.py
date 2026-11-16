@@ -31,12 +31,10 @@ import sys
 import tempfile
 import time
 from typing import Any, Dict, List, Optional, Tuple
-import urllib.error
-import urllib.request
 
 from google import genai
 from google.genai import types
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
@@ -234,7 +232,23 @@ def get_direct_genai_client(timeout_ms: int = DirectConfig.VIDEO_GEN_TIMEOUT_MS)
 
 
 class VisionProfileSpec(BaseModel):
-    """Project-wide cinematic lookbook locking visual grammar, palette, lighting, and acoustic direction."""
+    """Project-wide cinematic lookbook locking visual grammar, palette, lighting, and acoustic direction.
+
+    Attributes:
+        project_title: Short campaign or film title.
+        creative_thesis: Core emotional/narrative thesis.
+        aspect_ratio: Frame aspect ratio ('16:9' or '9:16').
+        visual_motif: Recurring visual motif.
+        primary_palette: 3-color palette lock.
+        forbidden_colors: Colors strictly excluded from frames.
+        lighting_ratio: Lighting contrast ratio.
+        lens_language: Focal length progression across acts.
+        camera_motion_grammar: Allowed camera motion vocabulary.
+        style_anchor: Verbatim style lock appended to image plates and video prompts.
+        audio_direction: Acoustic and TTS/voiceover direction.
+        default_tts_voice: Default Gemini 3.8 TTS voice.
+        default_tts_style: Default speaking delivery style.
+    """
 
     project_title: str = Field(default="Untitled Commercial", description="Short campaign or film title.")
     creative_thesis: str = Field(default="", description="Core emotional/narrative thesis.")
@@ -267,6 +281,31 @@ class VisionProfileSpec(BaseModel):
     )
     default_tts_voice: str = Field(default="Kore", description="Default Gemini 3.8 TTS voice.")
     default_tts_style: str = Field(default="", description="Default speaking delivery style.")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_legacy_aliases(cls, data: Any) -> Any:
+        """Accepts `storyboard_spec.md` alias keys (`color_palette`, `lighting_motivation`, etc.)."""
+        if not isinstance(data, dict):
+            return data
+        normalized = dict(data)
+        if "primary_palette" not in normalized and "color_palette" in normalized:
+            normalized["primary_palette"] = normalized["color_palette"]
+        if "lighting_ratio" not in normalized:
+            lighting_parts = [
+                str(normalized[k]).strip()
+                for k in ("lighting_motivation", "contrast_ratio")
+                if normalized.get(k)
+            ]
+            if lighting_parts:
+                normalized["lighting_ratio"] = " | ".join(lighting_parts)
+        if "lens_language" not in normalized and "primary_focal_lengths_mm" in normalized:
+            focal = normalized["primary_focal_lengths_mm"]
+            if isinstance(focal, list):
+                normalized["lens_language"] = " -> ".join(f"{str(f).rstrip('m')}mm" for f in focal)
+            elif focal:
+                normalized["lens_language"] = str(focal)
+        return normalized
 
 
 class StoryboardEntrySpec(BaseModel):
@@ -360,7 +399,7 @@ class CriterionEvaluation(BaseModel):
     comments: str = Field(default="Meets criteria", description="Specific observation.")
 
 
-QUALITY_EVALUATION_PROPERTY_ORDER: List[str] = [
+QUALITY_EVALUATION_PROPERTY_ORDER: tuple[str, ...] = (
     "opening_environment_observed",
     "heard_transcript",
     "speech_end_sec",
@@ -370,7 +409,7 @@ QUALITY_EVALUATION_PROPERTY_ORDER: List[str] = [
     "score",
     "verdict",
     "feedback",
-]
+)
 
 
 class QualityEvaluationResult(BaseModel):
@@ -396,7 +435,7 @@ class SeamWindowObservation(BaseModel):
     notes: str = Field(default="Clean visual and acoustic transition.")
 
 
-MASTER_SEAM_PROPERTY_ORDER: List[str] = [
+MASTER_SEAM_PROPERTY_ORDER: tuple[str, ...] = (
     "seam_observations",
     "voice_timbre_consistent",
     "loudness_continuity_ok",
@@ -404,7 +443,7 @@ MASTER_SEAM_PROPERTY_ORDER: List[str] = [
     "score",
     "verdict",
     "feedback",
-]
+)
 
 
 class MasterSeamEvaluationResult(BaseModel):
@@ -894,6 +933,18 @@ def generate_reference_image_direct(
 
     Automatically skips `part.thought == True` draft thought-images so only the final rendered
     high-resolution image bytes are returned.
+
+    Args:
+        prompt: Text prompt describing the target frame or scene plate.
+        reference_images_b64: Optional list of up to 4 base64-encoded reference images.
+        aspect_ratio: Output frame aspect ratio (e.g. ``"16:9"`` or ``"9:16"``).
+        client: Optional pre-configured ``genai.Client``.
+
+    Returns:
+        Raw PNG/JPEG bytes of the final non-thought generated image.
+
+    Raises:
+        RuntimeError: If the image generation response contains no non-thought image bytes.
     """
     active_client = client or get_direct_genai_client(timeout_ms=DirectConfig.RATER_TIMEOUT_MS)
     contents: List[Any] = []
@@ -1260,49 +1311,22 @@ def _extract_video_bytes_from_interaction(interaction: Any) -> Optional[bytes]:
     return None
 
 
-def generate_omni_clip_direct(
+def _build_omni_request_kwargs(
+    *,
     prompt: str,
-    input_image_b64: Optional[str] = None,
-    end_image_b64: Optional[str] = None,
-    input_video_b64: Optional[str] = None,
-    task: Optional[str] = None,
-    model_override: Optional[str] = None,
-    reference_images_b64: Optional[List[str]] = None,
-    reference_audio_b64: Optional[List[str]] = None,
-    voice_transcript: Optional[str] = None,
-    aspect_ratio: str = "16:9",
-    resolution: str = "720p",
-    duration: int = 10,
-    client: Optional[genai.Client] = None,
-) -> bytes:
-    """Generates a single MP4 clip directly via `gemini-omni-1.2-flash` (`interactions.create`)."""
-    active_client = client or get_direct_genai_client(timeout_ms=DirectConfig.VIDEO_GEN_TIMEOUT_MS)
-    is_two_frame_interp = bool(input_image_b64 and end_image_b64)
-    ref_imgs = None if (input_image_b64 or end_image_b64 or input_video_b64) else reference_images_b64
-    if task:
-        effective_task = task
-    elif input_image_b64 and not end_image_b64 and not input_video_b64:
-        effective_task = "image_to_video"
-    elif ref_imgs and len(ref_imgs) > 0:
-        effective_task = "reference_to_video"
-    else:
-        effective_task = None
-
-    # Per GRoot omni_request_validation.cc, AudioContent is valid on REFERENCE_TO_VIDEO and TASK_UNSPECIFIED (None),
-    # and rejected on IMAGE_TO_VIDEO (unless EnableOmniImageToVideoAudioRef) or EXTEND.
-    ref_auds = (
-        [a for a in reference_audio_b64[:5] if a]
-        if (reference_audio_b64 and effective_task in ("reference_to_video", None))
-        else []
-    )
-
-    eff_duration = resolve_omni_shot_duration(
-        requested_sec=duration,
-        default_sec=10,
-        task_or_mode=effective_task,
-        is_two_frame_interp=is_two_frame_interp,
-    )
-
+    input_image_b64: Optional[str],
+    end_image_b64: Optional[str],
+    input_video_b64: Optional[str],
+    effective_task: Optional[str],
+    model_override: Optional[str],
+    ref_imgs: Optional[List[str]],
+    ref_auds: List[str],
+    voice_transcript: Optional[str],
+    aspect_ratio: str,
+    resolution: str,
+    eff_duration: int,
+) -> Tuple[Dict[str, Any], List[Dict[str, Any]], str]:
+    """Builds `interactions.create` kwargs, multimodal payload, and target model."""
     formatted_prompt = build_omni_control_string(
         prompt=prompt,
         input_image_b64=input_image_b64,
@@ -1371,66 +1395,163 @@ def generate_omni_clip_direct(
             "duration": f"{eff_duration}s",
             "resolution": norm_resolution,
         }
+    return create_kwargs, payload, target_model
 
-    def _invoke_safe(kwargs_dict: Dict[str, Any]) -> Any:
-        try:
-            return _call_with_backoff_sync(active_client.interactions.create, **kwargs_dict)
-        except Exception as err:
-            err_l = str(err).lower()
-            if effective_task == "extend" and input_video_b64 and (
-                "speech edit" in err_l or "unable to process speech" in err_l
-            ):
-                amb_b64 = _sanitize_tail_audio_for_speech_edit(input_video_b64, strip_all=False)
-                amb_payload = [payload[0], {"type": "video", "data": amb_b64, "mime_type": "video/mp4"}] + payload[2:]
-                try:
-                    return _call_with_backoff_sync(
-                        active_client.interactions.create, **{**kwargs_dict, "input": amb_payload}
-                    )
-                except Exception as err2:
-                    if "speech edit" in str(err2).lower() or "unable to process speech" in str(err2).lower():
-                        sil_b64 = _sanitize_tail_audio_for_speech_edit(input_video_b64, strip_all=True)
-                        sil_payload = [
-                            payload[0],
-                            {"type": "video", "data": sil_b64, "mime_type": "video/mp4"},
-                        ] + payload[2:]
-                        return _call_with_backoff_sync(
-                            active_client.interactions.create, **{**kwargs_dict, "input": sil_payload}
-                        )
-                    err = err2
-                    err_l = str(err2).lower()
 
-            if voice_transcript and (
-                "safety violations" in err_l
-                or "harmful content" in err_l
-                or "speech edit" in err_l
-                or "unable to process speech" in err_l
-            ):
-                in_vid = (
-                    _sanitize_tail_audio_for_speech_edit(input_video_b64, strip_all=True)
-                    if (effective_task == "extend" and input_video_b64 and ("speech edit" in err_l or "unable to process speech" in err_l))
-                    else input_video_b64
-                )
-                fb_prompt = build_omni_control_string(
-                    prompt=prompt,
-                    input_image_b64=input_image_b64,
-                    end_image_b64=end_image_b64,
-                    input_video_b64=in_vid,
-                    task=effective_task,
-                    reference_images_b64=ref_imgs,
-                    voice_transcript=None,
-                    aspect_ratio=aspect_ratio,
-                    resolution=resolution,
-                    duration=eff_duration,
-                )
-                fb_tail = [{"type": "video", "data": in_vid, "mime_type": "video/mp4"}] + payload[2:] if in_vid else payload[1:]
-                return _call_with_backoff_sync(
-                    active_client.interactions.create,
-                    **{**kwargs_dict, "input": [{"type": "text", "text": fb_prompt}] + fb_tail},
-                )
-            raise
-
+def _invoke_omni_with_fallbacks(
+    *,
+    active_client: genai.Client,
+    kwargs_dict: Dict[str, Any],
+    payload: List[Dict[str, Any]],
+    prompt: str,
+    input_image_b64: Optional[str],
+    end_image_b64: Optional[str],
+    input_video_b64: Optional[str],
+    effective_task: Optional[str],
+    ref_imgs: Optional[List[str]],
+    voice_transcript: Optional[str],
+    aspect_ratio: str,
+    resolution: str,
+    eff_duration: int,
+) -> Any:
+    """Calls `interactions.create` with tail-audio sanitization and safety fallbacks."""
     try:
-        interaction = _invoke_safe(create_kwargs)
+        return _call_with_backoff_sync(active_client.interactions.create, **kwargs_dict)
+    except Exception as err:
+        err_l = str(err).lower()
+        if effective_task == "extend" and input_video_b64 and (
+            "speech edit" in err_l or "unable to process speech" in err_l
+        ):
+            amb_b64 = _sanitize_tail_audio_for_speech_edit(input_video_b64, strip_all=False)
+            amb_payload = [payload[0], {"type": "video", "data": amb_b64, "mime_type": "video/mp4"}] + payload[2:]
+            try:
+                return _call_with_backoff_sync(
+                    active_client.interactions.create, **{**kwargs_dict, "input": amb_payload}
+                )
+            except Exception as err2:
+                if "speech edit" in str(err2).lower() or "unable to process speech" in str(err2).lower():
+                    sil_b64 = _sanitize_tail_audio_for_speech_edit(input_video_b64, strip_all=True)
+                    sil_payload = [
+                        payload[0],
+                        {"type": "video", "data": sil_b64, "mime_type": "video/mp4"},
+                    ] + payload[2:]
+                    return _call_with_backoff_sync(
+                        active_client.interactions.create, **{**kwargs_dict, "input": sil_payload}
+                    )
+                err = err2
+                err_l = str(err2).lower()
+
+        if voice_transcript and (
+            "safety violations" in err_l
+            or "harmful content" in err_l
+            or "speech edit" in err_l
+            or "unable to process speech" in err_l
+        ):
+            in_vid = (
+                _sanitize_tail_audio_for_speech_edit(input_video_b64, strip_all=True)
+                if (effective_task == "extend" and input_video_b64 and ("speech edit" in err_l or "unable to process speech" in err_l))
+                else input_video_b64
+            )
+            fb_prompt = build_omni_control_string(
+                prompt=prompt,
+                input_image_b64=input_image_b64,
+                end_image_b64=end_image_b64,
+                input_video_b64=in_vid,
+                task=effective_task,
+                reference_images_b64=ref_imgs,
+                voice_transcript=None,
+                aspect_ratio=aspect_ratio,
+                resolution=resolution,
+                duration=eff_duration,
+            )
+            non_audio_tail = [p for p in payload[1:] if p.get("type") != "audio"]
+            if in_vid:
+                fb_tail = [{"type": "video", "data": in_vid, "mime_type": "video/mp4"}] + [
+                    p for p in non_audio_tail if p.get("type") != "video"
+                ]
+            else:
+                fb_tail = non_audio_tail
+            return _call_with_backoff_sync(
+                active_client.interactions.create,
+                **{**kwargs_dict, "input": [{"type": "text", "text": fb_prompt}] + fb_tail},
+            )
+        raise
+
+
+def generate_omni_clip_direct(
+    prompt: str,
+    input_image_b64: Optional[str] = None,
+    end_image_b64: Optional[str] = None,
+    input_video_b64: Optional[str] = None,
+    task: Optional[str] = None,
+    model_override: Optional[str] = None,
+    reference_images_b64: Optional[List[str]] = None,
+    reference_audio_b64: Optional[List[str]] = None,
+    voice_transcript: Optional[str] = None,
+    aspect_ratio: str = "16:9",
+    resolution: str = "720p",
+    duration: int = 10,
+    client: Optional[genai.Client] = None,
+) -> bytes:
+    """Generates a single MP4 clip directly via `gemini-omni-1.2-flash` (`interactions.create`)."""
+    active_client = client or get_direct_genai_client(timeout_ms=DirectConfig.VIDEO_GEN_TIMEOUT_MS)
+    is_two_frame_interp = bool(input_image_b64 and end_image_b64)
+    ref_imgs = None if (input_image_b64 or end_image_b64 or input_video_b64) else reference_images_b64
+    if task:
+        effective_task = task
+    elif input_image_b64 and not end_image_b64 and not input_video_b64:
+        effective_task = "image_to_video"
+    elif ref_imgs and len(ref_imgs) > 0:
+        effective_task = "reference_to_video"
+    else:
+        effective_task = None
+
+    # AudioContent is supported on reference_to_video and untasked (None) requests,
+    # and rejected on standard image_to_video or extend requests.
+    ref_auds = (
+        [a for a in reference_audio_b64[:5] if a]
+        if (reference_audio_b64 and effective_task in ("reference_to_video", None))
+        else []
+    )
+
+    eff_duration = resolve_omni_shot_duration(
+        requested_sec=duration,
+        default_sec=10,
+        task_or_mode=effective_task,
+        is_two_frame_interp=is_two_frame_interp,
+    )
+
+    create_kwargs, payload, target_model = _build_omni_request_kwargs(
+        prompt=prompt,
+        input_image_b64=input_image_b64,
+        end_image_b64=end_image_b64,
+        input_video_b64=input_video_b64,
+        effective_task=effective_task,
+        model_override=model_override,
+        ref_imgs=ref_imgs,
+        ref_auds=ref_auds,
+        voice_transcript=voice_transcript,
+        aspect_ratio=aspect_ratio,
+        resolution=resolution,
+        eff_duration=eff_duration,
+    )
+
+    invoke_args = dict(
+        active_client=active_client,
+        payload=payload,
+        prompt=prompt,
+        input_image_b64=input_image_b64,
+        end_image_b64=end_image_b64,
+        input_video_b64=input_video_b64,
+        effective_task=effective_task,
+        ref_imgs=ref_imgs,
+        voice_transcript=voice_transcript,
+        aspect_ratio=aspect_ratio,
+        resolution=resolution,
+        eff_duration=eff_duration,
+    )
+    try:
+        interaction = _invoke_omni_with_fallbacks(kwargs_dict=create_kwargs, **invoke_args)
     except Exception as primary_err:
         err_text = str(primary_err)
         can_fallback = (
@@ -1445,7 +1566,7 @@ def generate_omni_clip_direct(
         )
         if can_fallback:
             create_kwargs["model"] = DirectConfig.VIDEO_EXTEND_FALLBACK_MODEL
-            interaction = _invoke_safe(create_kwargs)
+            interaction = _invoke_omni_with_fallbacks(kwargs_dict=create_kwargs, **invoke_args)
         else:
             raise
 
@@ -1456,8 +1577,8 @@ def generate_omni_clip_direct(
 
 
 def dub_omni_clip_direct(
-    video_path_or_bytes: Any,
-    voice_wav_path_or_bytes: Any,
+    video_path_or_bytes: bytes | str,
+    voice_wav_path_or_bytes: bytes | str,
     prompt: str = "Replace the spoken voice in this video seamlessly with the reference voice track while preserving all visual motion and environmental realism.",
     voice_transcript: Optional[str] = None,
     aspect_ratio: str = "16:9",
@@ -1466,7 +1587,25 @@ def dub_omni_clip_direct(
     model_override: Optional[str] = None,
     client: Optional[genai.Client] = None,
 ) -> bytes:
-    """TPVG untasked V2V speech/voice dubbing (`task=None`, `[text, video, tts_wav_chunks]`)."""
+    """TPVG untasked V2V speech/voice dubbing (`task=None`, `[text, video, tts_wav_chunks]`).
+
+    Args:
+        video_path_or_bytes: Path to an MP4 file or raw MP4 bytes.
+        voice_wav_path_or_bytes: Path to a reference WAV file or raw WAV bytes.
+        prompt: Dubbing instruction prompt.
+        voice_transcript: Optional spoken transcript for lip-sync conditioning.
+        aspect_ratio: Target aspect ratio (`"16:9"` or `"9:16"`).
+        resolution: Target output resolution (`"360p"` or `"720p"`).
+        duration: Clip duration in seconds.
+        model_override: Optional Omni model ID override.
+        client: Optional pre-configured ``genai.Client``.
+
+    Returns:
+        Dubbed MP4 video bytes.
+
+    Raises:
+        FileNotFoundError: If a path argument does not exist on disk.
+    """
     if isinstance(video_path_or_bytes, (bytes, bytearray)):
         vid_bytes = bytes(video_path_or_bytes)
     elif isinstance(video_path_or_bytes, str) and os.path.exists(video_path_or_bytes):
@@ -1486,8 +1625,7 @@ def dub_omni_clip_direct(
     audio_chunks_b64 = split_wav_reference_chunks(wav_bytes, chunk_sec=3.0, max_chunks=5)
     vid_b64 = base64.b64encode(vid_bytes).decode("utf-8")
 
-    # Per GRoot omni_request_validation.cc, untasked TASK_UNSPECIFIED (task=None) permits
-    # VideoContent + AudioContent when project has EnableOmniSpeechEditing enabled.
+    # Untasked (task=None) permits VideoContent + AudioContent for speech dubbing.
     return generate_omni_clip_direct(
         prompt=prompt,
         input_video_b64=vid_b64,
@@ -1551,14 +1689,30 @@ def _extract_interaction_usage_telemetry(interaction: Any) -> Dict[str, Any]:
 
 
 def upscale_omni_clip_direct(
-    video_bytes_or_b64: Any,
+    video_bytes_or_b64: bytes | str,
     target_resolution: str = "720p",
     source_resolution: str = "360p",
     model_override: Optional[str] = None,
     return_telemetry: bool = False,
     client: Optional[genai.Client] = None,
-) -> Any:
-    """Upscales an MP4 clip (<= 15s) via standalone `task='upscale'` on `gemini-omni-1.2-flash` (`total_input_tokens: 0`)."""
+) -> bytes | Tuple[bytes, Dict[str, Any]]:
+    """Upscales an MP4 clip (<= 15s) via standalone `task='upscale'` on `gemini-omni-1.2-flash`.
+
+    Args:
+        video_bytes_or_b64: Raw MP4 bytes or base64-encoded MP4 string.
+        target_resolution: Target resolution (`"720p"`, `"1080p"`, or `"4k"`).
+        source_resolution: Source resolution (`"360p"` or `"720p"`).
+        model_override: Optional Omni model ID override.
+        return_telemetry: When True, returns `(video_bytes, telemetry_dict)`.
+        client: Optional pre-configured ``genai.Client``.
+
+    Returns:
+        Upscaled MP4 bytes, or `(video_bytes, telemetry_dict)` if `return_telemetry` is True.
+
+    Raises:
+        ValueError: If `video_bytes_or_b64` is empty or the upscale transition is invalid.
+        RuntimeError: If the upscale call returns no video bytes.
+    """
     src_res, tgt_res = validate_upscale_transition(source_resolution, target_resolution)
     if isinstance(video_bytes_or_b64, (bytes, bytearray)):
         if len(video_bytes_or_b64) == 0:
@@ -2038,10 +2192,8 @@ def _build_cli_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: Optional[List[str]] = None) -> int:
-    parser = _build_cli_parser()
-    args = parser.parse_args(argv)
-
+def _dispatch_cli_command(args: argparse.Namespace) -> int:
+    """Dispatches parsed CLI subcommands for `omni_direct`."""
     if args.command == "generate-image":
         ref_b64s = [encode_image_file_b64(p) for p in (args.reference or [])] or None
         img_bytes = generate_reference_image_direct(
@@ -2218,6 +2370,12 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 0
 
     return 1
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+    """CLI entrypoint for `omni_direct`."""
+    parser = _build_cli_parser()
+    return _dispatch_cli_command(parser.parse_args(argv))
 
 
 if __name__ == "__main__":

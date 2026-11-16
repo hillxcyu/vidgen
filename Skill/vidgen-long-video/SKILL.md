@@ -27,7 +27,8 @@ Self-contained, **zero-ADK** film and commercial production skill combining **Mo
    export GOOGLE_GENAI_USE_VERTEXAI=True
    export GOOGLE_CLOUD_PROJECT="{your_gcp_project}"
    export GOOGLE_CLOUD_LOCATION="global"
-   SKILL_DIR=".agents/skills/vidgen-long-video"  # or Skill/vidgen-long-video
+   # Set SKILL_DIR to the installed skill location (~/.gemini/config/..., /google/src/files/head/depot/..., or local .agents/skills/vidgen-long-video)
+   SKILL_DIR="${SKILL_DIR:-$HOME/.gemini/config/skills/vidgen-long-video}"
    ```
    *(Gemini API `GEMINI_API_KEY` is also supported for Modes A–D; note that TPVG audio input requires an allowlisted Vertex AI project.)*
 
@@ -110,7 +111,7 @@ Never jump straight from a vague one-liner to expensive multi-minute video gener
 # Synthesize a 24kHz studio WAV voice track via gemini-3.8-flash-tts (alias: gemini-3.8-tts)
 uv run "$SKILL_DIR/scripts/omni_direct.py" synthesize-tts \
   --text "Cold-pressed golden botanicals lock pure bio-active potency inside every drop." \
-  --model gemini-3.8-tts \
+  --tts-model gemini-3.8-tts \
   --voice Kore \
   --style "Warm, poised luxury narrator" \
   --output ./output/vo_shot_1.wav
@@ -126,7 +127,7 @@ uv run "$SKILL_DIR/scripts/omni_direct.py" generate-clip \
 # Re-voice / lip-sync an existing video clip via untasked TPVG V2V speech dubbing
 uv run "$SKILL_DIR/scripts/omni_direct.py" dub-clip \
   --video ./output/shot_1.mp4 \
-  --audio ./output/vo_shot_1.wav \
+  --voice ./output/vo_shot_1.wav \
   --dialogue "Every morning begins with one luminous golden drop." \
   --output ./output/shot_1_dubbed.mp4
 
@@ -142,7 +143,7 @@ uv run "$SKILL_DIR/scripts/omni_direct.py" upscale-clip --video ./output/draft_3
 # Mix off-camera TTS WAV (-16 LUFS) over diegetic video with 1100Hz vocal-formant notch + ducking
 uv run "$SKILL_DIR/scripts/media_ops.py" mux-voiceover \
   --video ./output/macro_diegetic.mp4 \
-  --voice-wav ./output/vo_shot_2.wav \
+  --voice ./output/vo_shot_2.wav \
   --output ./output/macro_voiced.mp4
 
 # Build labeled plate or QA contact sheet (PNGs or MP4s)

@@ -46,6 +46,7 @@ from media_ops import (  # noqa: E402
     extract_last_frame,
     extract_video_tail,
     get_video_duration,
+    get_video_height,
     mix_voiceover_onto_video,
     split_wav_reference_chunks,
     stitch_videos,
@@ -237,13 +238,30 @@ def _segment_voiceover(voice_transcript: Optional[str], num_shots: int) -> List[
     return out
 
 
+class SpecValidationResult(BaseModel):
+    """Structured pre-flight validation result returned by `validate_production_spec`."""
+
+    valid: bool
+    errors: List[str] = Field(default_factory=list)
+    warnings: List[str] = Field(default_factory=list)
+    total_shots: int = 0
+    total_duration_sec: int = 0
+
+    def __getitem__(self, key: str) -> Any:
+        return getattr(self, key)
+
+    def get(self, key: str, default: Any = None) -> Any:
+        return getattr(self, key, default)
+
+
 def validate_production_spec(
     storyboard_specs: Optional[List[StoryboardEntrySpec]] = None,
     scene_specs: Optional[List[SceneSpec]] = None,
     default_mode: str = "video_extend",
     default_duration: int = 10,
     ignore_missing_plate_paths: bool = False,
-) -> Dict[str, Any]:
+    reference_paths: Optional[List[str]] = None,
+) -> SpecValidationResult:
     """Validates storyboard/scene specs before video compute (`--check-spec` pre-flight)."""
     errors: List[str] = []
     warnings: List[str] = []
@@ -255,7 +273,7 @@ def validate_production_spec(
         for sc in scene_specs:
             groups.append((sc.scene_id, sc.mode or default_mode, sc.duration_sec or default_duration, sc.reference_paths, sc.scene_plate_prompt, sc.shots))
     elif storyboard_specs:
-        groups.append(("single_scene", default_mode, default_duration, [], None, storyboard_specs))
+        groups.append(("single_scene", default_mode, default_duration, list(reference_paths or []), None, storyboard_specs))
 
     for sc_id, sc_mode, sc_dur, ref_paths, plate_prompt, shots in groups:
         for rp in ref_paths or []:
@@ -304,13 +322,13 @@ def validate_production_spec(
                 )
             prev_angle = cur_angle
 
-    return {
-        "valid": len(errors) == 0,
-        "errors": errors,
-        "warnings": warnings,
-        "total_shots": total_shots,
-        "total_duration_sec": total_duration_sec,
-    }
+    return SpecValidationResult(
+        valid=len(errors) == 0,
+        errors=errors,
+        warnings=warnings,
+        total_shots=total_shots,
+        total_duration_sec=total_duration_sec,
+    )
 
 
 def _resolve_effective_shot_mode(
@@ -375,7 +393,12 @@ async def _execute_single_shot(
     tts_dur_sec: Optional[float] = None
     tts_chunks_b64: Optional[List[str]] = None
 
-    if tpvg_tts_enabled and spec.spoken_dialogue and spec.spoken_dialogue.strip() and eff_audio_mode in ("on_camera", "off_camera_vo"):
+    should_synth_tts = (
+        tpvg_tts_enabled
+        and bool(spec.spoken_dialogue and spec.spoken_dialogue.strip())
+        and (eff_audio_mode == "off_camera_vo" or (eff_audio_mode == "on_camera" and is_r2v_shot))
+    )
+    if should_synth_tts:
         shot_voice = spec.tts_voice or (vision_profile.default_tts_voice if vision_profile else tts_voice) or DirectConfig.DEFAULT_TTS_VOICE
         shot_style = spec.tts_style if spec.tts_style is not None else (vision_profile.default_tts_style if vision_profile else tts_style)
         wav_bytes, tts_meta = await asyncio.to_thread(
@@ -595,14 +618,19 @@ async def _upscale_manifest_shots_async(
     sem = upscale_sem or asyncio.Semaphore(max(1, max_parallel_upscales))
     t_up0 = time.monotonic()
 
+    _res_heights = {"360p": 360, "720p": 720, "1080p": 1080, "4k": 2160}
+    target_height = _res_heights.get(tgt_res, 0)
+
     async def _upscale_one(rec: ShotRecord) -> None:
         if not rec.video_path or not os.path.exists(rec.video_path):
             return
         draft_archive = os.path.join(manifest.output_dir, f"shot_{rec.shot_index}_draft_{src_res}.mp4")
         if os.path.exists(draft_archive) and os.path.getsize(draft_archive) > 10_000:
-            rec.draft_video_path = os.path.abspath(draft_archive)
-            print(f"[Upscale Shot #{rec.shot_index}] Reusing already-upscaled {rec.video_path} (draft={draft_archive})")
-            return
+            cur_height = await asyncio.to_thread(get_video_height, rec.video_path)
+            if cur_height == 0 or cur_height >= target_height:
+                rec.draft_video_path = os.path.abspath(draft_archive)
+                print(f"[Upscale Shot #{rec.shot_index}] Reusing already-upscaled {rec.video_path} (draft={draft_archive})")
+                return
 
         shutil.copyfile(rec.video_path, draft_archive)
         rec.draft_video_path = os.path.abspath(draft_archive)
@@ -735,6 +763,62 @@ async def run_standalone_pipeline_async(
     ]
     can_parallel = all(m == "reference" for m in effective_modes) and len(specs) > 1 and not tpvg_tts_enabled
 
+    async def _resume_existing_shot(
+        i: int,
+        sp: StoryboardEntrySpec,
+        eff_m: str,
+        existing_clip: str,
+        prev_last_frame: Optional[str] = None,
+    ) -> ShotRecord:
+        ff_p = os.path.join(abs_out_dir, f"shot_{i + 1}_first_frame.png")
+        lf_p = os.path.join(abs_out_dir, f"shot_{i + 1}_last_frame.png")
+        if not os.path.exists(ff_p):
+            await asyncio.to_thread(extract_first_frame, existing_clip, ff_p)
+        if not os.path.exists(lf_p):
+            await asyncio.to_thread(extract_last_frame, existing_clip, lf_p)
+        t_av = time.monotonic()
+        eval_res = await evaluate_clip_quality_direct(
+            shot_index=i + 1,
+            prompt=sp.description,
+            video_path=existing_clip,
+            evaluation_criteria=sp.evaluation_criteria,
+            spoken_dialogue=sp.spoken_dialogue,
+            reference_images_b64=reference_b64s,
+            prev_last_frame_b64=prev_last_frame if i > 0 else None,
+            is_r2v_shot=(eff_m == "reference"),
+            is_extend_shot=(eff_m == "video_extend"),
+            fails_if=sp.fails_if,
+            audio_mode=sp.audio_mode,
+            client=active_rater_client,
+        )
+        avu_dt = round(time.monotonic() - t_av, 2)
+        sc_val = round(float(eval_res.get("score", 0.0)), 3)
+        resumed_dur = resolve_omni_shot_duration(
+            requested_sec=sp.duration_sec,
+            default_sec=duration,
+            task_or_mode=eff_m,
+            is_two_frame_interp=False,
+        )
+        print(f"[Resume Shot #{i + 1}] Reusing saved {existing_clip} -> Score={sc_val:.2f}")
+        return ShotRecord(
+            shot_index=i + 1,
+            effective_mode=eff_m,
+            duration_sec=resumed_dur,
+            prompt=sp.description,
+            evaluation_criteria=sp.evaluation_criteria,
+            spoken_dialogue=sp.spoken_dialogue,
+            audio_mode=sp.audio_mode,
+            attempts_used=1,
+            quality_score=sc_val,
+            verdict=eval_res.get("verdict", "PASSED" if sc_val >= 0.8 else "COMPLETED_BEST_OF_K"),
+            detected_genmedia_issues=list(eval_res.get("detected_genmedia_issues") or []),
+            video_path=os.path.abspath(existing_clip),
+            first_frame_path=os.path.abspath(ff_p),
+            last_frame_path=os.path.abspath(lf_p),
+            avu_sec=avu_dt,
+            evaluation_report=eval_res,
+        )
+
     t_draft0 = time.monotonic()
     shot_records: List[ShotRecord] = []
     if can_parallel:
@@ -742,6 +826,9 @@ async def run_standalone_pipeline_async(
 
         async def _worker(i: int, sp: StoryboardEntrySpec) -> ShotRecord:
             async with sem:
+                existing_clip = os.path.join(abs_out_dir, f"shot_{i + 1}.mp4")
+                if resume and os.path.exists(existing_clip) and os.path.getsize(existing_clip) > 50_000:
+                    return await _resume_existing_shot(i, sp, "reference", existing_clip)
                 return await _execute_single_shot(
                     idx=i,
                     spec=sp,
@@ -773,54 +860,7 @@ async def run_standalone_pipeline_async(
             eff_m = effective_modes[i]
             existing_clip = os.path.join(abs_out_dir, f"shot_{i + 1}.mp4")
             if resume and os.path.exists(existing_clip) and os.path.getsize(existing_clip) > 50_000:
-                ff_p = os.path.join(abs_out_dir, f"shot_{i + 1}_first_frame.png")
-                lf_p = os.path.join(abs_out_dir, f"shot_{i + 1}_last_frame.png")
-                if not os.path.exists(ff_p):
-                    await asyncio.to_thread(extract_first_frame, existing_clip, ff_p)
-                if not os.path.exists(lf_p):
-                    await asyncio.to_thread(extract_last_frame, existing_clip, lf_p)
-                t_av = time.monotonic()
-                eval_res = await evaluate_clip_quality_direct(
-                    shot_index=i + 1,
-                    prompt=sp.description,
-                    video_path=existing_clip,
-                    evaluation_criteria=sp.evaluation_criteria,
-                    spoken_dialogue=sp.spoken_dialogue,
-                    reference_images_b64=reference_b64s,
-                    prev_last_frame_b64=prev_last_frame_b64 if i > 0 else None,
-                    is_r2v_shot=(eff_m == "reference"),
-                    is_extend_shot=(eff_m == "video_extend"),
-                    fails_if=sp.fails_if,
-                    audio_mode=sp.audio_mode,
-                    client=active_rater_client,
-                )
-                avu_dt = round(time.monotonic() - t_av, 2)
-                sc_val = round(float(eval_res.get("score", 0.0)), 3)
-                resumed_dur = resolve_omni_shot_duration(
-                    requested_sec=sp.duration_sec,
-                    default_sec=duration,
-                    task_or_mode=eff_m,
-                    is_two_frame_interp=False,
-                )
-                print(f"[Resume Shot #{i + 1}] Reusing saved {existing_clip} -> Score={sc_val:.2f}")
-                rec = ShotRecord(
-                    shot_index=i + 1,
-                    effective_mode=eff_m,
-                    duration_sec=resumed_dur,
-                    prompt=sp.description,
-                    evaluation_criteria=sp.evaluation_criteria,
-                    spoken_dialogue=sp.spoken_dialogue,
-                    audio_mode=sp.audio_mode,
-                    attempts_used=1,
-                    quality_score=sc_val,
-                    verdict=eval_res.get("verdict", "PASSED" if sc_val >= 0.8 else "COMPLETED_BEST_OF_K"),
-                    detected_genmedia_issues=list(eval_res.get("detected_genmedia_issues") or []),
-                    video_path=os.path.abspath(existing_clip),
-                    first_frame_path=os.path.abspath(ff_p),
-                    last_frame_path=os.path.abspath(lf_p),
-                    avu_sec=avu_dt,
-                    evaluation_report=eval_res,
-                )
+                rec = await _resume_existing_shot(i, sp, eff_m, existing_clip, prev_last_frame_b64)
             else:
                 rec = await _execute_single_shot(
                     idx=i,
@@ -1227,6 +1267,9 @@ async def _repair_scene_shots_with_interpolation(
 
         if accepted and rec.video_path:
             shutil.copyfile(cand_path, rec.video_path)
+            tts_wav = rec.tts_audio_path or os.path.join(manifest.output_dir, f"shot_{rec.shot_index}_tts.wav")
+            if rec.audio_mode == "off_camera_vo" and tts_wav and os.path.exists(tts_wav):
+                await asyncio.to_thread(mix_voiceover_onto_video, rec.video_path, tts_wav, rec.video_path)
             if rec.first_frame_path:
                 await asyncio.to_thread(extract_first_frame, rec.video_path, rec.first_frame_path)
             if rec.last_frame_path:
@@ -1685,6 +1728,7 @@ def _build_cli_parser() -> argparse.ArgumentParser:
 
 
 def _load_optional_vision_profile(vision_json_path: Optional[str]) -> Optional[VisionProfileSpec]:
+    """Loads an optional `VisionProfileSpec` from a JSON file (supporting nested `vision_profile`)."""
     if not vision_json_path or not os.path.exists(vision_json_path):
         return None
     raw = json.loads(Path(vision_json_path).read_text(encoding="utf-8"))
@@ -1693,169 +1737,187 @@ def _load_optional_vision_profile(vision_json_path: Optional[str]) -> Optional[V
     return VisionProfileSpec.model_validate(raw)
 
 
-def main(argv: Optional[List[str]] = None) -> int:
-    parser = _build_cli_parser()
-    args = parser.parse_args(argv)
-    abs_out_dir = os.path.abspath(args.output_dir)
-    os.makedirs(abs_out_dir, exist_ok=True)
-    vision_profile = _load_optional_vision_profile(args.vision_json)
-
-    if args.stage == "plan":
-        prompt_text = args.prompt.strip()
-        if not prompt_text:
-            parser.error("--stage plan requires --prompt.")
-        plan = asyncio.run(
-            generate_vision_and_plan_direct(
-                intent=prompt_text,
-                num_shots=args.shots,
-                mode=args.mode,
-                aspect_ratio=args.aspect_ratio,
-                voice_transcript=args.voice_transcript,
-                default_duration_sec=args.duration,
-                tts_voice=args.tts_voice,
-                tts_style=args.tts_style,
-            )
+def _run_stage_plan(args: argparse.Namespace, parser: argparse.ArgumentParser, abs_out_dir: str) -> int:
+    """Executes `--stage plan` to generate `director_plan.json`, `.md`, and `storyboard_defined.json`."""
+    prompt_text = args.prompt.strip()
+    if not prompt_text:
+        parser.error("--stage plan requires --prompt.")
+    plan = asyncio.run(
+        generate_vision_and_plan_direct(
+            intent=prompt_text,
+            num_shots=args.shots,
+            mode=args.mode,
+            aspect_ratio=args.aspect_ratio,
+            voice_transcript=args.voice_transcript,
+            default_duration_sec=args.duration,
+            tts_voice=args.tts_voice,
+            tts_style=args.tts_style,
         )
-        plan_json_p = os.path.join(abs_out_dir, "director_plan.json")
-        plan_md_p = os.path.join(abs_out_dir, "director_plan.md")
-        sb_json_p = os.path.join(abs_out_dir, "storyboard_defined.json")
-        Path(plan_json_p).write_text(plan.model_dump_json(indent=2), encoding="utf-8")
-        Path(plan_md_p).write_text(format_director_plan_markdown(plan), encoding="utf-8")
-        Path(sb_json_p).write_text(json.dumps([s.model_dump() for s in plan.shots], indent=2), encoding="utf-8")
-        spec_check = validate_production_spec(
-            storyboard_specs=plan.shots,
-            default_mode=args.mode,
-            default_duration=args.duration,
-        )
-        print(json.dumps({
-            "status": "plan_ready",
-            "director_plan_json": plan_json_p,
-            "director_plan_md": plan_md_p,
-            "storyboard_defined_json": sb_json_p,
-            "spec_check": spec_check,
-        }, indent=2))
-        return 0
+    )
+    plan_json_p = os.path.join(abs_out_dir, "director_plan.json")
+    plan_md_p = os.path.join(abs_out_dir, "director_plan.md")
+    sb_json_p = os.path.join(abs_out_dir, "storyboard_defined.json")
+    Path(plan_json_p).write_text(plan.model_dump_json(indent=2), encoding="utf-8")
+    Path(plan_md_p).write_text(format_director_plan_markdown(plan), encoding="utf-8")
+    Path(sb_json_p).write_text(json.dumps([s.model_dump() for s in plan.shots], indent=2), encoding="utf-8")
+    spec_check = validate_production_spec(
+        storyboard_specs=plan.shots,
+        default_mode=args.mode,
+        default_duration=args.duration,
+    )
+    print(json.dumps({
+        "status": "plan_ready",
+        "director_plan_json": plan_json_p,
+        "director_plan_md": plan_md_p,
+        "storyboard_defined_json": sb_json_p,
+        "spec_check": spec_check.model_dump(),
+    }, indent=2))
+    return 0
 
-    if args.stage == "plates":
-        plate_items: List[Dict[str, Any]] = []
-        style_suffix = f" {vision_profile.style_anchor}" if (vision_profile and vision_profile.style_anchor) else ""
-        if args.scenes_json:
-            raw_scenes_doc = json.loads(Path(args.scenes_json).read_text(encoding="utf-8"))
-            raw_scenes_list = raw_scenes_doc.get("scenes", []) if isinstance(raw_scenes_doc, dict) else raw_scenes_doc
-            scene_specs = [SceneSpec.model_validate(item) for item in raw_scenes_list]
-            for sc in scene_specs:
-                sc_dir = os.path.join(abs_out_dir, sc.scene_id)
-                os.makedirs(sc_dir, exist_ok=True)
-                target_plate = sc.reference_paths[-1] if (sc.scene_plate_prompt and len(sc.reference_paths) >= 2) else (
-                    sc.reference_paths[0] if (sc.scene_plate_prompt and len(sc.reference_paths) == 1) else os.path.join(sc_dir, "scene_plate.png")
-                )
-                if sc.scene_plate_prompt and not os.path.exists(target_plate):
-                    cond_refs = [encode_image_file_b64(p) for p in sc.reference_paths if p != target_plate and os.path.exists(p)] or None
-                    img_bytes = generate_reference_image_direct(
-                        prompt=f"{sc.scene_plate_prompt.strip()}{style_suffix}".strip(),
-                        reference_images_b64=cond_refs,
-                        aspect_ratio=args.aspect_ratio,
-                    )
-                    os.makedirs(os.path.dirname(os.path.abspath(target_plate)), exist_ok=True)
-                    Path(target_plate).write_bytes(img_bytes)
-                for p in (sc.reference_paths or [target_plate]):
-                    if p and os.path.exists(p):
-                        plate_items.append({"path": os.path.abspath(p), "label": f"{sc.scene_id}: {os.path.basename(p)}", "status": "PLATE"})
-        else:
-            for p in (args.reference or []):
-                if os.path.exists(p):
-                    plate_items.append({"path": os.path.abspath(p), "label": os.path.basename(p), "status": "PLATE"})
-        if not plate_items:
-            parser.error("--stage plates found no scene_plate_prompt or existing reference images to render.")
-        sheet_p = os.path.join(abs_out_dir, "plates_contact_sheet.png")
-        build_contact_sheet(plate_items, sheet_p, cols=min(3, len(plate_items)))
-        print(json.dumps({
-            "status": "plates_ready",
-            "plates_contact_sheet_path": sheet_p,
-            "plates_count": len(plate_items),
-        }, indent=2))
-        return 0
 
+def _run_stage_plates(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser,
+    abs_out_dir: str,
+    vision_profile: Optional[VisionProfileSpec],
+) -> int:
+    """Executes `--stage plates` to synthesize scene plates and render a contact sheet."""
+    plate_items: List[Dict[str, Any]] = []
     if args.scenes_json:
         raw_scenes_doc = json.loads(Path(args.scenes_json).read_text(encoding="utf-8"))
-        if isinstance(raw_scenes_doc, dict):
-            intent_str = args.prompt.strip() or raw_scenes_doc.get("original_intent", "")
-            raw_scenes_list = raw_scenes_doc.get("scenes", [])
-        else:
-            intent_str = args.prompt.strip()
-            raw_scenes_list = raw_scenes_doc
+        if vision_profile is None and isinstance(raw_scenes_doc, dict) and raw_scenes_doc.get("vision_profile"):
+            vision_profile = VisionProfileSpec.model_validate(raw_scenes_doc["vision_profile"])
+        style_suffix = f" {vision_profile.style_anchor}" if (vision_profile and vision_profile.style_anchor) else ""
+        raw_scenes_list = raw_scenes_doc.get("scenes", []) if isinstance(raw_scenes_doc, dict) else raw_scenes_doc
         scene_specs = [SceneSpec.model_validate(item) for item in raw_scenes_list]
-        if not scene_specs:
-            parser.error("--scenes-json contained zero scenes.")
-
-        spec_check = validate_production_spec(
-            scene_specs=scene_specs,
-            default_mode=args.mode,
-            default_duration=args.duration,
-        )
-        if args.check_spec:
-            print(json.dumps(spec_check, indent=2))
-            return 0 if spec_check["valid"] else 1
-
-        multi_manifest = asyncio.run(
-            run_multi_scene_pipeline_async(
-                scenes=scene_specs,
-                output_dir=args.output_dir,
-                original_intent=intent_str,
-                duration=args.duration,
-                aspect_ratio=args.aspect_ratio,
-                resolution=args.resolution,
-                max_attempts=args.max_attempts,
-                max_parallel_scenes=args.max_parallel_scenes,
-                quality_threshold=args.quality_threshold,
-                shot_crossfade_seconds=args.crossfade if args.crossfade is not None else 0.08,
-                scene_crossfade_seconds=args.scene_crossfade,
-                draft_mode=args.draft_mode,
-                draft_resolution=args.draft_resolution,
-                max_parallel_upscales=args.max_parallel_upscales,
-                vision_profile=vision_profile,
-                tts_model=args.tts_model,
-                tts_voice=args.tts_voice,
-                tts_style=args.tts_style,
-                tts_language=args.tts_language,
-                auto_approve=args.auto_approve,
-                resume=args.resume,
+        for sc in scene_specs:
+            sc_dir = os.path.join(abs_out_dir, sc.scene_id)
+            os.makedirs(sc_dir, exist_ok=True)
+            target_plate = sc.reference_paths[-1] if (sc.scene_plate_prompt and len(sc.reference_paths) >= 2) else (
+                sc.reference_paths[0] if (sc.scene_plate_prompt and len(sc.reference_paths) == 1) else os.path.join(sc_dir, "scene_plate.png")
             )
-        )
-        print(json.dumps({
-            "status": "human_review_required" if multi_manifest.human_review_required else "ok",
-            "master_video_path": multi_manifest.master_video_path,
-            "master_duration_sec": multi_manifest.master_duration_sec,
-            "resolution": multi_manifest.resolution,
-            "draft_mode": multi_manifest.draft_mode,
-            "draft_resolution": multi_manifest.draft_resolution,
-            "tts_model": multi_manifest.tts_model,
-            "tts_voice": multi_manifest.tts_voice,
-            "qa_contact_sheet_path": multi_manifest.qa_contact_sheet_path,
-            "escalation_report_path": multi_manifest.escalation_report_path,
-            "elapsed_sec": multi_manifest.elapsed_sec,
-            "sum_scene_draft_and_avu_sec": multi_manifest.sum_scene_draft_and_avu_sec,
-            "sum_scene_repair_sec": multi_manifest.sum_scene_repair_sec,
-            "sum_scene_upscale_sec": multi_manifest.sum_scene_upscale_sec,
-            "master_stitch_and_seam_audit_sec": multi_manifest.master_stitch_and_seam_audit_sec,
-            "manifest_path": os.path.join(multi_manifest.output_dir, "run_manifest.json"),
-            "scene_scores": [
-                {
-                    "scene_id": s.scene_id,
-                    "elapsed_sec": s.elapsed_sec,
-                    "draft_and_avu_sec": s.draft_and_avu_sec,
-                    "interpolation_repair_sec": s.interpolation_repair_sec,
-                    "upscale_sec": s.upscale_sec,
-                    "shot_scores": [sh.quality_score for sh in s.shots],
-                    "repairs": len(s.interpolation_repairs),
-                    "scene_seam_score": (s.scene_seam_report or {}).get("score"),
-                }
-                for s in multi_manifest.scenes
-            ],
-            "master_score": (multi_manifest.master_seam_report or {}).get("score"),
-        }, indent=2))
-        return 2 if multi_manifest.human_review_required else 0
+            if sc.scene_plate_prompt and not os.path.exists(target_plate):
+                cond_refs = [encode_image_file_b64(p) for p in sc.reference_paths if p != target_plate and os.path.exists(p)] or None
+                img_bytes = generate_reference_image_direct(
+                    prompt=f"{sc.scene_plate_prompt.strip()}{style_suffix}".strip(),
+                    reference_images_b64=cond_refs,
+                    aspect_ratio=args.aspect_ratio,
+                )
+                os.makedirs(os.path.dirname(os.path.abspath(target_plate)), exist_ok=True)
+                Path(target_plate).write_bytes(img_bytes)
+            for p in (sc.reference_paths or [target_plate]):
+                if p and os.path.exists(p):
+                    plate_items.append({"path": os.path.abspath(p), "label": f"{sc.scene_id}: {os.path.basename(p)}", "status": "PLATE"})
+    else:
+        for p in (args.reference or []):
+            if os.path.exists(p):
+                plate_items.append({"path": os.path.abspath(p), "label": os.path.basename(p), "status": "PLATE"})
+    if not plate_items:
+        parser.error("--stage plates found no scene_plate_prompt or existing reference images to render.")
+    sheet_p = os.path.join(abs_out_dir, "plates_contact_sheet.png")
+    build_contact_sheet(plate_items, sheet_p, cols=min(3, len(plate_items)))
+    print(json.dumps({
+        "status": "plates_ready",
+        "plates_contact_sheet_path": sheet_p,
+        "plates_count": len(plate_items),
+    }, indent=2))
+    return 0
 
+
+def _run_scenes_cli(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser,
+    vision_profile: Optional[VisionProfileSpec],
+) -> int:
+    """Runs multi-scene `--scenes-json` validation or full production."""
+    raw_scenes_doc = json.loads(Path(args.scenes_json).read_text(encoding="utf-8"))
+    if isinstance(raw_scenes_doc, dict):
+        intent_str = args.prompt.strip() or raw_scenes_doc.get("original_intent", "")
+        raw_scenes_list = raw_scenes_doc.get("scenes", [])
+        if vision_profile is None and raw_scenes_doc.get("vision_profile"):
+            vision_profile = VisionProfileSpec.model_validate(raw_scenes_doc["vision_profile"])
+    else:
+        intent_str = args.prompt.strip()
+        raw_scenes_list = raw_scenes_doc
+    scene_specs = [SceneSpec.model_validate(item) for item in raw_scenes_list]
+    if not scene_specs:
+        parser.error("--scenes-json contained zero scenes.")
+
+    spec_check = validate_production_spec(
+        scene_specs=scene_specs,
+        default_mode=args.mode,
+        default_duration=args.duration,
+    )
+    if args.check_spec:
+        print(json.dumps(spec_check.model_dump(), indent=2))
+        return 0 if spec_check.valid else 1
+
+    multi_manifest = asyncio.run(
+        run_multi_scene_pipeline_async(
+            scenes=scene_specs,
+            output_dir=args.output_dir,
+            original_intent=intent_str,
+            duration=args.duration,
+            aspect_ratio=args.aspect_ratio,
+            resolution=args.resolution,
+            max_attempts=args.max_attempts,
+            max_parallel_scenes=args.max_parallel_scenes,
+            quality_threshold=args.quality_threshold,
+            shot_crossfade_seconds=args.crossfade if args.crossfade is not None else 0.08,
+            scene_crossfade_seconds=args.scene_crossfade,
+            draft_mode=args.draft_mode,
+            draft_resolution=args.draft_resolution,
+            max_parallel_upscales=args.max_parallel_upscales,
+            vision_profile=vision_profile,
+            tts_model=args.tts_model,
+            tts_voice=args.tts_voice,
+            tts_style=args.tts_style,
+            tts_language=args.tts_language,
+            auto_approve=args.auto_approve,
+            resume=args.resume,
+        )
+    )
+    print(json.dumps({
+        "status": "human_review_required" if multi_manifest.human_review_required else "ok",
+        "master_video_path": multi_manifest.master_video_path,
+        "master_duration_sec": multi_manifest.master_duration_sec,
+        "resolution": multi_manifest.resolution,
+        "draft_mode": multi_manifest.draft_mode,
+        "draft_resolution": multi_manifest.draft_resolution,
+        "tts_model": multi_manifest.tts_model,
+        "tts_voice": multi_manifest.tts_voice,
+        "qa_contact_sheet_path": multi_manifest.qa_contact_sheet_path,
+        "escalation_report_path": multi_manifest.escalation_report_path,
+        "elapsed_sec": multi_manifest.elapsed_sec,
+        "sum_scene_draft_and_avu_sec": multi_manifest.sum_scene_draft_and_avu_sec,
+        "sum_scene_repair_sec": multi_manifest.sum_scene_repair_sec,
+        "sum_scene_upscale_sec": multi_manifest.sum_scene_upscale_sec,
+        "master_stitch_and_seam_audit_sec": multi_manifest.master_stitch_and_seam_audit_sec,
+        "manifest_path": os.path.join(multi_manifest.output_dir, "run_manifest.json"),
+        "scene_scores": [
+            {
+                "scene_id": s.scene_id,
+                "elapsed_sec": s.elapsed_sec,
+                "draft_and_avu_sec": s.draft_and_avu_sec,
+                "interpolation_repair_sec": s.interpolation_repair_sec,
+                "upscale_sec": s.upscale_sec,
+                "shot_scores": [sh.quality_score for sh in s.shots],
+                "repairs": len(s.interpolation_repairs),
+                "scene_seam_score": (s.scene_seam_report or {}).get("score"),
+            }
+            for s in multi_manifest.scenes
+        ],
+        "master_score": (multi_manifest.master_seam_report or {}).get("score"),
+    }, indent=2))
+    return 2 if multi_manifest.human_review_required else 0
+
+
+def _run_single_scene_cli(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser,
+    vision_profile: Optional[VisionProfileSpec],
+) -> int:
+    """Runs single-scene `--storyboard-json` or `--prompt` validation or production."""
     specs: Optional[List[StoryboardEntrySpec]] = None
     if args.storyboard_json:
         raw_data = json.loads(Path(args.storyboard_json).read_text(encoding="utf-8"))
@@ -1868,9 +1930,10 @@ def main(argv: Optional[List[str]] = None) -> int:
             storyboard_specs=specs,
             default_mode=args.mode,
             default_duration=args.duration,
+            reference_paths=args.reference,
         )
-        print(json.dumps(spec_check, indent=2))
-        return 0 if spec_check["valid"] else 1
+        print(json.dumps(spec_check.model_dump(), indent=2))
+        return 0 if spec_check.valid else 1
 
     prompt_text = args.prompt.strip()
     if not prompt_text and specs:
@@ -1925,6 +1988,23 @@ def main(argv: Optional[List[str]] = None) -> int:
         "master_score": (manifest.master_seam_report or {}).get("score"),
     }, indent=2))
     return 2 if manifest.human_review_required else 0
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+    """CLI entrypoint for `run_vidgen_workflow`."""
+    parser = _build_cli_parser()
+    args = parser.parse_args(argv)
+    abs_out_dir = os.path.abspath(args.output_dir)
+    os.makedirs(abs_out_dir, exist_ok=True)
+    vision_profile = _load_optional_vision_profile(args.vision_json)
+
+    if args.stage == "plan":
+        return _run_stage_plan(args, parser, abs_out_dir)
+    if args.stage == "plates":
+        return _run_stage_plates(args, parser, abs_out_dir, vision_profile)
+    if args.scenes_json:
+        return _run_scenes_cli(args, parser, vision_profile)
+    return _run_single_scene_cli(args, parser, vision_profile)
 
 
 if __name__ == "__main__":
