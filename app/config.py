@@ -16,6 +16,8 @@ class Config:
     VIDEO_GEN_MODEL: str = os.getenv("VIDEO_GEN_MODEL", "gemini-omni-1.2-flash")
     VIDEO_EXTEND_MODEL: str = os.getenv("VIDEO_EXTEND_MODEL", "gemini-omni-1.2-flash")
     VIDEO_EXTEND_FALLBACK_MODEL: str = os.getenv("VIDEO_EXTEND_FALLBACK_MODEL", "gemini-omni-flash-preview")
+    TTS_MODEL: str = os.getenv("TTS_MODEL", "gemini-3.8-flash-tts")
+    DEFAULT_TTS_VOICE: str = os.getenv("DEFAULT_TTS_VOICE", "Kore")
     VIDEO_EXTEND_INPUT_SECONDS: float = float(os.getenv("VIDEO_EXTEND_INPUT_SECONDS", "5.0"))
     MEDIA_PROCESSING: str = os.getenv("MEDIA_PROCESSING", "agentic")
     ORCHESTRATOR_TIMEOUT_MS: int = int(os.getenv("ORCHESTRATOR_TIMEOUT_MS", "120000"))

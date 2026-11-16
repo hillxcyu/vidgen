@@ -1078,3 +1078,72 @@
 - Executed `uv run --no-sync pytest tests/unit tests/integration -v` (`task-8924`, exit code `0`): **`72 passed in 75.65s` (`100%`)**.
 - Staged all modified skill, test, documentation, and workflow tracking files, committed to `main`, and pushed cleanly to `origin/main` (`git@github.com:hillxcyu/vidgen.git`).
 - **Status:** COMPLETED.
+
+
+---
+
+## [2026-11-12 03:39 UTC] Stage 3 (`ACT`): Run 15 — Upgrade `vidgen-long-video` Skill (`<FIRST_FRAME>` I2V Task Routing, Domain-Neutral Boundary Keyframe Prompts & Per-Shot/Scene Duration Flexibility `3s–15s`)
+
+### 1. Explicit Single-Image `<FIRST_FRAME>` I2V Task Routing (`Skill/vidgen-long-video/scripts/omni_direct.py` & `run_vidgen_workflow.py`) (`[skill]`)
+- Upgraded `generate_omni_clip_direct`, `omni_direct.py generate-clip`, and `_execute_single_shot` so single-image `<FIRST_FRAME>` inputs (`input_image_b64` without `end_image_b64` or `input_video_b64`) explicitly dispatch `generation_config={"video_config": {"task": "image_to_video"}}` alongside full `response_format={"type": "video", "aspect_ratio": aspect_ratio, "duration": f"{eff_duration}s", "resolution": norm_resolution}` (and ensured fallback explicit `effective_task` branches also preserve `aspect_ratio`/`duration`/`resolution`), while keeping two-frame `<FIRST_FRAME>+<LAST_FRAME>` interpolation on `task=None` without `generation_config`.
+- Upgraded `build_omni_control_string` to prepend `"Use this image as the starting frame."` on single-image `<FIRST_FRAME>` calls and sanitize `"from/in the reference image"` $\rightarrow$ `"from the starting frame"` whenever source media is attached.
+
+### 2. Domain-Neutral Boundary Keyframe Synthesis (`Skill/vidgen-long-video/scripts/run_vidgen_workflow.py`) (`[skill]`)
+- Replaced hardcoded beauty strings (*`"champagne-ivory satin blazer, and amber serum dropper bottle"`*) in `_repair_scene_shots_with_interpolation` with `_build_default_boundary_keyframe_prompt(...)`, adapting cleanly across `2+` references (`[subject/product anchor, scene plate]`), `1` reference, and `0` references for any product vertical.
+
+### 3. Per-Shot & Per-Scene Duration Flexibility & Variable Seam Windows (`omni_direct.py`, `run_vidgen_workflow.py`, `SKILL.md`, `references/storyboard_spec.md`) (`[skill]` `[docs]`)
+- Added optional `duration_sec` overrides to `StoryboardEntrySpec` and `SceneSpec` (persisted on `ShotRecord.duration_sec` in `run_manifest.json`) with `resolve_omni_shot_duration(...)` enforcing GA `gemini-omni-1.2-flash` bounds (`3–15s` for R2V/I2V/T2V; `3–10s` for `extend` and two-frame interpolation) and dynamic speech-completion pacing (`duration_sec - 2s`).
+- Added `compute_seam_transition_windows(...)` and `shot_durations_sec` + `crossfade_sec` support in `evaluate_stitched_master_direct` (plus `--shot-durations` and `--crossfade` on `omni_direct.py rate-master`), auditing exact cumulative `[t_cut - 1.5s, t_cut + 1.5s]` seam windows across variable-duration shots and asymmetric multi-act runs.
+- Updated `Skill/vidgen-long-video/SKILL.md` and `Skill/vidgen-long-video/references/storyboard_spec.md`.
+
+### 4. Automated Test Verification (`[test]` `[qa]`)
+- Added `test_single_image_i2v_task_routing_domain_neutral_repairs_and_variable_durations` to `tests/unit/test_standalone_skill.py` and executed `uv run --no-sync pytest tests/unit tests/integration -v` (`task-8756`, exit code `0`):
+  - **`73 passed in 79.18s` (`100%`)** across all unit and integration tests (`5/5` in `test_standalone_skill.py`), with CLI `--help` smoke checks verified on both `omni_direct.py` and `run_vidgen_workflow.py`.
+- **Status:** COMPLETED (awaiting user confirmation to mark Run 15 `[x]` in `PLAN.md`).
+
+
+---
+
+## [2026-11-16 08:00 UTC] Stage 3 (`ACT`): Run 16 — Movie/Art Director Craft, `Plan -> Define -> Execute` Workflow, Dual HITL Gates, 10-Category GenMedia Defect Rubric & Mode E `tpvg_tts` (`gemini-3.8-flash-tts`)
+
+### 1. Filmmaker Reference Manuals & Restructured `SKILL.md` (`Skill/vidgen-long-video/`)
+- Created `Skill/vidgen-long-video/references/director_craft_guide.md` (`VisionProfileSpec`, `24mm–100mm macro` focal-length psychology, `15°` & `180°` editorial rules, motivated `2:1`/`4:1`/`8:1` lighting ratios, 3-color + forbidden-color palette theory, silent-camera & no-letterbox hygiene, `on_camera` vs. `off_camera_vo` sound design, and 8-Layer Director Prompt Architecture).
+- Created `Skill/vidgen-long-video/references/genmedia_eval_rubric.md` (10-Category GenMedia Defect Taxonomy, observable `fails_if`, automatic retry remedies, `--check-spec` rules, and Dual HITL Gate 1 & Gate 2 protocol).
+- Updated `Skill/vidgen-long-video/references/storyboard_spec.md` and `Skill/vidgen-long-video/SKILL.md` (`< 230` lines, clean `>-` frontmatter, `Plan -> Define -> Execute` workflow, Modes A–E).
+
+### 2. Upgraded Portable Skill Scripts (`media_ops.py`, `omni_direct.py`, `run_vidgen_workflow.py`)
+- **`media_ops.py`:** Added `ensure_riff_wav_bytes`, `get_wav_duration_sec`, `split_wav_reference_chunks` (`<= 3.0s × 5` RIFF WAV chunks), `mix_voiceover_onto_video` (`mux-voiceover` CLI with `-16 LUFS` loudnorm + `1100 Hz` `bandreject` vocal-formant notch & ducking), and `build_contact_sheet` (`contact-sheet` CLI for `plates_contact_sheet.png` / `qa_contact_sheet.png`).
+- **`omni_direct.py`:** Added `DirectConfig.TTS_MODEL` + `normalize_tts_model_name` (`gemini-3.8-tts` $\rightarrow$ `gemini-3.8-flash-tts`), `synthesize_tts_track_direct` (`synthesize-tts` CLI), `reference_audio_b64` TPVG R2V conditioning (`--audio-ref` on `generate-clip`, strictly gated to `reference_to_video` / `None` per GRoot validation), `dub_omni_clip_direct` (`dub-clip` CLI for untasked V2V speech replacement), `GENMEDIA_DEFECT_TAXONOMY` + `format_genmedia_remedy_guidance`, `VisionProfileSpec` / `DirectorPlanSpec`, observation-first `detected_genmedia_issues`, and `generate_vision_and_plan_direct` (`generate-vision-plan` CLI).
+- **`run_vidgen_workflow.py`:** Added `--mode tpvg_tts`, `--tts-model`, `--tts-voice`, `--tts-style`, `--tts-language`, `--stage {plan,plates,execute}`, `--check-spec` (`validate_production_spec`), `--vision-json`, `--auto-approve`, `qa_contact_sheet.png`, and Dual HITL Gate 2 (`escalation_report.json` + exit code `2` unless `--auto-approve`).
+
+### 3. Synced into Hosted ADK 2.0 Web Studio (`app/`)
+- Created `app/tools/tts_client.py` (`# Copyright 2026 Author:Hill YU(xcyu@)` + top-level docstring) and updated `app/config.py`, `app/state.py` (`mode="tpvg_tts"`), `app/tools/omni_client.py`, `app/agents/pipeline.py`, and `app/agent.py` with `GENMEDIA_DEFECT_TAXONOMY`, `detected_genmedia_issues`, defect-remedy prompt injection, and `tpvg_tts` synthesis/conditioning.
+
+### 4. Automated Test Suite & Live `tpvg_tts` Smoke Test on `vital-octagon-19612`
+- **Pytest Suite (`task-9130`):** `uv run --no-sync pytest tests/unit tests/integration -v` $\rightarrow$ **`76 passed in 103.66s` (`100%`)**.
+- **Live End-to-End `tpvg_tts` Smoke Test (`task-9140`, `GOOGLE_CLOUD_PROJECT=vital-octagon-19612`, `GOOGLE_CLOUD_LOCATION=global`, `360p`):**
+  - `--check-spec`: `valid=True`, `total_shots=2`, `total_duration_sec=14`, `0` errors/warnings.
+  - **Shot 1 (`on_camera`, `8s`, `reference_to_video`):** `gemini-3.8-flash-tts` (`Aoede`) synthesized `4.60s` WAV $\rightarrow$ `2` RIFF WAV chunks (`<= 3.0s`) $\rightarrow$ `gemini-omni-1.2-flash` TPVG R2V (`render=23.97s`) $\rightarrow$ `gemini-3.8-flash` AVU (`AVU_tokens=24,474`, `WER=0.0`, `r2v_f0_mae=78.22`).
+  - **Shot 2 (`off_camera_vo`, `6s`, `reference_to_video` + FFMPEG `1100 Hz` formant-notched VO mux):** `gemini-3.8-flash-tts` (`Aoede`) synthesized `3.44s` WAV $\rightarrow$ Omni `render=19.86s` + `mix_voiceover_onto_video` $\rightarrow$ `gemini-3.8-flash` AVU (`AVU_tokens=14,313`, `WER=0.0`, flagged `detected_genmedia_issues=["identity_or_sku_drift"]`).
+  - **Stitched Master (`output_stitched_14s.mp4`, `14.0s`):** Master Seam Critic `score=0.92` (`PASSED`), `qa_contact_sheet.png` visually verified via `read_file`.
+- **Status:** COMPLETED (awaiting user confirmation to mark Run 16 `[x]` in `PLAN.md`).
+
+
+---
+
+## [2026-11-16 08:49 UTC] Stage 3 (`ACT`): Run 17 — End-to-End `tpvg_tts` Commercial Showcase (*Heritage Espresso & Pour-Over Atelier*, `37.96s`, `Aoede`, Direct `720p`)
+
+### 1. Stage 1 (`PLAN`) & Stage 2 (`DEFINE` / HITL Gate 1)
+- Synthesized custom `#FFFFFF` studio-white anchors via `gemini-nano-banana-2.1` (`task-9186`): `output/showcase_espresso_tpvg_38s/hero_barista_anchor.png` (`998,367 bytes`) and `output/showcase_espresso_tpvg_38s/carafe_only_anchor.png` (`1,178,042 bytes`).
+- Generated `director_plan.json` (`VisionProfileSpec`), `scenes_espresso_tpvg_38s.json`, and 3 people-free/anchored architectural plates (`--stage plates`, `plates_contact_sheet.png`, `task-9197`), passing `--check-spec` (`valid=True`, `0` errors, `0` warnings, `4` shots, `38s` total).
+
+### 2. Stage 3 (`EXECUTE & VERIFY` — Direct `720p`, `Aoede`, `vital-octagon-19612`, `task-9211`)
+- **Command:** `run_vidgen_workflow.py --stage execute --scenes-json output/showcase_espresso_tpvg_38s/scenes_espresso_tpvg_38s.json --vision-json output/showcase_espresso_tpvg_38s/director_plan.json --tts-model gemini-3.8-tts --tts-voice Aoede --resolution 720p --max-attempts 3 --max-parallel-scenes 2 --output-dir output/showcase_espresso_tpvg_38s`
+- **Total Wall-Clock Elapsed:** **`298.12s` (`4m 58s`)** | **`status: "ok"`** | **`master_score: 0.83` (`PASSED`)**
+  - **Act 1 · Shot 1 (`10s`, `on_camera`, `reference_to_video` + `Aoede` `4.80s` $\rightarrow$ `2` WAV chunks):** Attempt 1 $\rightarrow$ **`Score = 1.00` (`PASSED`)**, `WER = 0.0`, `AVU_tokens = 19,430` (`render=38.4s`, `avu=26.8s`).
+  - **Act 1 · Shot 2 (`8s`, `on_camera`, `video_extend` `5.0s` TPVG tail, `Aoede` `4.32s`):** Attempt 1 $\rightarrow$ **`Score = 1.00` (`PASSED`)**, `WER = 0.0`, `AVU_tokens = 22,521` (`render=63.9s`, `avu=25.5s`).
+  - **Act 2 · Shot 3 (`10s`, `off_camera_vo`, `reference_to_video` zero-human `carafe_only_anchor.png` + `Aoede` `5.68s` `1100 Hz` formant-notched VO mux):** Attempt 1 (`0.70`) $\rightarrow$ Defect-Remedy Auto-Retry $\rightarrow$ Attempt 2 $\rightarrow$ **`Score = 1.00` (`PASSED`)**, `WER = 0.0`, `AVU_tokens = 25,830` (`render=43.4s`, `avu=23.9s`).
+  - **Act 3 · Shot 4 (`10s`, `on_camera`, `reference_to_video` + `Aoede` `5.00s` $\rightarrow$ `2` WAV chunks):** Attempt 1 $\rightarrow$ **`Score = 0.95` (`PASSED`)**, `WER = 0.0`, `AVU_tokens = 26,822` (`render=45.2s`, `avu=25.6s`).
+- **Final Master Verification (`ffprobe` + `read_file` on `qa_contact_sheet.png`):**
+  - `output/showcase_espresso_tpvg_38s/output_master_38s.mp4`: `1280×720` `h264` `24fps`, `48000 Hz` stereo `aac`, `37.958s`, `11,273,718 bytes`.
+- **Status:** COMPLETED (awaiting user confirmation to mark Run 17 `[x]` in `PLAN.md`).

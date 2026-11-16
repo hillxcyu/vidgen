@@ -244,6 +244,16 @@ def generate_omni_clip(
                 "mime_type": "image/png"
             })
 
+    # TPVG Audio References (allowed strictly on reference_to_video or untasked TASK_UNSPECIFIED)
+    if ref_auds and effective_task in ("reference_to_video", None):
+        for aud_b64 in ref_auds[:5]:
+            if aud_b64:
+                payload.append({
+                    "type": "audio",
+                    "data": aud_b64,
+                    "mime_type": "audio/wav"
+                })
+
     target_model = model_override or (
         config.VIDEO_EXTEND_MODEL if effective_task == "extend" else config.VIDEO_GEN_MODEL
     )

@@ -38,6 +38,7 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 from media_ops import (  # noqa: E402
+    build_contact_sheet,
     detect_r2v_first_frame_lock,
     detect_seam_jump_cut,
     encode_image_file_b64,
@@ -45,19 +46,28 @@ from media_ops import (  # noqa: E402
     extract_last_frame,
     extract_video_tail,
     get_video_duration,
+    mix_voiceover_onto_video,
+    split_wav_reference_chunks,
     stitch_videos,
     trim_video_prefix,
 )
 from omni_direct import (  # noqa: E402
     DirectConfig,
+    DirectorPlanSpec,
     StoryboardEntrySpec,
+    VisionProfileSpec,
     evaluate_clip_quality_direct,
     evaluate_stitched_master_direct,
+    format_director_plan_markdown,
     generate_omni_clip_direct,
     generate_reference_image_direct,
     generate_storyboard_direct,
+    generate_vision_and_plan_direct,
     get_direct_genai_client,
+    normalize_tts_model_name,
     optimize_shot_prompt_direct,
+    resolve_omni_shot_duration,
+    synthesize_tts_track_direct,
     upscale_omni_clip_direct,
     validate_upscale_transition,
 )
@@ -66,12 +76,17 @@ from omni_direct import (  # noqa: E402
 class ShotRecord(BaseModel):
     shot_index: int
     effective_mode: str
+    duration_sec: int = 10
     prompt: str
     evaluation_criteria: str
     spoken_dialogue: Optional[str] = None
+    audio_mode: Optional[str] = None
+    tts_audio_path: Optional[str] = None
+    tts_duration_sec: Optional[float] = None
     attempts_used: int = 0
     quality_score: Optional[float] = None
     verdict: str = "PENDING"
+    detected_genmedia_issues: List[str] = Field(default_factory=list)
     video_path: Optional[str] = None
     draft_video_path: Optional[str] = None
     first_frame_path: Optional[str] = None
@@ -100,7 +115,15 @@ class SceneSpec(BaseModel):
     scene_id: str = Field(description="Short slug such as 'scene_1'.")
     title: str = Field(default="", description="Human-readable scene chapter title.")
     mode: str = Field(default="video_extend", description="Scene continuity mode ('video_extend', 'i2v_chaining', 'reference', 'hybrid').")
+    duration_sec: Optional[int] = Field(
+        default=None,
+        description="Optional default per-shot duration in seconds for shots in this scene (overrides CLI --duration when shot.duration_sec is unset).",
+    )
     reference_paths: List[str] = Field(default_factory=list, description="Per-scene reference images (e.g., [hero_anchor.png, scene_plate.png]).")
+    scene_plate_prompt: Optional[str] = Field(
+        default=None,
+        description="Optional prompt for `--stage plates` to synthesize a missing architectural scene plate via Nano Banana 2.1.",
+    )
     opening_keyframe_prompt: Optional[str] = Field(
         default=None,
         description="Optional prompt to synthesize a grounded 16:9 opening keyframe if Shot 1 requires <FIRST_FRAME>+<LAST_FRAME> interpolation.",
@@ -132,6 +155,11 @@ class WorkflowManifest(BaseModel):
     stitch_and_seam_audit_sec: float = 0.0
     output_dir: str
     reference_anchor_path: Optional[str] = None
+    tts_model: Optional[str] = None
+    tts_voice: Optional[str] = None
+    qa_contact_sheet_path: Optional[str] = None
+    escalation_report_path: Optional[str] = None
+    human_review_required: bool = False
     stitched_video_path: Optional[str] = None
     stitched_duration_sec: float = 0.0
     shots: List[ShotRecord] = Field(default_factory=list)
@@ -175,6 +203,11 @@ class MultiSceneWorkflowManifest(BaseModel):
     sum_scene_upscale_sec: float = 0.0
     master_stitch_and_seam_audit_sec: float = 0.0
     output_dir: str
+    tts_model: Optional[str] = None
+    tts_voice: Optional[str] = None
+    qa_contact_sheet_path: Optional[str] = None
+    escalation_report_path: Optional[str] = None
+    human_review_required: bool = False
     master_video_path: Optional[str] = None
     master_duration_sec: float = 0.0
     scenes: List[SceneManifestRecord] = Field(default_factory=list)
@@ -204,6 +237,82 @@ def _segment_voiceover(voice_transcript: Optional[str], num_shots: int) -> List[
     return out
 
 
+def validate_production_spec(
+    storyboard_specs: Optional[List[StoryboardEntrySpec]] = None,
+    scene_specs: Optional[List[SceneSpec]] = None,
+    default_mode: str = "video_extend",
+    default_duration: int = 10,
+    ignore_missing_plate_paths: bool = False,
+) -> Dict[str, Any]:
+    """Validates storyboard/scene specs before video compute (`--check-spec` pre-flight)."""
+    errors: List[str] = []
+    warnings: List[str] = []
+    total_shots = 0
+    total_duration_sec = 0
+
+    groups: List[tuple] = []
+    if scene_specs:
+        for sc in scene_specs:
+            groups.append((sc.scene_id, sc.mode or default_mode, sc.duration_sec or default_duration, sc.reference_paths, sc.scene_plate_prompt, sc.shots))
+    elif storyboard_specs:
+        groups.append(("single_scene", default_mode, default_duration, [], None, storyboard_specs))
+
+    for sc_id, sc_mode, sc_dur, ref_paths, plate_prompt, shots in groups:
+        for rp in ref_paths or []:
+            if rp and not os.path.exists(rp):
+                if ignore_missing_plate_paths and plate_prompt:
+                    warnings.append(f"[{sc_id}] Plate '{rp}' not yet rendered; will synthesize in --stage plates.")
+                else:
+                    errors.append(f"[{sc_id}] Missing reference asset on disk: '{rp}'.")
+
+        prev_angle: Optional[str] = None
+        for idx, sh in enumerate(shots):
+            total_shots += 1
+            eff_m = _resolve_effective_shot_mode(sc_mode, sh.mode_override, idx, bool(ref_paths))
+            raw_dur = sh.duration_sec if sh.duration_sec is not None else sc_dur
+            if eff_m == "video_extend" and raw_dur > 10:
+                warnings.append(
+                    f"[{sc_id} Shot #{sh.scene_number}] Requested duration {raw_dur}s exceeds GA 10s video_extend cap; clamped to 10s."
+                )
+            elif raw_dur < 3 or raw_dur > 15:
+                warnings.append(
+                    f"[{sc_id} Shot #{sh.scene_number}] Requested duration {raw_dur}s outside GA 3-15s bounds; clamped."
+                )
+            eff_dur = resolve_omni_shot_duration(
+                requested_sec=sh.duration_sec,
+                default_sec=sc_dur,
+                task_or_mode=eff_m,
+            )
+            total_duration_sec += eff_dur
+
+            if not (sh.evaluation_criteria and sh.evaluation_criteria.strip()):
+                errors.append(f"[{sc_id} Shot #{sh.scene_number}] Empty evaluation_criteria.")
+
+            if sh.spoken_dialogue and sh.spoken_dialogue.strip():
+                words = len(sh.spoken_dialogue.strip().split())
+                speech_window = max(1.5, float(eff_dur) - 2.0)
+                wps = words / speech_window
+                if wps > 2.4:
+                    warnings.append(
+                        f"[{sc_id} Shot #{sh.scene_number}] Spoken dialogue ({words} words in {eff_dur}s, {wps:.2f} wps > 2.4 wps) risks end-of-clip cutoff."
+                    )
+
+            cur_angle = (sh.shot_size or sh.camera_angle or "").strip().lower()
+            if prev_angle and cur_angle and cur_angle == prev_angle and eff_m == "reference":
+                warnings.append(
+                    f"[{sc_id} Shot #{sh.scene_number}] Repeats identical camera angle '{cur_angle}' across hard cut (15-degree / shot-scale change rule)."
+                )
+            prev_angle = cur_angle
+
+    return {
+        "valid": len(errors) == 0,
+        "errors": errors,
+        "warnings": warnings,
+        "total_shots": total_shots,
+        "total_duration_sec": total_duration_sec,
+    }
+
+
 def _resolve_effective_shot_mode(
     pipeline_mode: str,
     shot_override: Optional[str],
@@ -212,7 +321,7 @@ def _resolve_effective_shot_mode(
 ) -> str:
     """Determines the exact generation conditioning mode for shot `idx` (0-based)."""
     raw = (shot_override or pipeline_mode or "reference").strip().lower()
-    if raw == "hybrid":
+    if raw in ("hybrid", "tpvg_tts"):
         return "reference" if idx == 0 else "video_extend"
     if idx == 0 and raw in ("i2v_chaining", "video_extend"):
         return "reference" if has_references else raw
@@ -233,10 +342,16 @@ async def _execute_single_shot(
     prev_last_frame_b64: Optional[str] = None,
     prev_video_tail_b64: Optional[str] = None,
     prev_video_tail_sec: float = 0.0,
+    vision_profile: Optional[VisionProfileSpec] = None,
+    tpvg_tts_enabled: bool = False,
+    tts_model: str = DirectConfig.TTS_MODEL,
+    tts_voice: str = DirectConfig.DEFAULT_TTS_VOICE,
+    tts_style: str = "",
+    tts_language: str = "en-US",
     gen_client: Optional[genai.Client] = None,
     rater_client: Optional[genai.Client] = None,
 ) -> ShotRecord:
-    """Executes prompt optimization, generation, OpenCV seam/R2V checks, Auto-Rater v2, and Best-of-K checkpointing."""
+    """Executes TTS pre-synthesis (in tpvg_tts mode), Director Prompt optimization, Omni render, OpenCV guards, and Auto-Rater v2."""
     shot_idx = spec.scene_number
     raw_prompt = f"{spec.camera_angle} shot: {spec.description}"
     clip_path = os.path.join(output_dir, f"shot_{shot_idx}.mp4")
@@ -247,12 +362,52 @@ async def _execute_single_shot(
     is_i2v_shot = effective_mode == "i2v_chaining" and idx > 0 and prev_frame_b64 is not None
     is_r2v_shot = bool(reference_images_b64 and not is_extend_shot and not is_i2v_shot)
 
+    resolved_mode_label = "video_extend" if is_extend_shot else ("i2v_chaining" if is_i2v_shot else "reference")
+    eff_duration = resolve_omni_shot_duration(
+        requested_sec=spec.duration_sec,
+        default_sec=duration,
+        task_or_mode=resolved_mode_label,
+        is_two_frame_interp=False,
+    )
+
+    eff_audio_mode = (spec.audio_mode or ("on_camera" if (spec.spoken_dialogue and spec.spoken_dialogue.strip()) else "ambient")).strip().lower()
+    tts_wav_path: Optional[str] = None
+    tts_dur_sec: Optional[float] = None
+    tts_chunks_b64: Optional[List[str]] = None
+
+    if tpvg_tts_enabled and spec.spoken_dialogue and spec.spoken_dialogue.strip() and eff_audio_mode in ("on_camera", "off_camera_vo"):
+        shot_voice = spec.tts_voice or (vision_profile.default_tts_voice if vision_profile else tts_voice) or DirectConfig.DEFAULT_TTS_VOICE
+        shot_style = spec.tts_style if spec.tts_style is not None else (vision_profile.default_tts_style if vision_profile else tts_style)
+        wav_bytes, tts_meta = await asyncio.to_thread(
+            synthesize_tts_track_direct,
+            text=spec.spoken_dialogue.strip(),
+            voice_name=shot_voice,
+            language_code=tts_language,
+            style=shot_style,
+            model_name=tts_model,
+            client=rater_client,
+        )
+        tts_wav_path = os.path.join(output_dir, f"shot_{shot_idx}_tts.wav")
+        with open(tts_wav_path, "wb") as tfp:
+            tfp.write(wav_bytes)
+        tts_dur_sec = float(tts_meta.get("duration_sec") or 0.0)
+        if eff_audio_mode == "on_camera" and is_r2v_shot:
+            tts_chunks_b64 = split_wav_reference_chunks(wav_bytes, chunk_sec=3.0, max_chunks=5)
+        print(
+            f"[Shot #{shot_idx} TTS] model={tts_meta.get('model')} voice={shot_voice} "
+            f"dur={tts_dur_sec:.2f}s audio_mode={eff_audio_mode} chunks={len(tts_chunks_b64 or [])}"
+        )
+
     record = ShotRecord(
         shot_index=shot_idx,
-        effective_mode="video_extend" if is_extend_shot else ("i2v_chaining" if is_i2v_shot else "reference"),
+        effective_mode=resolved_mode_label,
+        duration_sec=eff_duration,
         prompt=raw_prompt,
         evaluation_criteria=spec.evaluation_criteria,
         spoken_dialogue=spec.spoken_dialogue,
+        audio_mode=eff_audio_mode,
+        tts_audio_path=os.path.abspath(tts_wav_path) if tts_wav_path else None,
+        tts_duration_sec=tts_dur_sec,
     )
 
     best_score: float = -1.0
@@ -260,26 +415,39 @@ async def _execute_single_shot(
     best_prompt: str = raw_prompt
     best_eval: Optional[Dict[str, Any]] = None
     feedback: Optional[str] = None
+    detected_issues: Optional[List[str]] = None
+
+    omni_dialogue = None if (tpvg_tts_enabled and eff_audio_mode == "off_camera_vo") else spec.spoken_dialogue
 
     for attempt in range(max(1, max_attempts)):
         record.attempts_used = attempt + 1
         opt_prompt = await optimize_shot_prompt_direct(
             raw_prompt=raw_prompt,
             feedback=feedback,
-            voice_transcript=spec.spoken_dialogue,
+            voice_transcript=omni_dialogue,
             is_extend_shot=is_extend_shot,
             is_r2v_shot=is_r2v_shot,
+            duration_sec=eff_duration,
+            vision_profile=vision_profile,
+            shot_spec=spec,
+            detected_issues=detected_issues,
             client=rater_client,
         )
 
         shot_refs = reference_images_b64 if is_r2v_shot else None
-        shot_task = "extend" if is_extend_shot else ("reference_to_video" if shot_refs else None)
+        shot_task = (
+            "extend"
+            if is_extend_shot
+            else ("image_to_video" if is_i2v_shot else ("reference_to_video" if shot_refs else None))
+        )
         shot_in_img = prev_frame_b64 if is_i2v_shot else None
         shot_in_vid = prev_video_tail_b64 if is_extend_shot else None
+        shot_aud_refs = tts_chunks_b64 if (is_r2v_shot and tts_chunks_b64) else None
 
         print(
             f"[Shot #{shot_idx} | Attempt {attempt + 1}/{max_attempts}] "
-            f"mode={record.effective_mode} task={shot_task or 'i2v/t2v'} res={resolution}"
+            f"mode={record.effective_mode} task={shot_task or 't2v'} dur={eff_duration}s res={resolution}"
+            + (f" tpvg_audio_chunks={len(shot_aud_refs)}" if shot_aud_refs else "")
         )
 
         t_ren0 = time.monotonic()
@@ -290,10 +458,11 @@ async def _execute_single_shot(
             input_video_b64=shot_in_vid,
             task=shot_task,
             reference_images_b64=shot_refs,
-            voice_transcript=spec.spoken_dialogue,
+            reference_audio_b64=shot_aud_refs,
+            voice_transcript=omni_dialogue,
             aspect_ratio=aspect_ratio,
             resolution=resolution,
-            duration=duration,
+            duration=eff_duration,
             client=gen_client,
         )
 
@@ -302,7 +471,7 @@ async def _execute_single_shot(
                 trim_video_prefix,
                 video_bytes,
                 prev_video_tail_sec,
-                float(duration),
+                float(eff_duration),
                 prev_last_frame_b64,
             )
         attempt_render_sec = time.monotonic() - t_ren0
@@ -310,6 +479,11 @@ async def _execute_single_shot(
 
         with open(clip_path, "wb") as fp:
             fp.write(video_bytes)
+
+        if tpvg_tts_enabled and eff_audio_mode == "off_camera_vo" and tts_wav_path and os.path.exists(tts_wav_path):
+            await asyncio.to_thread(mix_voiceover_onto_video, clip_path, tts_wav_path, clip_path)
+            with open(clip_path, "rb") as fp:
+                video_bytes = fp.read()
 
         det_signals: Dict[str, Any] = {}
         if is_r2v_shot and reference_images_b64:
@@ -324,6 +498,7 @@ async def _execute_single_shot(
                     best_bytes = video_bytes
                     best_prompt = opt_prompt
                 if attempt < max_attempts - 1:
+                    detected_issues = ["r2v_white_backdrop_echo"]
                     feedback = (
                         f"Frame 0 echoed the #FFFFFF studio reference image (MAE={r2v_f0_mae:.2f}). "
                         "Open immediately inside the full target environment—never show a white backdrop."
@@ -344,6 +519,7 @@ async def _execute_single_shot(
                     best_bytes = video_bytes
                     best_prompt = opt_prompt
                 if attempt < max_attempts - 1:
+                    detected_issues = ["seam_jump_or_momentum_stall"]
                     feedback = (
                         f"Hard jump-cut detected at extension boundary (peak MAE={peak_mae:.1f}). "
                         "Continue seamlessly from the exact ending frame and room in one unbroken camera shot."
@@ -362,6 +538,8 @@ async def _execute_single_shot(
             deterministic_signals=det_signals,
             is_r2v_shot=is_r2v_shot,
             is_extend_shot=is_extend_shot,
+            fails_if=spec.fails_if,
+            audio_mode=eff_audio_mode,
             client=rater_client,
         )
         attempt_avu_sec = time.monotonic() - t_avu0
@@ -382,6 +560,7 @@ async def _execute_single_shot(
 
         if score >= 0.8 or attempt == max_attempts - 1:
             break
+        detected_issues = list(eval_res.get("detected_genmedia_issues") or [])
         feedback = eval_res.get("feedback", "Improve subject continuity and single-take smoothness.")
 
     if best_bytes is not None:
@@ -395,6 +574,7 @@ async def _execute_single_shot(
         record.prompt = best_prompt
         record.quality_score = round(best_score, 3)
         record.verdict = (best_eval or {}).get("verdict", "PASSED" if best_score >= 0.8 else "COMPLETED_BEST_OF_K")
+        record.detected_genmedia_issues = list((best_eval or {}).get("detected_genmedia_issues") or [])
         record.evaluation_report = best_eval
 
     return record
@@ -458,9 +638,11 @@ async def _upscale_manifest_shots_async(
     manifest.draft_mode = True
     manifest.draft_resolution = src_res
 
-    valid_clips = [r.video_path for r in manifest.shots if r.video_path and os.path.exists(r.video_path)]
+    valid_records = [r for r in manifest.shots if r.video_path and os.path.exists(r.video_path)]
+    valid_clips = [r.video_path for r in valid_records if r.video_path]
     if valid_clips:
-        stitched_name = f"output_stitched_{len(valid_clips) * manifest.duration_per_shot_sec}s.mp4"
+        nominal_sec = sum(int(r.duration_sec or manifest.duration_per_shot_sec) for r in valid_records)
+        stitched_name = f"output_stitched_{nominal_sec}s.mp4"
         target_stitched = manifest.stitched_video_path or os.path.join(manifest.output_dir, stitched_name)
         t_st0 = time.monotonic()
         stitched_path = await asyncio.to_thread(stitch_videos, valid_clips, target_stitched, crossfade_seconds)
@@ -487,6 +669,13 @@ async def run_standalone_pipeline_async(
     reference_paths: Optional[List[str]] = None,
     voice_transcript: Optional[str] = None,
     storyboard_specs: Optional[List[StoryboardEntrySpec]] = None,
+    vision_profile: Optional[VisionProfileSpec] = None,
+    tts_model: str = DirectConfig.TTS_MODEL,
+    tts_voice: str = DirectConfig.DEFAULT_TTS_VOICE,
+    tts_style: str = "",
+    tts_language: str = "en-US",
+    quality_threshold: float = 0.80,
+    auto_approve: bool = True,
     max_attempts: int = 3,
     max_parallel: int = DirectConfig.MAX_PARALLEL_SHOTS,
     crossfade_seconds: Optional[float] = None,
@@ -502,6 +691,8 @@ async def run_standalone_pipeline_async(
     t0 = time.monotonic()
     abs_out_dir = os.path.abspath(output_dir)
     os.makedirs(abs_out_dir, exist_ok=True)
+    tpvg_tts_enabled = str(mode or "").strip().lower() == "tpvg_tts"
+    resolved_tts_model = normalize_tts_model_name(tts_model) if tpvg_tts_enabled else None
 
     tgt_res = str(resolution or "720p").strip().lower()
     drf_res = str(draft_resolution or "360p").strip().lower()
@@ -529,6 +720,7 @@ async def run_standalone_pipeline_async(
             num_shots=num_shots,
             mode=mode,
             voice_transcript=voice_transcript,
+            default_duration_sec=duration,
             client=active_rater_client,
         )
 
@@ -541,7 +733,7 @@ async def run_standalone_pipeline_async(
         _resolve_effective_shot_mode(mode, s.mode_override, i, bool(reference_b64s))
         for i, s in enumerate(specs)
     ]
-    can_parallel = all(m == "reference" for m in effective_modes) and len(specs) > 1
+    can_parallel = all(m == "reference" for m in effective_modes) and len(specs) > 1 and not tpvg_tts_enabled
 
     t_draft0 = time.monotonic()
     shot_records: List[ShotRecord] = []
@@ -560,6 +752,12 @@ async def run_standalone_pipeline_async(
                     duration=duration,
                     max_attempts=max_attempts,
                     output_dir=abs_out_dir,
+                    vision_profile=vision_profile,
+                    tpvg_tts_enabled=tpvg_tts_enabled,
+                    tts_model=tts_model,
+                    tts_voice=tts_voice,
+                    tts_style=tts_style,
+                    tts_language=tts_language,
                     gen_client=active_gen_client,
                     rater_client=active_rater_client,
                 )
@@ -592,20 +790,31 @@ async def run_standalone_pipeline_async(
                     prev_last_frame_b64=prev_last_frame_b64 if i > 0 else None,
                     is_r2v_shot=(eff_m == "reference"),
                     is_extend_shot=(eff_m == "video_extend"),
+                    fails_if=sp.fails_if,
+                    audio_mode=sp.audio_mode,
                     client=active_rater_client,
                 )
                 avu_dt = round(time.monotonic() - t_av, 2)
                 sc_val = round(float(eval_res.get("score", 0.0)), 3)
+                resumed_dur = resolve_omni_shot_duration(
+                    requested_sec=sp.duration_sec,
+                    default_sec=duration,
+                    task_or_mode=eff_m,
+                    is_two_frame_interp=False,
+                )
                 print(f"[Resume Shot #{i + 1}] Reusing saved {existing_clip} -> Score={sc_val:.2f}")
                 rec = ShotRecord(
                     shot_index=i + 1,
                     effective_mode=eff_m,
+                    duration_sec=resumed_dur,
                     prompt=sp.description,
                     evaluation_criteria=sp.evaluation_criteria,
                     spoken_dialogue=sp.spoken_dialogue,
+                    audio_mode=sp.audio_mode,
                     attempts_used=1,
                     quality_score=sc_val,
                     verdict=eval_res.get("verdict", "PASSED" if sc_val >= 0.8 else "COMPLETED_BEST_OF_K"),
+                    detected_genmedia_issues=list(eval_res.get("detected_genmedia_issues") or []),
                     video_path=os.path.abspath(existing_clip),
                     first_frame_path=os.path.abspath(ff_p),
                     last_frame_path=os.path.abspath(lf_p),
@@ -627,6 +836,12 @@ async def run_standalone_pipeline_async(
                     prev_last_frame_b64=prev_last_frame_b64,
                     prev_video_tail_b64=prev_tail_b64 if eff_m == "video_extend" else None,
                     prev_video_tail_sec=prev_tail_sec if eff_m == "video_extend" else 0.0,
+                    vision_profile=vision_profile,
+                    tpvg_tts_enabled=tpvg_tts_enabled,
+                    tts_model=tts_model,
+                    tts_voice=tts_voice,
+                    tts_style=tts_style,
+                    tts_language=tts_language,
                     gen_client=active_gen_client,
                     rater_client=active_rater_client,
                 )
@@ -676,7 +891,8 @@ async def run_standalone_pipeline_async(
             crossfade_seconds=resolved_xfade,
             gen_client=active_gen_client,
         )
-        valid_clips = [r.video_path for r in manifest.shots if r.video_path and os.path.exists(r.video_path)]
+        valid_records = [r for r in manifest.shots if r.video_path and os.path.exists(r.video_path)]
+        valid_clips = [r.video_path for r in valid_records if r.video_path]
         if len(valid_clips) >= 2 and manifest.stitched_video_path:
             t_sm0 = time.monotonic()
             manifest.master_seam_report = await evaluate_stitched_master_direct(
@@ -686,15 +902,19 @@ async def run_standalone_pipeline_async(
                 original_intent=prompt,
                 voice_transcript=voice_transcript,
                 reference_images_b64=reference_b64s,
+                shot_durations_sec=[float(r.duration_sec or duration) for r in valid_records],
+                crossfade_sec=resolved_xfade,
                 client=active_rater_client,
             )
             manifest.stitch_and_seam_audit_sec = round(
                 manifest.stitch_and_seam_audit_sec + (time.monotonic() - t_sm0), 2
             )
     else:
-        valid_clips = [r.video_path for r in manifest.shots if r.video_path and os.path.exists(r.video_path)]
+        valid_records = [r for r in manifest.shots if r.video_path and os.path.exists(r.video_path)]
+        valid_clips = [r.video_path for r in valid_records if r.video_path]
         if valid_clips:
-            stitched_name = f"output_stitched_{len(valid_clips) * duration}s.mp4"
+            nominal_sec = sum(int(r.duration_sec or duration) for r in valid_records)
+            stitched_name = f"output_stitched_{nominal_sec}s.mp4"
             target_stitched = os.path.join(abs_out_dir, stitched_name)
             t_st0 = time.monotonic()
             stitched_path = await asyncio.to_thread(stitch_videos, valid_clips, target_stitched, resolved_xfade)
@@ -708,12 +928,61 @@ async def run_standalone_pipeline_async(
                     original_intent=prompt,
                     voice_transcript=voice_transcript,
                     reference_images_b64=reference_b64s,
+                    shot_durations_sec=[float(r.duration_sec or duration) for r in valid_records],
+                    crossfade_sec=resolved_xfade,
                     client=active_rater_client,
                 )
             manifest.stitch_and_seam_audit_sec = round(time.monotonic() - t_st0, 2)
             manifest.stitched_video_path = stitched_path
             manifest.stitched_duration_sec = stitched_dur
             manifest.master_seam_report = master_report
+
+    manifest.tts_model = resolved_tts_model
+    manifest.tts_voice = tts_voice if tpvg_tts_enabled else None
+
+    if valid_clips:
+        qa_items = [
+            {
+                "path": r.video_path,
+                "label": f"Shot {r.shot_index} ({r.effective_mode})",
+                "score": r.quality_score,
+                "status": "PASSED" if (r.quality_score or 0.0) >= quality_threshold else "ESCALATED",
+            }
+            for r in manifest.shots
+            if r.video_path and os.path.exists(r.video_path)
+        ]
+        if qa_items:
+            qa_sheet_path = os.path.join(abs_out_dir, "qa_contact_sheet.png")
+            await asyncio.to_thread(build_contact_sheet, qa_items, qa_sheet_path, 3)
+            manifest.qa_contact_sheet_path = qa_sheet_path
+
+    if not _defer_upscale and not auto_approve:
+        unresolved = [
+            {
+                "shot_index": r.shot_index,
+                "score": r.quality_score,
+                "verdict": r.verdict,
+                "detected_genmedia_issues": r.detected_genmedia_issues,
+                "feedback": (r.evaluation_report or {}).get("feedback", ""),
+                "video_path": r.video_path,
+            }
+            for r in manifest.shots
+            if float(r.quality_score or 0.0) < quality_threshold
+        ]
+        master_score = (manifest.master_seam_report or {}).get("score")
+        if unresolved or (master_score is not None and float(master_score) < 0.75):
+            esc_path = os.path.join(abs_out_dir, "escalation_report.json")
+            esc_payload = {
+                "status": "human_review_required",
+                "quality_threshold": quality_threshold,
+                "unresolved_shots": unresolved,
+                "master_seam_score": master_score,
+                "qa_contact_sheet_path": manifest.qa_contact_sheet_path,
+                "stitched_video_path": manifest.stitched_video_path,
+            }
+            Path(esc_path).write_text(json.dumps(esc_payload, indent=2), encoding="utf-8")
+            manifest.escalation_report_path = esc_path
+            manifest.human_review_required = True
 
     manifest.elapsed_sec = round(time.monotonic() - t0, 2)
     manifest_path = os.path.join(abs_out_dir, "run_manifest.json")
@@ -754,6 +1023,31 @@ def _select_shots_for_interpolation_repair(
     return sorted(flagged.items(), key=lambda item: item[0])
 
 
+def _build_default_boundary_keyframe_prompt(
+    shot_spec: StoryboardEntrySpec,
+    position: str = "opening",
+    num_refs: int = 0,
+    aspect_ratio: str = "16:9",
+) -> str:
+    """Builds a domain-neutral Shot-1 opening or Shot-N closing keyframe synthesis prompt."""
+    pos_label = "opening film still" if position == "opening" else "closing hero film still"
+    if num_refs >= 2:
+        grounding = (
+            "Preserve exact subject or product identity, proportions, colorway, branding, and wardrobe/materials "
+            "from the first reference image, grounded naturally inside the architectural environment and lighting "
+            "of the second reference image. Photorealistic natural lighting, zero text overlays, zero white studio backdrop."
+        )
+    elif num_refs == 1:
+        grounding = (
+            "Preserve exact subject or product identity, proportions, colorway, branding, and wardrobe/materials "
+            "from the reference image, placed naturally inside the target scene environment. "
+            "Photorealistic natural lighting, zero text overlays, zero white studio backdrop."
+        )
+    else:
+        grounding = "Photorealistic natural lighting, coherent cinematic scene composition, zero text overlays."
+    return f"Cinematic {aspect_ratio} {pos_label} for: {shot_spec.description}. {grounding}"
+
+
 async def _repair_scene_shots_with_interpolation(
     scene_spec: SceneSpec,
     manifest: WorkflowManifest,
@@ -770,6 +1064,10 @@ async def _repair_scene_shots_with_interpolation(
     active_gen_client = gen_client or get_direct_genai_client(timeout_ms=DirectConfig.VIDEO_GEN_TIMEOUT_MS)
     active_rater_client = rater_client or get_direct_genai_client(timeout_ms=DirectConfig.RATER_TIMEOUT_MS)
     scene_ref_b64s = [encode_image_file_b64(p) for p in scene_spec.reference_paths if os.path.exists(p)] or None
+    num_scene_refs = len(scene_ref_b64s) if scene_ref_b64s else 0
+    scene_default_dur = int(
+        scene_spec.duration_sec if scene_spec.duration_sec is not None else manifest.duration_per_shot_sec
+    )
     any_accepted = False
     n_shots = len(manifest.shots)
 
@@ -780,6 +1078,7 @@ async def _repair_scene_shots_with_interpolation(
             description=rec.prompt,
             evaluation_criteria=rec.evaluation_criteria,
             spoken_dialogue=rec.spoken_dialogue,
+            duration_sec=rec.duration_sec,
         )
         orig_score = float(rec.quality_score if rec.quality_score is not None else 0.0)
         print(
@@ -797,11 +1096,11 @@ async def _repair_scene_shots_with_interpolation(
         elif k == 0:
             lf_path = manifest.shots[1].first_frame_path
             gen_start_path = os.path.join(manifest.output_dir, "shot_1_interp_start.png")
-            start_prompt = scene_spec.opening_keyframe_prompt or (
-                f"Cinematic 16:9 opening film still for: {shot_spec.description}. "
-                "Keep exact spokesperson face, champagne-ivory satin blazer, and amber serum dropper bottle "
-                "from the first reference image inside the architectural environment of the second reference image. "
-                "Photorealistic natural daylight, zero text overlays, zero white studio backdrop."
+            start_prompt = scene_spec.opening_keyframe_prompt or _build_default_boundary_keyframe_prompt(
+                shot_spec=shot_spec,
+                position="opening",
+                num_refs=num_scene_refs,
+                aspect_ratio=manifest.aspect_ratio,
             )
             start_bytes = await asyncio.to_thread(
                 generate_reference_image_direct,
@@ -816,11 +1115,11 @@ async def _repair_scene_shots_with_interpolation(
         else:
             ff_path = manifest.shots[k - 1].last_frame_path
             gen_end_path = os.path.join(manifest.output_dir, f"shot_{rec.shot_index}_interp_end.png")
-            end_prompt = scene_spec.closing_keyframe_prompt or (
-                f"Cinematic 16:9 closing hero film still for: {shot_spec.description}. "
-                "Keep exact spokesperson face, champagne-ivory satin blazer, and amber serum dropper bottle "
-                "from the first reference image inside the architectural environment of the second reference image. "
-                "Photorealistic lighting, zero text overlays, zero white studio backdrop."
+            end_prompt = scene_spec.closing_keyframe_prompt or _build_default_boundary_keyframe_prompt(
+                shot_spec=shot_spec,
+                position="closing",
+                num_refs=num_scene_refs,
+                aspect_ratio=manifest.aspect_ratio,
             )
             end_bytes = await asyncio.to_thread(
                 generate_reference_image_direct,
@@ -839,6 +1138,12 @@ async def _repair_scene_shots_with_interpolation(
 
         ff_b64 = encode_image_file_b64(ff_path)
         lf_b64 = encode_image_file_b64(lf_path)
+        interp_dur = resolve_omni_shot_duration(
+            requested_sec=shot_spec.duration_sec if shot_spec.duration_sec is not None else rec.duration_sec,
+            default_sec=scene_default_dur,
+            task_or_mode="first_last_interpolation",
+            is_two_frame_interp=True,
+        )
         prev_feedback = (rec.evaluation_report or {}).get("feedback")
         interp_prompt = await optimize_shot_prompt_direct(
             raw_prompt=f"{shot_spec.camera_angle} shot: {shot_spec.description}",
@@ -849,10 +1154,10 @@ async def _repair_scene_shots_with_interpolation(
             voice_transcript=shot_spec.spoken_dialogue,
             is_extend_shot=False,
             is_r2v_shot=False,
+            duration_sec=interp_dur,
             client=active_rater_client,
         )
 
-        interp_dur = min(10, max(3, int(manifest.duration_per_shot_sec)))
         interp_bytes = await asyncio.to_thread(
             generate_omni_clip_direct,
             prompt=interp_prompt,
@@ -927,6 +1232,7 @@ async def _repair_scene_shots_with_interpolation(
             if rec.last_frame_path:
                 await asyncio.to_thread(extract_last_frame, rec.video_path, rec.last_frame_path)
             rec.effective_mode = "first_last_interpolation"
+            rec.duration_sec = interp_dur
             rec.prompt = interp_prompt
             rec.attempts_used += 1
             rec.quality_score = interp_score
@@ -935,7 +1241,8 @@ async def _repair_scene_shots_with_interpolation(
             any_accepted = True
 
     if any_accepted:
-        valid_clips = [r.video_path for r in manifest.shots if r.video_path and os.path.exists(r.video_path)]
+        valid_records = [r for r in manifest.shots if r.video_path and os.path.exists(r.video_path)]
+        valid_clips = [r.video_path for r in valid_records if r.video_path]
         if valid_clips and manifest.stitched_video_path:
             await asyncio.to_thread(stitch_videos, valid_clips, manifest.stitched_video_path, crossfade_seconds)
             manifest.stitched_duration_sec = round(get_video_duration(manifest.stitched_video_path), 2)
@@ -946,10 +1253,12 @@ async def _repair_scene_shots_with_interpolation(
                 manifest.master_seam_report = await evaluate_stitched_master_direct(
                     stitched_video_path=manifest.stitched_video_path,
                     num_shots=len(valid_clips),
-                    shot_duration_sec=float(manifest.duration_per_shot_sec),
+                    shot_duration_sec=float(scene_default_dur),
                     original_intent=scene_spec.title or manifest.original_intent,
                     voice_transcript=vo_lines,
                     reference_images_b64=scene_ref_b64s,
+                    shot_durations_sec=[float(r.duration_sec or scene_default_dur) for r in valid_records],
+                    crossfade_sec=crossfade_seconds,
                     client=active_rater_client,
                 )
         manifest_path = os.path.join(manifest.output_dir, "run_manifest.json")
@@ -974,6 +1283,12 @@ async def run_multi_scene_pipeline_async(
     draft_mode: bool = False,
     draft_resolution: str = "360p",
     max_parallel_upscales: int = 3,
+    vision_profile: Optional[VisionProfileSpec] = None,
+    tts_model: str = DirectConfig.TTS_MODEL,
+    tts_voice: str = DirectConfig.DEFAULT_TTS_VOICE,
+    tts_style: str = "",
+    tts_language: str = "en-US",
+    auto_approve: bool = True,
     resume: bool = False,
     gen_client: Optional[genai.Client] = None,
     rater_client: Optional[genai.Client] = None,
@@ -1000,26 +1315,44 @@ async def run_multi_scene_pipeline_async(
             scene_slug = sc.scene_id or f"scene_{idx + 1}"
             scene_dir = os.path.join(abs_out_dir, scene_slug)
             saved_sc_mf = os.path.join(scene_dir, "run_manifest.json")
-            top_scene_mp4 = os.path.join(abs_out_dir, f"{scene_slug}_{(len(sc.shots) or 3) * duration}s.mp4")
-            if resume and os.path.exists(saved_sc_mf) and os.path.exists(top_scene_mp4):
-                sc_manifest = WorkflowManifest.model_validate_json(Path(saved_sc_mf).read_text(encoding="utf-8"))
-                print(f"\n=== [{scene_slug}] Resumed completed scene ({sc_manifest.stitched_duration_sec}s) ===")
-                return SceneManifestRecord(
-                    scene_id=scene_slug,
-                    title=sc.title,
-                    output_dir=scene_dir,
-                    scene_video_path=top_scene_mp4,
-                    scene_duration_sec=sc_manifest.stitched_duration_sec,
-                    elapsed_sec=sc_manifest.elapsed_sec,
-                    draft_and_avu_sec=sc_manifest.draft_and_avu_sec,
-                    interpolation_repair_sec=sc_manifest.interpolation_repair_sec,
-                    upscale_sec=sc_manifest.upscale_sec,
-                    stitch_and_seam_audit_sec=sc_manifest.stitch_and_seam_audit_sec,
-                    reference_paths=[os.path.abspath(p) for p in sc.reference_paths if os.path.exists(p)],
-                    shots=sc_manifest.shots,
-                    interpolation_repairs=sc_manifest.interpolation_repairs,
-                    scene_seam_report=sc_manifest.master_seam_report,
+            scene_default_dur = int(sc.duration_sec if sc.duration_sec is not None else duration)
+            has_sc_refs = bool(sc.reference_paths)
+            if sc.shots:
+                est_scene_sec = sum(
+                    resolve_omni_shot_duration(
+                        requested_sec=s.duration_sec,
+                        default_sec=scene_default_dur,
+                        task_or_mode=_resolve_effective_shot_mode(sc.mode, s.mode_override, j, has_sc_refs),
+                        is_two_frame_interp=False,
+                    )
+                    for j, s in enumerate(sc.shots)
                 )
+            else:
+                est_scene_sec = 3 * scene_default_dur
+            top_scene_mp4 = os.path.join(abs_out_dir, f"{scene_slug}_{est_scene_sec}s.mp4")
+            if resume and os.path.exists(saved_sc_mf):
+                sc_manifest = WorkflowManifest.model_validate_json(Path(saved_sc_mf).read_text(encoding="utf-8"))
+                mf_sec = sum(int(r.duration_sec or scene_default_dur) for r in sc_manifest.shots) or est_scene_sec
+                alt_top_mp4 = os.path.join(abs_out_dir, f"{scene_slug}_{mf_sec}s.mp4")
+                resumed_top = top_scene_mp4 if os.path.exists(top_scene_mp4) else (alt_top_mp4 if os.path.exists(alt_top_mp4) else None)
+                if resumed_top:
+                    print(f"\n=== [{scene_slug}] Resumed completed scene ({sc_manifest.stitched_duration_sec}s) ===")
+                    return SceneManifestRecord(
+                        scene_id=scene_slug,
+                        title=sc.title,
+                        output_dir=scene_dir,
+                        scene_video_path=resumed_top,
+                        scene_duration_sec=sc_manifest.stitched_duration_sec,
+                        elapsed_sec=sc_manifest.elapsed_sec,
+                        draft_and_avu_sec=sc_manifest.draft_and_avu_sec,
+                        interpolation_repair_sec=sc_manifest.interpolation_repair_sec,
+                        upscale_sec=sc_manifest.upscale_sec,
+                        stitch_and_seam_audit_sec=sc_manifest.stitch_and_seam_audit_sec,
+                        reference_paths=[os.path.abspath(p) for p in sc.reference_paths if os.path.exists(p)],
+                        shots=sc_manifest.shots,
+                        interpolation_repairs=sc_manifest.interpolation_repairs,
+                        scene_seam_report=sc_manifest.master_seam_report,
+                    )
 
             scene_vo = " ".join(
                 s.spoken_dialogue.strip() for s in sc.shots if s.spoken_dialogue and s.spoken_dialogue.strip()
@@ -1027,7 +1360,7 @@ async def run_multi_scene_pipeline_async(
             scene_prompt = sc.title or (" / ".join(s.description for s in sc.shots))
             res_banner = f"{drf_res} draft -> {tgt_res} upscale" if active_draft else tgt_res
             print(
-                f"\n=== [{scene_slug}] Starting {len(sc.shots) * duration}s Scene ({res_banner}): "
+                f"\n=== [{scene_slug}] Starting {est_scene_sec}s Scene ({res_banner}): "
                 f"{sc.title or scene_slug} ==="
             )
 
@@ -1036,12 +1369,19 @@ async def run_multi_scene_pipeline_async(
                 output_dir=scene_dir,
                 mode=sc.mode,
                 num_shots=len(sc.shots) or 3,
-                duration=duration,
+                duration=scene_default_dur,
                 aspect_ratio=aspect_ratio,
                 resolution=tgt_res,
                 reference_paths=sc.reference_paths or None,
                 voice_transcript=scene_vo,
                 storyboard_specs=sc.shots or None,
+                vision_profile=vision_profile,
+                tts_model=tts_model,
+                tts_voice=tts_voice,
+                tts_style=tts_style,
+                tts_language=tts_language,
+                quality_threshold=quality_threshold,
+                auto_approve=True,
                 max_attempts=max_attempts,
                 crossfade_seconds=shot_crossfade_seconds,
                 draft_mode=active_draft,
@@ -1081,7 +1421,8 @@ async def run_multi_scene_pipeline_async(
 
             exported_scene_video: Optional[str] = sc_manifest.stitched_video_path
             if sc_manifest.stitched_video_path and os.path.exists(sc_manifest.stitched_video_path):
-                top_scene_mp4 = os.path.join(abs_out_dir, f"{scene_slug}_{len(sc_manifest.shots) * duration}s.mp4")
+                actual_nominal_sec = sum(int(r.duration_sec or scene_default_dur) for r in sc_manifest.shots) or est_scene_sec
+                top_scene_mp4 = os.path.join(abs_out_dir, f"{scene_slug}_{actual_nominal_sec}s.mp4")
                 shutil.copyfile(sc_manifest.stitched_video_path, top_scene_mp4)
                 exported_scene_video = top_scene_mp4
 
@@ -1104,9 +1445,10 @@ async def run_multi_scene_pipeline_async(
 
     scene_records = list(await asyncio.gather(*(_run_one_scene(i, s) for i, s in enumerate(scenes))))
 
-    scene_videos = [
-        sr.scene_video_path for sr in scene_records if sr.scene_video_path and os.path.exists(sr.scene_video_path)
+    valid_scene_records = [
+        sr for sr in scene_records if sr.scene_video_path and os.path.exists(sr.scene_video_path)
     ]
+    scene_videos = [sr.scene_video_path for sr in valid_scene_records if sr.scene_video_path]
     total_shots = sum(len(sr.shots) for sr in scene_records)
     master_video_path: Optional[str] = None
     master_dur: float = 0.0
@@ -1115,7 +1457,10 @@ async def run_multi_scene_pipeline_async(
 
     if scene_videos:
         t_ms0 = time.monotonic()
-        nominal_total_sec = total_shots * duration
+        nominal_total_sec = (
+            sum(int(sh.duration_sec or duration) for sr in scene_records for sh in sr.shots)
+            or (total_shots * duration)
+        )
         target_master = os.path.join(abs_out_dir, f"output_master_{nominal_total_sec}s.mp4")
         master_video_path = await asyncio.to_thread(
             stitch_videos, scene_videos, target_master, scene_crossfade_seconds
@@ -1135,6 +1480,12 @@ async def run_multi_scene_pipeline_async(
                 if s.spoken_dialogue and s.spoken_dialogue.strip()
             ) or None
             avg_scene_dur = round(master_dur / float(len(scene_videos)), 2) if master_dur > 0 else float(3 * duration)
+            per_scene_durs = [
+                float(sr.scene_duration_sec)
+                if sr.scene_duration_sec > 0
+                else float(sum(int(sh.duration_sec or duration) for sh in sr.shots) or (3 * duration))
+                for sr in valid_scene_records
+            ]
             master_report = await evaluate_stitched_master_direct(
                 stitched_video_path=master_video_path,
                 num_shots=len(scene_videos),
@@ -1142,9 +1493,64 @@ async def run_multi_scene_pipeline_async(
                 original_intent=original_intent or " / ".join(sc.title or sc.scene_id for sc in scenes),
                 voice_transcript=full_vo,
                 reference_images_b64=hero_ref_b64s,
+                shot_durations_sec=per_scene_durs,
+                crossfade_sec=scene_crossfade_seconds,
                 client=active_rater_client,
             )
         master_stitch_sec = round(time.monotonic() - t_ms0, 2)
+
+    any_tpvg_tts = any(str(sc.mode or "").strip().lower() == "tpvg_tts" for sc in scenes)
+    qa_items = [
+        {
+            "path": sh.video_path,
+            "label": f"{sr.scene_id} S{sh.shot_index}",
+            "score": sh.quality_score,
+            "status": "PASSED" if float(sh.quality_score or 0.0) >= quality_threshold else "ESCALATED",
+        }
+        for sr in scene_records
+        for sh in sr.shots
+        if sh.video_path and os.path.exists(sh.video_path)
+    ]
+    qa_sheet_path: Optional[str] = None
+    if qa_items:
+        qa_sheet_path = os.path.join(abs_out_dir, "qa_contact_sheet.png")
+        await asyncio.to_thread(build_contact_sheet, qa_items, qa_sheet_path, 3)
+
+    esc_path: Optional[str] = None
+    human_review_req = False
+    if not auto_approve:
+        unresolved = [
+            {
+                "scene_id": sr.scene_id,
+                "shot_index": sh.shot_index,
+                "score": sh.quality_score,
+                "verdict": sh.verdict,
+                "detected_genmedia_issues": sh.detected_genmedia_issues,
+                "feedback": (sh.evaluation_report or {}).get("feedback", ""),
+                "video_path": sh.video_path,
+            }
+            for sr in scene_records
+            for sh in sr.shots
+            if float(sh.quality_score or 0.0) < quality_threshold
+        ]
+        m_score = (master_report or {}).get("score")
+        if unresolved or (m_score is not None and float(m_score) < 0.75):
+            esc_path = os.path.join(abs_out_dir, "escalation_report.json")
+            Path(esc_path).write_text(
+                json.dumps(
+                    {
+                        "status": "human_review_required",
+                        "quality_threshold": quality_threshold,
+                        "unresolved_shots": unresolved,
+                        "master_seam_score": m_score,
+                        "qa_contact_sheet_path": qa_sheet_path,
+                        "master_video_path": master_video_path,
+                    },
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+            human_review_req = True
 
     multi_manifest = MultiSceneWorkflowManifest(
         created_at_utc=datetime.now(timezone.utc).isoformat(),
@@ -1162,6 +1568,11 @@ async def run_multi_scene_pipeline_async(
         sum_scene_upscale_sec=round(sum(sr.upscale_sec for sr in scene_records), 2),
         master_stitch_and_seam_audit_sec=master_stitch_sec,
         output_dir=abs_out_dir,
+        tts_model=normalize_tts_model_name(tts_model) if any_tpvg_tts else None,
+        tts_voice=tts_voice if any_tpvg_tts else None,
+        qa_contact_sheet_path=qa_sheet_path,
+        escalation_report_path=esc_path,
+        human_review_required=human_review_req,
         master_video_path=master_video_path,
         master_duration_sec=master_dur,
         scenes=scene_records,
@@ -1191,12 +1602,38 @@ def _build_cli_parser() -> argparse.ArgumentParser:
     parser.add_argument("--reference", nargs="*", help="Optional #FFFFFF reference image path(s).")
     parser.add_argument(
         "--mode",
-        choices=["reference", "i2v_chaining", "video_extend", "hybrid"],
+        choices=["reference", "i2v_chaining", "video_extend", "hybrid", "tpvg_tts"],
         default="video_extend",
-        help="Multi-shot continuity mode.",
+        help="Multi-shot continuity mode (tpvg_tts = Gemini 3.8 TTS + Omni TPVG/Mux hybrid).",
     )
+    parser.add_argument(
+        "--stage",
+        choices=["plan", "plates", "execute"],
+        default="execute",
+        help="Production stage: 'plan' (VisionProfile + Storyboard), 'plates' (render scene plates + contact sheet), or 'execute' (render + audit).",
+    )
+    parser.add_argument(
+        "--check-spec",
+        action="store_true",
+        help="Validate storyboard/scenes spec (WPM pacing, GA duration bounds, missing assets, angle cuts) and exit without video compute.",
+    )
+    parser.add_argument("--vision-json", default=None, help="Optional path to director_plan.json / VisionProfileSpec JSON.")
+    parser.add_argument(
+        "--auto-approve",
+        action="store_true",
+        help="Bypass Dual HITL Gate 2 pause (returns exit code 0 even if shots need human review).",
+    )
+    parser.add_argument("--tts-model", default=DirectConfig.TTS_MODEL, help="TTS model ID or alias (gemini-3.8-tts -> gemini-3.8-flash-tts).")
+    parser.add_argument("--tts-voice", default=DirectConfig.DEFAULT_TTS_VOICE, help="Default TTS voice (Kore, Puck, Aoede, Charon, Fenrir, Leda, Zephyr).")
+    parser.add_argument("--tts-style", default="", help="Optional TTS speaking style directive.")
+    parser.add_argument("--tts-language", default="en-US", help="BCP-47 TTS language code (default: en-US).")
     parser.add_argument("--shots", type=int, default=3, help="Number of shots (ignored if --storyboard-json set).")
-    parser.add_argument("--duration", type=int, default=10, help="Duration per shot in seconds (3-10 for extend/interp).")
+    parser.add_argument(
+        "--duration",
+        type=int,
+        default=10,
+        help="Default duration per shot in seconds (3-15s for R2V/I2V/T2V; auto-clamped to 3-10s for extend/interp).",
+    )
     parser.add_argument("--aspect-ratio", default="16:9", choices=["16:9", "9:16"])
     parser.add_argument("--resolution", default="720p", choices=["360p", "720p", "1080p", "4k"])
     parser.add_argument(
@@ -1247,9 +1684,97 @@ def _build_cli_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _load_optional_vision_profile(vision_json_path: Optional[str]) -> Optional[VisionProfileSpec]:
+    if not vision_json_path or not os.path.exists(vision_json_path):
+        return None
+    raw = json.loads(Path(vision_json_path).read_text(encoding="utf-8"))
+    if isinstance(raw, dict) and "vision_profile" in raw:
+        return VisionProfileSpec.model_validate(raw["vision_profile"])
+    return VisionProfileSpec.model_validate(raw)
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     parser = _build_cli_parser()
     args = parser.parse_args(argv)
+    abs_out_dir = os.path.abspath(args.output_dir)
+    os.makedirs(abs_out_dir, exist_ok=True)
+    vision_profile = _load_optional_vision_profile(args.vision_json)
+
+    if args.stage == "plan":
+        prompt_text = args.prompt.strip()
+        if not prompt_text:
+            parser.error("--stage plan requires --prompt.")
+        plan = asyncio.run(
+            generate_vision_and_plan_direct(
+                intent=prompt_text,
+                num_shots=args.shots,
+                mode=args.mode,
+                aspect_ratio=args.aspect_ratio,
+                voice_transcript=args.voice_transcript,
+                default_duration_sec=args.duration,
+                tts_voice=args.tts_voice,
+                tts_style=args.tts_style,
+            )
+        )
+        plan_json_p = os.path.join(abs_out_dir, "director_plan.json")
+        plan_md_p = os.path.join(abs_out_dir, "director_plan.md")
+        sb_json_p = os.path.join(abs_out_dir, "storyboard_defined.json")
+        Path(plan_json_p).write_text(plan.model_dump_json(indent=2), encoding="utf-8")
+        Path(plan_md_p).write_text(format_director_plan_markdown(plan), encoding="utf-8")
+        Path(sb_json_p).write_text(json.dumps([s.model_dump() for s in plan.shots], indent=2), encoding="utf-8")
+        spec_check = validate_production_spec(
+            storyboard_specs=plan.shots,
+            default_mode=args.mode,
+            default_duration=args.duration,
+        )
+        print(json.dumps({
+            "status": "plan_ready",
+            "director_plan_json": plan_json_p,
+            "director_plan_md": plan_md_p,
+            "storyboard_defined_json": sb_json_p,
+            "spec_check": spec_check,
+        }, indent=2))
+        return 0
+
+    if args.stage == "plates":
+        plate_items: List[Dict[str, Any]] = []
+        style_suffix = f" {vision_profile.style_anchor}" if (vision_profile and vision_profile.style_anchor) else ""
+        if args.scenes_json:
+            raw_scenes_doc = json.loads(Path(args.scenes_json).read_text(encoding="utf-8"))
+            raw_scenes_list = raw_scenes_doc.get("scenes", []) if isinstance(raw_scenes_doc, dict) else raw_scenes_doc
+            scene_specs = [SceneSpec.model_validate(item) for item in raw_scenes_list]
+            for sc in scene_specs:
+                sc_dir = os.path.join(abs_out_dir, sc.scene_id)
+                os.makedirs(sc_dir, exist_ok=True)
+                target_plate = sc.reference_paths[-1] if (sc.scene_plate_prompt and len(sc.reference_paths) >= 2) else (
+                    sc.reference_paths[0] if (sc.scene_plate_prompt and len(sc.reference_paths) == 1) else os.path.join(sc_dir, "scene_plate.png")
+                )
+                if sc.scene_plate_prompt and not os.path.exists(target_plate):
+                    cond_refs = [encode_image_file_b64(p) for p in sc.reference_paths if p != target_plate and os.path.exists(p)] or None
+                    img_bytes = generate_reference_image_direct(
+                        prompt=f"{sc.scene_plate_prompt.strip()}{style_suffix}".strip(),
+                        reference_images_b64=cond_refs,
+                        aspect_ratio=args.aspect_ratio,
+                    )
+                    os.makedirs(os.path.dirname(os.path.abspath(target_plate)), exist_ok=True)
+                    Path(target_plate).write_bytes(img_bytes)
+                for p in (sc.reference_paths or [target_plate]):
+                    if p and os.path.exists(p):
+                        plate_items.append({"path": os.path.abspath(p), "label": f"{sc.scene_id}: {os.path.basename(p)}", "status": "PLATE"})
+        else:
+            for p in (args.reference or []):
+                if os.path.exists(p):
+                    plate_items.append({"path": os.path.abspath(p), "label": os.path.basename(p), "status": "PLATE"})
+        if not plate_items:
+            parser.error("--stage plates found no scene_plate_prompt or existing reference images to render.")
+        sheet_p = os.path.join(abs_out_dir, "plates_contact_sheet.png")
+        build_contact_sheet(plate_items, sheet_p, cols=min(3, len(plate_items)))
+        print(json.dumps({
+            "status": "plates_ready",
+            "plates_contact_sheet_path": sheet_p,
+            "plates_count": len(plate_items),
+        }, indent=2))
+        return 0
 
     if args.scenes_json:
         raw_scenes_doc = json.loads(Path(args.scenes_json).read_text(encoding="utf-8"))
@@ -1262,6 +1787,15 @@ def main(argv: Optional[List[str]] = None) -> int:
         scene_specs = [SceneSpec.model_validate(item) for item in raw_scenes_list]
         if not scene_specs:
             parser.error("--scenes-json contained zero scenes.")
+
+        spec_check = validate_production_spec(
+            scene_specs=scene_specs,
+            default_mode=args.mode,
+            default_duration=args.duration,
+        )
+        if args.check_spec:
+            print(json.dumps(spec_check, indent=2))
+            return 0 if spec_check["valid"] else 1
 
         multi_manifest = asyncio.run(
             run_multi_scene_pipeline_async(
@@ -1279,16 +1813,26 @@ def main(argv: Optional[List[str]] = None) -> int:
                 draft_mode=args.draft_mode,
                 draft_resolution=args.draft_resolution,
                 max_parallel_upscales=args.max_parallel_upscales,
+                vision_profile=vision_profile,
+                tts_model=args.tts_model,
+                tts_voice=args.tts_voice,
+                tts_style=args.tts_style,
+                tts_language=args.tts_language,
+                auto_approve=args.auto_approve,
                 resume=args.resume,
             )
         )
         print(json.dumps({
-            "status": "ok",
+            "status": "human_review_required" if multi_manifest.human_review_required else "ok",
             "master_video_path": multi_manifest.master_video_path,
             "master_duration_sec": multi_manifest.master_duration_sec,
             "resolution": multi_manifest.resolution,
             "draft_mode": multi_manifest.draft_mode,
             "draft_resolution": multi_manifest.draft_resolution,
+            "tts_model": multi_manifest.tts_model,
+            "tts_voice": multi_manifest.tts_voice,
+            "qa_contact_sheet_path": multi_manifest.qa_contact_sheet_path,
+            "escalation_report_path": multi_manifest.escalation_report_path,
             "elapsed_sec": multi_manifest.elapsed_sec,
             "sum_scene_draft_and_avu_sec": multi_manifest.sum_scene_draft_and_avu_sec,
             "sum_scene_repair_sec": multi_manifest.sum_scene_repair_sec,
@@ -1310,12 +1854,23 @@ def main(argv: Optional[List[str]] = None) -> int:
             ],
             "master_score": (multi_manifest.master_seam_report or {}).get("score"),
         }, indent=2))
-        return 0
+        return 2 if multi_manifest.human_review_required else 0
 
     specs: Optional[List[StoryboardEntrySpec]] = None
     if args.storyboard_json:
         raw_data = json.loads(Path(args.storyboard_json).read_text(encoding="utf-8"))
         specs = [StoryboardEntrySpec.model_validate(item) for item in raw_data]
+
+    if args.check_spec:
+        if not specs:
+            parser.error("--check-spec requires --storyboard-json or --scenes-json.")
+        spec_check = validate_production_spec(
+            storyboard_specs=specs,
+            default_mode=args.mode,
+            default_duration=args.duration,
+        )
+        print(json.dumps(spec_check, indent=2))
+        return 0 if spec_check["valid"] else 1
 
     prompt_text = args.prompt.strip()
     if not prompt_text and specs:
@@ -1335,6 +1890,13 @@ def main(argv: Optional[List[str]] = None) -> int:
             reference_paths=args.reference,
             voice_transcript=args.voice_transcript,
             storyboard_specs=specs,
+            vision_profile=vision_profile,
+            tts_model=args.tts_model,
+            tts_voice=args.tts_voice,
+            tts_style=args.tts_style,
+            tts_language=args.tts_language,
+            quality_threshold=args.quality_threshold,
+            auto_approve=args.auto_approve,
             max_attempts=args.max_attempts,
             max_parallel=args.max_parallel,
             crossfade_seconds=args.crossfade,
@@ -1345,12 +1907,16 @@ def main(argv: Optional[List[str]] = None) -> int:
         )
     )
     print(json.dumps({
-        "status": "ok",
+        "status": "human_review_required" if manifest.human_review_required else "ok",
         "stitched_video_path": manifest.stitched_video_path,
         "stitched_duration_sec": manifest.stitched_duration_sec,
         "resolution": manifest.resolution,
         "draft_mode": manifest.draft_mode,
         "draft_resolution": manifest.draft_resolution,
+        "tts_model": manifest.tts_model,
+        "tts_voice": manifest.tts_voice,
+        "qa_contact_sheet_path": manifest.qa_contact_sheet_path,
+        "escalation_report_path": manifest.escalation_report_path,
         "elapsed_sec": manifest.elapsed_sec,
         "draft_and_avu_sec": manifest.draft_and_avu_sec,
         "upscale_sec": manifest.upscale_sec,
@@ -1358,7 +1924,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         "shot_scores": [s.quality_score for s in manifest.shots],
         "master_score": (manifest.master_seam_report or {}).get("score"),
     }, indent=2))
-    return 0
+    return 2 if manifest.human_review_required else 0
 
 
 if __name__ == "__main__":

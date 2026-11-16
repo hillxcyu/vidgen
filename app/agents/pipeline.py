@@ -31,6 +31,65 @@ from app.tools.video_parser import (
 )
 from app.tools.omni_client import generate_omni_clip, build_omni_control_string
 from app.tools.stitcher import stitch_videos
+from app.tools.tts_client import split_wav_reference_chunks, synthesize_tts_wav
+
+
+GENMEDIA_DEFECT_TAXONOMY: Dict[str, Dict[str, str]] = {
+    "r2v_white_backdrop_echo": {
+        "description": "Frame 0 opens on or dissolves out of a #FFFFFF studio white backdrop instead of the target scene.",
+        "remedy": "Open immediately on Frame 0 inside the physical environment; never mention or depict a white studio background.",
+    },
+    "identity_or_sku_drift": {
+        "description": "Facial geometry, skin tone, garment colorway, or product SKU proportions/materials drift from reference.",
+        "remedy": "Preserve exact Character A facial identity, wardrobe silhouette, and product geometry/colors from the reference image.",
+    },
+    "text_or_logo_garbling": {
+        "description": "Brand typography, label lettering, or logo geometry warps, misspells, or hallucinates unrequested emblems.",
+        "remedy": "Keep packaging/surface branding crisp and forbid unrequested text overlays, watermarks, or third-party logos.",
+    },
+    "hand_or_anatomy_morphing": {
+        "description": "Extra/fused fingers, impossible wrist rotations, or limb clipping through rigid props.",
+        "remedy": "Use natural relaxed grip mechanics with clear five-finger anatomy, or reframe to medium waist-up.",
+    },
+    "physics_or_gravity_violation": {
+        "description": "Objects float, vanish mid-shot, teleport between hands, or liquids/fabrics move backward.",
+        "remedy": "Enforce causal physical weight, gravity, and continuous object permanence from start to finish.",
+    },
+    "unmotivated_camera_jitter_or_cuts": {
+        "description": "Abrupt internal jump-cuts, hidden soft cross-dissolves, erratic camera shake, or unrequested letterbox bars.",
+        "remedy": "Lock to one stabilized continuous single-take camera movement filling the full frame edge-to-edge with zero internal cuts or letterbox bars.",
+    },
+    "lighting_or_color_flicker": {
+        "description": "Key-light direction flips mid-shot, exposure pumps, or forbidden palette colors pollute the grade.",
+        "remedy": "Anchor motivated key-light direction and stable color temperature consistently across the entire shot.",
+    },
+    "lip_sync_or_speech_mismatch": {
+        "description": "Audible speech misaligns with mouth motion, truncates at clip end, or moves lips during off-camera voiceover.",
+        "remedy": "Pace spoken dialogue briskly to finish 2s before clip end with clear lip-sync (or keep lips closed if off-camera VO).",
+    },
+    "unwanted_music_or_audio_collision": {
+        "description": "Unrequested loud music, mechanical camera noise, or competing voices drown out dialogue or clean foley.",
+        "remedy": "Keep camera movement completely silent and render clean room tone and subtle diegetic foley without background music.",
+    },
+    "seam_jump_or_momentum_stall": {
+        "description": "Chained/extended shot stalls on Frame 0 or snaps pose/camera velocity abruptly relative to the prior shot.",
+        "remedy": "Continue camera velocity, subject momentum, and spatial framing seamlessly from the exact ending state of the prior shot.",
+    },
+}
+
+
+def format_genmedia_remedy_guidance(issues: Optional[List[str]]) -> str:
+    """Maps detected GenMedia defect codes to concrete prompt-engineering remedies for retry attempts."""
+    if not issues:
+        return ""
+    remedies: List[str] = []
+    seen = set()
+    for raw_code in issues:
+        code = str(raw_code or "").strip().lower()
+        if code in GENMEDIA_DEFECT_TAXONOMY and code not in seen:
+            seen.add(code)
+            remedies.append(f"[{code}] {GENMEDIA_DEFECT_TAXONOMY[code]['remedy']}")
+    return " ".join(remedies)
 
 
 def _safe_run_async(coro):
@@ -58,6 +117,7 @@ QUALITY_EVALUATION_PROPERTY_ORDER: List[str] = [
     "heard_transcript",
     "speech_end_sec",
     "detected_internal_cuts",
+    "detected_genmedia_issues",
     "reason",
     "score",
     "verdict",
@@ -82,6 +142,10 @@ class QualityEvaluationResult(BaseModel):
     detected_internal_cuts: int = Field(
         default=0,
         description="Count of internal camera jump-cuts, soft cross-dissolves, or multi-shot edits inside this single clip (0 if unbroken continuous single take).",
+    )
+    detected_genmedia_issues: List[str] = Field(
+        default_factory=list,
+        description="List of detected GenMedia defect taxonomy codes (empty list if none).",
     )
     reason: List[CriterionEvaluation] = Field(
         default_factory=list,
@@ -128,6 +192,11 @@ def build_quality_evaluation_schema() -> types.Schema:
             "detected_internal_cuts": types.Schema(
                 type=types.Type.INTEGER,
                 description="Count of internal camera jump-cuts, soft cross-dissolves, or multi-angle transitions inside this clip (0 if unbroken single take).",
+            ),
+            "detected_genmedia_issues": types.Schema(
+                type=types.Type.ARRAY,
+                items=types.Schema(type=types.Type.STRING),
+                description="Detected GenMedia defect taxonomy codes (empty array if none).",
             ),
             "reason": types.Schema(
                 type=types.Type.ARRAY,
@@ -448,15 +517,18 @@ async def optimize_prompt(
     is_extend_shot: bool = False,
     is_r2v_shot: bool = False,
     is_i2v_shot: bool = False,
+    detected_issues: Optional[List[str]] = None,
     session_service: Optional[InMemorySessionService] = None,
     session_id: Optional[str] = None,
     client: Optional[genai.Client] = None
 ) -> str:
-    """Prompt Optimizer Agent: Enhances raw storyboard prompts with dialogue integrity rules."""
+    """Prompt Optimizer Agent: Enhances raw storyboard prompts with dialogue integrity and defect-remedy rules."""
     config = Config()
     agents = create_pipeline_agents(config)
     optimizer = agents["prompt_optimizer"]
 
+    remedy_text = format_genmedia_remedy_guidance(detected_issues)
+    remedy_context = f"\nMANDATORY DEFECT REMEDIES: {remedy_text}" if remedy_text else ""
     feedback_context = f"\nQuality Rater Feedback to address: '{feedback}'" if feedback else ""
     transcript_context = (
         f"\nExact Spoken Dialogue Transcript: '{voice_transcript}'.\n"
@@ -480,9 +552,10 @@ async def optimize_prompt(
     )
 
     full_prompt = (
-        f"Raw Shot Description: '{raw_prompt}'.{feedback_context}{transcript_context}{extend_context}{i2v_context}{r2v_context}\n"
+        f"Raw Shot Description: '{raw_prompt}'.{feedback_context}{remedy_context}{transcript_context}{extend_context}{i2v_context}{r2v_context}\n"
         "Generate an enhanced, highly-detailed cinematic prompt optimized for Gemini Omni Flash video generation. "
-        "Keep it concise, under 60 words, focusing on lighting, continuous camera motion, visual clarity, and object persistence. "
+        "Keep it concise, under 65 words, focusing on lighting, continuous camera motion, visual clarity, and object persistence. "
+        "Include 'The camera movement itself is completely silent.' and ensure full edge-to-edge framing with zero letterbox bars. "
         "STRICT BRAND & META RULE: NEVER invent third-party brand names (such as Nike, Adidas, ASICS, Apple, etc.) unless explicitly present in the Raw Shot Description, and NEVER output word-count annotations like '(49 words)'. "
         "STRICT SINGLE-SHOT RULE: The clip MUST be a single, continuous, uninterrupted camera take. Explicitly specify a single continuous camera motion (e.g. 'continuous single take', 'smooth tracking shot') and strictly forbid internal cuts, scene switches, jump cuts, or multi-angle edits."
     )
@@ -752,13 +825,15 @@ async def evaluate_clip_quality(
     telemetry_block = _format_telemetry_block(merged_telemetry, spoken_dialogue)
     rubric_str = "\n".join(f"- {r}" for r in consolidated_rubric)
 
+    defect_codes_str = ", ".join(GENMEDIA_DEFECT_TAXONOMY.keys())
     eval_instructions = (
         f"You are the QualityRaterAgent performing a strict ground-truth multimodal quality audit on shot #{shot_index}.\n"
         f"Target Shot Prompt: '{prompt}'\n\n"
         f"{telemetry_block}\n\n"
         f"CONSOLIDATED EVALUATION RUBRIC:\n{rubric_str}\n\n"
         "OBSERVATION-FIRST AUDIT PROTOCOL (MANDATORY):\n"
-        "1. Use agentic video & audio inspection across the FULL 0.0s-to-end timeline to record 'opening_environment_observed' from KEY FRAME A (t=0.00s), 'heard_transcript' (exact spoken words heard in the audio stream), 'speech_end_sec', and 'detected_internal_cuts' (0 ONLY if one unbroken single camera take from 0.0s to clip end; >=1 if ANY internal hard jump-cut OR soft cross-dissolve/fade between different camera framings occurs inside the clip).\n"
+        "1. Use agentic video & audio inspection across the FULL 0.0s-to-end timeline to record 'opening_environment_observed' from KEY FRAME A (t=0.00s), 'heard_transcript' (exact spoken words heard in the audio stream), 'speech_end_sec', 'detected_internal_cuts' (0 ONLY if one unbroken single camera take from 0.0s to clip end; >=1 if ANY internal hard jump-cut OR soft cross-dissolve/fade between different camera framings occurs inside the clip), "
+        f"and 'detected_genmedia_issues' (list any matching defect codes from [{defect_codes_str}], or [] if none).\n"
         "2. Compare subject identity, wardrobe colors, and SKU geometry in KEY FRAME A/M/B and the MP4 video directly against CANONICAL REFERENCE ANCHOR (if attached) and boundary alignment against PRIOR SHOT TERMINAL FRAME (if attached).\n"
         "3. Score each rubric criterion (0.0 to 1.0) and compute overall 'score'. If identity/SKU drifts, Frame 0 opens on a white studio backdrop, internal jump-cuts occur, or dialogue cuts off at clip end, set score < 0.8 and verdict='REATTEMPT_REQUIRED' with concrete prompt fix instructions in 'feedback'."
     )
@@ -1207,7 +1282,7 @@ def _resolve_effective_shot_mode(state: PipelineState, shot: VideoShot, idx: int
     """Resolves the active continuity mode ('reference', 'i2v_chaining', or 'video_extend') for a specific shot."""
     if shot.mode_override in ("reference", "i2v_chaining", "video_extend"):
         return shot.mode_override
-    if state.mode == "hybrid":
+    if state.mode in ("hybrid", "tpvg_tts"):
         return "reference" if idx == 0 else "video_extend"
     return state.mode
 
@@ -1242,7 +1317,32 @@ async def _execute_single_shot(
     )
 
     feedback: Optional[str] = None
+    detected_issues: Optional[List[str]] = None
     max_attempts = state.max_attempts or 2
+
+    # In tpvg_tts mode, synthesize Gemini 3.8 TTS WAV for on-camera R2V shots (<= 3s x 5 chunks)
+    shot_audio_refs_b64: Optional[List[str]] = state.reference_audio_b64 or None
+    if state.mode == "tpvg_tts" and is_r2v_shot and shot.spoken_dialogue and shot.spoken_dialogue.strip():
+        try:
+            wav_bytes, tts_meta = await asyncio.to_thread(
+                synthesize_tts_wav,
+                text=shot.spoken_dialogue.strip(),
+                voice_name=state.tts_voice,
+                style=state.tts_style,
+                model_name=state.tts_model,
+                client=rater_client,
+            )
+            tts_wav_path = os.path.join(output_dir, f"shot_{shot.shot_index}_tts.wav")
+            with open(tts_wav_path, "wb") as tfp:
+                tfp.write(wav_bytes)
+            shot_audio_refs_b64 = split_wav_reference_chunks(wav_bytes, chunk_sec=3.0, max_chunks=5)
+            state.log_event(
+                agent="GeminiTTSClient",
+                action="SYNTHESIZE_TTS",
+                details={"shot_index": shot.shot_index, **tts_meta, "chunks": len(shot_audio_refs_b64)},
+            )
+        except Exception as tts_err:
+            print(f"[TTS Synthesis Notice on Shot #{shot.shot_index}]: {tts_err}")
 
     # Monotonic Best-of-K checkpointing across attempts
     best_score: float = -1.0
@@ -1264,6 +1364,7 @@ async def _execute_single_shot(
             is_extend_shot=is_extend_shot,
             is_r2v_shot=is_r2v_shot,
             is_i2v_shot=is_i2v_shot,
+            detected_issues=detected_issues,
             client=client,
         )
         state.log_event(
@@ -1367,6 +1468,7 @@ async def _execute_single_shot(
                 input_video_b64=active_tail_b64,
                 task=shot_task,
                 reference_images_b64=use_refs,
+                reference_audio_b64=shot_audio_refs_b64 if is_r2v_shot else None,
                 voice_transcript=shot.spoken_dialogue,
                 aspect_ratio=state.aspect_ratio,
                 resolution=state.resolution,
@@ -1552,6 +1654,7 @@ async def _execute_single_shot(
         if score >= 0.8 or attempt == max_attempts - 1:
             break
         else:
+            detected_issues = list(eval_result.get("detected_genmedia_issues") or [])
             feedback = eval_result.get("feedback", "Refine visual continuity and pacing")
 
     # Restore Best-of-K winner onto disk if a later attempt scored lower

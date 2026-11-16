@@ -258,3 +258,33 @@ def test_generate_omni_clip_extend_shot2_omits_ref_images_and_sets_extend_task()
     assert "# Sources <VIDEO_0>video_0.mp4" in sent_text
     assert "# References" not in sent_text
 
+
+def test_app_tts_client_and_tpvg_audio_attachment():
+    from app.tools.tts_client import normalize_tts_model_name, split_wav_reference_chunks, synthesize_tts_wav
+
+    assert normalize_tts_model_name("gemini-3.8-tts") == "gemini-3.8-flash-tts"
+    pcm = b"\x00\x01" * 24000 * 4  # 4 seconds at 24kHz 16-bit mono
+    mock_client = MagicMock()
+    mock_client.models.generate_content.return_value = MagicMock(
+        candidates=[MagicMock(content=MagicMock(parts=[MagicMock(inline_data=MagicMock(data=pcm))]))]
+    )
+    wav_bytes, meta = synthesize_tts_wav("Hello world.", voice_name="Kore", model_name="gemini-3.8-tts", client=mock_client)
+    assert wav_bytes.startswith(b"RIFF")
+    assert meta["model"] == "gemini-3.8-flash-tts"
+    assert len(split_wav_reference_chunks(wav_bytes, chunk_sec=3.0, max_chunks=5)) == 2
+
+    # Verify generate_omni_clip attaches audio parts on R2V and omits on extend
+    omni_client = MagicMock()
+    omni_client.interactions.create.return_value = MagicMock(output=b"tpvg_r2v_bytes")
+    out = generate_omni_clip(
+        prompt="walks in loft",
+        task="reference_to_video",
+        reference_images_b64=["img_b64"],
+        reference_audio_b64=["aud_b64_1", "aud_b64_2"],
+        client=omni_client,
+    )
+    assert out == b"tpvg_r2v_bytes"
+    sent_types = [p["type"] for p in omni_client.interactions.create.call_args.kwargs["input"]]
+    assert sent_types == ["text", "image", "audio", "audio"]
+
+

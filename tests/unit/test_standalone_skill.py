@@ -723,3 +723,586 @@ def test_standalone_upscale_and_draft_mode_multi_scene_workflow(tmp_path: Path, 
         assert os.path.exists(sh.draft_video_path)
         assert Path(sh.video_path).read_bytes() == upscaled_bytes
         assert sh.upscale_telemetry["total_input_tokens"] == 0
+
+
+
+def test_single_image_i2v_task_routing_domain_neutral_repairs_and_variable_durations(
+    tmp_path: Path, monkeypatch
+):
+    omni_direct = _load_skill_module("omni_direct")
+    workflow = _load_skill_module("run_vidgen_workflow")
+
+    # 1. Verify GA duration bounds helper: [3, 15] for R2V/I2V/T2V vs [3, 10] for extend/interp
+    assert omni_direct.resolve_omni_shot_duration(15, default_sec=10, task_or_mode="reference_to_video") == 15
+    assert omni_direct.resolve_omni_shot_duration(14, default_sec=10, task_or_mode="image_to_video") == 14
+    assert omni_direct.resolve_omni_shot_duration(18, default_sec=10, task_or_mode=None) == 15
+    assert omni_direct.resolve_omni_shot_duration(14, default_sec=10, task_or_mode="extend") == 10
+    assert omni_direct.resolve_omni_shot_duration(12, default_sec=10, task_or_mode="video_extend") == 10
+    assert omni_direct.resolve_omni_shot_duration(15, default_sec=10, is_two_frame_interp=True) == 10
+    assert omni_direct.resolve_omni_shot_duration(1, default_sec=10, task_or_mode="reference") == 3
+
+    # 2. Verify single-image <FIRST_FRAME> control string prepends starting-frame cue & sanitizes "reference image"
+    ctrl_single_ff = omni_direct.build_omni_control_string(
+        prompt="Character A walks forward keeping the sneaker from the reference image in sharp focus",
+        input_image_b64="ZmFrZV9mZg==",
+        reference_images_b64=["cmVm"],
+        duration=12,
+        resolution="1080p",
+    )
+    assert "<FIRST_FRAME>image_0.png" in ctrl_single_ff
+    assert "IMAGE_REF" not in ctrl_single_ff
+    assert "Character A" not in ctrl_single_ff
+    assert "reference image" not in ctrl_single_ff.lower()
+    assert "from the starting frame" in ctrl_single_ff
+    assert "Use this image as the starting frame." in ctrl_single_ff
+    assert "[duration=12s]" in ctrl_single_ff
+
+    # 3. Verify domain-neutral Shot-1 opening & Shot-N closing fallback prompts (zero beauty/blazer/serum tokens)
+    footwear_shot = omni_direct.StoryboardEntrySpec(
+        scene_number=1,
+        description="Carbon-plated running shoe splashes across wet urban asphalt at dusk",
+        camera_angle="low-angle tracking",
+        evaluation_criteria="Verify outsole geometry",
+    )
+    for n_refs in (0, 1, 2):
+        for pos in ("opening", "closing"):
+            p_txt = workflow._build_default_boundary_keyframe_prompt(
+                shot_spec=footwear_shot,
+                position=pos,
+                num_refs=n_refs,
+                aspect_ratio="9:16",
+            )
+            low_txt = p_txt.lower()
+            assert "9:16" in p_txt
+            assert "blazer" not in low_txt
+            assert "serum" not in low_txt
+            assert "dropper" not in low_txt
+            assert "spokesperson face" not in low_txt
+            if n_refs >= 2:
+                assert "first reference image" in low_txt and "second reference image" in low_txt
+            elif n_refs == 1:
+                assert "from the reference image" in low_txt
+
+    # 4. Verify variable cumulative seam window calculation
+    seam_wins = omni_direct.compute_seam_transition_windows(
+        num_shots=3,
+        shot_durations_sec=[15.0, 8.0, 10.0],
+        crossfade_sec=0.0,
+    )
+    assert len(seam_wins) == 2
+    assert "around 15.0s" in seam_wins[0] and "[13.5s - 16.5s]" in seam_wins[0]
+    assert "around 23.0s" in seam_wins[1] and "[21.5s - 24.5s]" in seam_wins[1]
+
+    # 5. End-to-end mocked check:
+    #    - Direct single-image <FIRST_FRAME> call dispatches task="image_to_video" + full response_format (12s, 1080p)
+    #    - Multi-scene workflow with variable shot/scene durations + Shot-1 & Shot-3 interpolation keyframe fallbacks
+    sample_mp4 = tmp_path / "var_dur_sample.mp4"
+    _make_test_mp4_with_audio(sample_mp4, duration_sec=2.0, start_bgr=(45, 115, 195), end_bgr=(45, 115, 195))
+    b64_mp4 = base64.b64encode(sample_mp4.read_bytes()).decode("utf-8")
+
+    png_ok, png_arr = cv2.imencode(".png", np.full((180, 320, 3), (200, 215, 230), dtype=np.uint8))
+    assert png_ok
+    final_png_bytes = png_arr.tobytes()
+
+    anchor = tmp_path / "shoe_anchor.png"
+    cv2.imwrite(str(anchor), np.full((180, 320, 3), 255, dtype=np.uint8))
+    plate = tmp_path / "track_plate.png"
+    plate.write_bytes(final_png_bytes)
+
+    captured_interactions: list = []
+    captured_image_prompts: list = []
+    captured_master_prompts: list = []
+
+    class _FakeInteractions:
+        def create(self, **kwargs):
+            captured_interactions.append(kwargs)
+            return SimpleNamespace(outputs=[{"data": b64_mp4}])
+
+    class _FakeModels:
+        def generate_content(self, *, model: str, contents: Any, config: Any = None):
+            mods = getattr(config, "response_modalities", None) or []
+            if "IMAGE" in mods:
+                captured_image_prompts.append(str(contents[-1]))
+                parts = [SimpleNamespace(thought=False, inline_data=SimpleNamespace(data=final_png_bytes))]
+                return SimpleNamespace(candidates=[SimpleNamespace(content=SimpleNamespace(parts=parts))])
+
+            schema = getattr(config, "response_schema", None)
+            usage = SimpleNamespace(tool_use_prompt_token_count=2500, prompt_token_count=410)
+            if schema is None:
+                return SimpleNamespace(text="Low-angle continuous tracking shot on rain-slicked track.", usage_metadata=usage)
+
+            props = getattr(schema, "properties", None) or {}
+            if "opening_environment_observed" in props:
+                prompt_blob = str(contents[0])
+                is_interp = "first_last_frame" in prompt_blob
+                # Trigger Shot #1 and Shot #3 boundary repairs on initial pass (< 0.80), then pass at 0.96!
+                if ("Shot #1" in prompt_blob or "Shot #3" in prompt_blob) and not is_interp:
+                    sc = 0.62
+                else:
+                    sc = 0.96
+                payload = {
+                    "opening_environment_observed": "Rain-slicked running track.",
+                    "heard_transcript": "Engineered for speed.",
+                    "speech_end_sec": 1.0,
+                    "detected_internal_cuts": 0,
+                    "reason": [{"criterion_name": "SKU Lock", "score": sc, "comments": "Checked"}],
+                    "score": sc,
+                    "verdict": "PASSED" if sc >= 0.8 else "REATTEMPT_REQUIRED",
+                    "feedback": "Re-anchor framing." if sc < 0.8 else "Clean.",
+                }
+                return SimpleNamespace(text=json.dumps(payload), usage_metadata=usage)
+
+            captured_master_prompts.append(str(contents[0]))
+            payload = {
+                "seam_observations": [
+                    {"seam_index": 1, "window_sec": "13.5s-16.5s", "continuity_score": 0.94, "notes": "Smooth"}
+                ],
+                "voice_timbre_consistent": True,
+                "loudness_continuity_ok": True,
+                "visual_xfade_smooth": True,
+                "score": 0.94,
+                "verdict": "PASSED",
+                "feedback": "Clean seams.",
+            }
+            return SimpleNamespace(text=json.dumps(payload), usage_metadata=usage)
+
+    fake_client = SimpleNamespace(interactions=_FakeInteractions(), models=_FakeModels())
+
+    # 5a. Direct single-image <FIRST_FRAME> call -> must set task="image_to_video" + full response_format!
+    omni_direct.generate_omni_clip_direct(
+        prompt="Camera glides along the carbon outsole from the reference image",
+        input_image_b64=omni_direct.encode_image_file_b64(str(plate)),
+        aspect_ratio="9:16",
+        resolution="1080p",
+        duration=12,
+        client=fake_client,
+    )
+    i2v_call = captured_interactions[-1]
+    assert i2v_call["generation_config"] == {"video_config": {"task": "image_to_video"}}
+    assert i2v_call["response_format"] == {
+        "type": "video",
+        "aspect_ratio": "9:16",
+        "duration": "12s",
+        "resolution": "1080p",
+    }
+    assert "Use this image as the starting frame." in i2v_call["input"][0]["text"]
+    assert "reference image" not in i2v_call["input"][0]["text"].lower()
+
+    # 5b. Multi-scene run with variable durations:
+    #     Shot 1: R2V 15s (repaired via Shot-1 opening keyframe -> clamped to 10s on two-frame interpolation!)
+    #     Shot 2: i2v_chaining 12s (stays 12s via task="image_to_video"!)
+    #     Shot 3: video_extend requested 14s -> auto-clamped to 10s, then repaired via Shot-3 closing keyframe!
+    captured_interactions.clear()
+    monkeypatch.setattr(workflow, "evaluate_clip_quality_direct", omni_direct.evaluate_clip_quality_direct)
+    monkeypatch.setattr(workflow, "evaluate_stitched_master_direct", omni_direct.evaluate_stitched_master_direct)
+    monkeypatch.setattr(workflow, "generate_omni_clip_direct", omni_direct.generate_omni_clip_direct)
+    monkeypatch.setattr(workflow, "generate_reference_image_direct", omni_direct.generate_reference_image_direct)
+    monkeypatch.setattr(omni_direct, "analyze_clip_audio_tail", lambda *a, **kw: {
+        "clip_duration_sec": 2.0,
+        "has_audio": True,
+        "mid_rms_db": -19.0,
+        "trailing_rms_db": -42.0,
+        "tail_window_sec": 0.2,
+        "speech_cutoff_detected": False,
+    })
+
+    scenes = [
+        workflow.SceneSpec(
+            scene_id="footwear_act_1",
+            title="Urban Track Launch",
+            mode="hybrid",
+            duration_sec=8,
+            reference_paths=[str(anchor), str(plate)],
+            shots=[
+                workflow.StoryboardEntrySpec(
+                    scene_number=1,
+                    description="Runner launches off starting blocks in carbon racing shoe",
+                    camera_angle="low-angle tracking",
+                    evaluation_criteria="Verify shoe geometry",
+                    spoken_dialogue="Engineered for speed.",
+                    mode_override="reference",
+                    duration_sec=15,
+                ),
+                workflow.StoryboardEntrySpec(
+                    scene_number=2,
+                    description="Side-profile tracking along wet tartan track",
+                    camera_angle="lateral dolly",
+                    evaluation_criteria="Verify smooth continuation",
+                    spoken_dialogue="Engineered for speed.",
+                    mode_override="i2v_chaining",
+                    duration_sec=12,
+                ),
+                workflow.StoryboardEntrySpec(
+                    scene_number=3,
+                    description="Close-up stride finish across painted finish line",
+                    camera_angle="close-up tracking",
+                    evaluation_criteria="Verify outsole lock",
+                    spoken_dialogue="Engineered for speed.",
+                    mode_override="video_extend",
+                    duration_sec=14,  # Should clamp to 10s for video_extend & interpolation!
+                ),
+            ],
+        )
+    ]
+
+    var_out_dir = tmp_path / "var_dur_out"
+    multi_mf = asyncio.run(
+        workflow.run_multi_scene_pipeline_async(
+            scenes=scenes,
+            output_dir=str(var_out_dir),
+            original_intent="Footwear variable duration & neutral repair test",
+            duration=10,
+            max_attempts=1,
+            quality_threshold=0.80,
+            shot_crossfade_seconds=0.0,
+            gen_client=fake_client,
+            rater_client=fake_client,
+        )
+    )
+
+    # Verify initial calls used 15s (R2V), 12s (image_to_video), and 10s (clamped extend),
+    # and the two Shot-1 / Shot-3 interpolation repairs clamped to 10s!
+    assert len(captured_interactions) == 5
+    assert captured_interactions[0]["generation_config"] == {"video_config": {"task": "reference_to_video"}}
+    assert captured_interactions[0]["response_format"]["duration"] == "15s"
+    assert captured_interactions[1]["generation_config"] == {"video_config": {"task": "image_to_video"}}
+    assert captured_interactions[1]["response_format"]["duration"] == "12s"
+    assert captured_interactions[2]["generation_config"] == {"video_config": {"task": "extend"}}
+    assert captured_interactions[2]["response_format"]["duration"] == "10s"
+    assert "generation_config" not in captured_interactions[3]
+    assert captured_interactions[3]["response_format"]["duration"] == "10s"
+    assert "generation_config" not in captured_interactions[4]
+    assert captured_interactions[4]["response_format"]["duration"] == "10s"
+
+    # Verify synthesized Shot-1 opening & Shot-3 closing keyframe prompts were 100% domain-neutral
+    assert len(captured_image_prompts) == 2
+    for img_p in captured_image_prompts:
+        assert "blazer" not in img_p.lower()
+        assert "serum" not in img_p.lower()
+        assert "carbon" in img_p.lower() or "finish line" in img_p.lower()
+
+    # After Shot 1 repaired (15s -> 10s interp), Shot 2 kept (12s), Shot 3 repaired (10s interp):
+    # Final shot durations = [10, 12, 10], repaired scene seam critic must inspect 10.0s and 22.0s!
+    sc_rec = multi_mf.scenes[0]
+    assert [sh.duration_sec for sh in sc_rec.shots] == [10, 12, 10]
+    assert "around 10.0s" in captured_master_prompts[-1]
+    assert "around 22.0s" in captured_master_prompts[-1]
+    assert os.path.basename(multi_mf.master_video_path) == "output_master_32s.mp4"
+
+
+def _make_sine_pcm_bytes(duration_sec: float = 7.2, sample_rate: int = 24000) -> bytes:
+    n_samples = int(round(duration_sec * sample_rate))
+    t = np.arange(n_samples, dtype=np.float32) / float(sample_rate)
+    samples = (0.25 * 32767.0 * np.sin(2.0 * np.pi * 440.0 * t)).astype("<i2")
+    return samples.tobytes()
+
+
+def test_director_craft_plan_spec_contact_sheet_and_hitl_gate2(tmp_path: Path, monkeypatch):
+    media_ops = _load_skill_module("media_ops")
+    omni_direct = _load_skill_module("omni_direct")
+    workflow = _load_skill_module("run_vidgen_workflow")
+
+    # 1. Defect taxonomy & remedy mapping
+    remedy = omni_direct.format_genmedia_remedy_guidance(
+        ["r2v_white_backdrop_echo", "lip_sync_or_speech_mismatch", "unknown_code"]
+    )
+    assert "r2v_white_backdrop_echo" in remedy
+    assert "lip_sync_or_speech_mismatch" in remedy
+    assert "unknown_code" not in remedy
+
+    # 2. Pre-flight --check-spec validation (WPM warning, extend duration cap, duplicate angle, missing plate)
+    bad_specs = [
+        workflow.StoryboardEntrySpec(
+            scene_number=1,
+            description="Wide lobby walk",
+            camera_angle="wide",
+            evaluation_criteria="Verify identity",
+            spoken_dialogue=" ".join(["word"] * 25),  # > 2.4 wps over 8s
+            mode_override="reference",
+        ),
+        workflow.StoryboardEntrySpec(
+            scene_number=2,
+            description="Second shot same angle",
+            camera_angle="wide",
+            evaluation_criteria="",  # Empty -> error!
+            mode_override="reference",
+            duration_sec=14,
+        ),
+    ]
+    chk = workflow.validate_production_spec(storyboard_specs=bad_specs, default_mode="reference", default_duration=10)
+    assert chk["valid"] is False
+    assert any("Empty evaluation_criteria" in e for e in chk["errors"])
+    assert any("2.4 wps" in w for w in chk["warnings"])
+    assert any("15-degree" in w for w in chk["warnings"])
+
+    # 3. Contact sheet rendering from PNG + MP4
+    img_p = tmp_path / "plate.png"
+    cv2.imwrite(str(img_p), np.full((180, 320, 3), (200, 180, 160), dtype=np.uint8))
+    vid_p = tmp_path / "clip.mp4"
+    _make_test_mp4_with_audio(vid_p, duration_sec=2.0, start_bgr=(50, 120, 180), end_bgr=(50, 120, 180))
+    sheet_p = tmp_path / "qa_sheet.png"
+    out_sheet = media_ops.build_contact_sheet(
+        items=[
+            {"path": str(img_p), "label": "Plate 1", "status": "PLATE"},
+            {"path": str(vid_p), "label": "Shot 1", "score": 0.62, "status": "ESCALATED"},
+        ],
+        output_path=str(sheet_p),
+        cols=2,
+    )
+    assert os.path.exists(out_sheet)
+    rendered = cv2.imread(out_sheet)
+    assert rendered is not None and rendered.shape[0] > 270 and rendered.shape[1] > 960
+
+    # 4. Gate 2 Escalation (exit code 2 when auto_approve=False and shot < threshold; 0 when auto_approve=True)
+    b64_mp4 = base64.b64encode(vid_p.read_bytes()).decode("utf-8")
+
+    class _FakeInteractions:
+        def create(self, **kwargs):
+            return SimpleNamespace(outputs=[{"data": b64_mp4}])
+
+    class _FakeModels:
+        def generate_content(self, *, model: str, contents: Any, config: Any = None):
+            schema = getattr(config, "response_schema", None)
+            usage = SimpleNamespace(tool_use_prompt_token_count=1200, prompt_token_count=300)
+            if schema is None:
+                return SimpleNamespace(text="Smooth single-take push-in. The camera movement itself is completely silent.", usage_metadata=usage)
+            props = getattr(schema, "properties", None) or {}
+            if "opening_environment_observed" in props:
+                return SimpleNamespace(
+                    text=json.dumps({
+                        "opening_environment_observed": "Sunlit studio room.",
+                        "heard_transcript": "",
+                        "speech_end_sec": None,
+                        "detected_internal_cuts": 0,
+                        "detected_genmedia_issues": ["hand_or_anatomy_morphing"],
+                        "reason": [{"criterion_name": "Anatomy", "score": 0.62, "comments": "Extra finger"}],
+                        "score": 0.62,
+                        "verdict": "REATTEMPT_REQUIRED",
+                        "feedback": "Use relaxed hand grip.",
+                    }),
+                    usage_metadata=usage,
+                )
+            return SimpleNamespace(
+                text=json.dumps({
+                    "project_title": "Test Film",
+                    "creative_thesis": "Minimalist precision.",
+                    "visual_motif": "Warm stone.",
+                    "primary_palette": ["ivory", "amber", "walnut"],
+                    "forbidden_colors": ["neon pink", "cyan", "lime"],
+                    "lighting_ratio": "4:1 warm key",
+                    "lens_language": "50mm -> 85mm",
+                    "camera_motion_grammar": "silent dolly",
+                    "style_anchor": "35mm natural daylight, zero letterbox bars.",
+                    "audio_direction": "Clean room tone.",
+                }),
+                usage_metadata=usage,
+            )
+
+    fake_client = SimpleNamespace(interactions=_FakeInteractions(), models=_FakeModels())
+    monkeypatch.setattr(omni_direct, "get_direct_genai_client", lambda *a, **kw: fake_client)
+    monkeypatch.setattr(workflow, "get_direct_genai_client", lambda *a, **kw: fake_client)
+    monkeypatch.setattr(workflow, "evaluate_clip_quality_direct", omni_direct.evaluate_clip_quality_direct)
+    monkeypatch.setattr(omni_direct, "analyze_clip_audio_tail", lambda *a, **kw: {
+        "clip_duration_sec": 2.0,
+        "has_audio": True,
+        "mid_rms_db": -22.0,
+        "trailing_rms_db": -45.0,
+        "tail_window_sec": 0.2,
+        "speech_cutoff_detected": False,
+    })
+
+    sb_json = tmp_path / "sb.json"
+    sb_json.write_text(json.dumps([{
+        "scene_number": 1,
+        "description": "Hero picks up bottle",
+        "camera_angle": "medium tracking",
+        "evaluation_criteria": "Verify hand anatomy",
+        "fails_if": "Extra fingers",
+    }]), encoding="utf-8")
+
+    esc_dir = tmp_path / "esc_out"
+    rc_gate2 = workflow.main([
+        "--storyboard-json", str(sb_json),
+        "--mode", "reference",
+        "--duration", "3",
+        "--max-attempts", "1",
+        "--output-dir", str(esc_dir),
+    ])
+    assert rc_gate2 == 2
+    assert (esc_dir / "escalation_report.json").is_file()
+    assert (esc_dir / "qa_contact_sheet.png").is_file()
+
+    auto_dir = tmp_path / "auto_out"
+    rc_auto = workflow.main([
+        "--storyboard-json", str(sb_json),
+        "--mode", "reference",
+        "--duration", "3",
+        "--max-attempts", "1",
+        "--auto-approve",
+        "--output-dir", str(auto_dir),
+    ])
+    assert rc_auto == 0
+    assert not (auto_dir / "escalation_report.json").exists()
+
+
+def test_tpvg_tts_synthesis_chunking_r2v_v2v_dub_and_vo_mux(tmp_path: Path, monkeypatch):
+    media_ops = _load_skill_module("media_ops")
+    omni_direct = _load_skill_module("omni_direct")
+    workflow = _load_skill_module("run_vidgen_workflow")
+
+    # 1. Model alias normalization & raw PCM -> RIFF WAV -> <=3s x 5 chunking
+    assert omni_direct.normalize_tts_model_name("gemini-3.8-tts") == "gemini-3.8-flash-tts"
+    assert omni_direct.normalize_tts_model_name("gemini-3.8-lite-tts") == "gemini-3.8-flash-lite-tts"
+
+    raw_pcm_7s = _make_sine_pcm_bytes(duration_sec=7.2, sample_rate=24000)
+    riff_wav = media_ops.ensure_riff_wav_bytes(raw_pcm_7s, sample_rate=24000)
+    assert riff_wav.startswith(b"RIFF")
+    dur_s, sr = media_ops.get_wav_duration_sec(riff_wav)
+    assert 7.0 <= dur_s <= 7.4 and sr == 24000
+
+    chunks = media_ops.split_wav_reference_chunks(riff_wav, chunk_sec=3.0, max_chunks=5)
+    assert len(chunks) == 3
+    for ch_b64 in chunks:
+        ch_bytes = base64.b64decode(ch_b64)
+        assert ch_bytes.startswith(b"RIFF")
+        ch_dur, _ = media_ops.get_wav_duration_sec(ch_bytes)
+        assert ch_dur <= 3.01
+
+    # 2. Hybrid tpvg_tts workflow: Shot 1 on_camera (R2V + audio refs), Shot 2 off_camera_vo (muxed WAV, no speech in Omni)
+    anchor = tmp_path / "hero.png"
+    cv2.imwrite(str(anchor), np.full((180, 320, 3), 255, dtype=np.uint8))
+    sample_mp4 = tmp_path / "base.mp4"
+    _make_test_mp4_with_audio(sample_mp4, duration_sec=2.0, start_bgr=(60, 120, 180), end_bgr=(60, 120, 180))
+    b64_mp4 = base64.b64encode(sample_mp4.read_bytes()).decode("utf-8")
+
+    captured_interactions: list = []
+
+    class _FakeInteractions:
+        def create(self, **kwargs):
+            captured_interactions.append(kwargs)
+            return SimpleNamespace(outputs=[{"data": b64_mp4}])
+
+    class _FakeModels:
+        def generate_content(self, *, model: str, contents: Any, config: Any = None):
+            mods = getattr(config, "response_modalities", None) or []
+            if "AUDIO" in mods:
+                assert model == "gemini-3.8-flash-tts"
+                return SimpleNamespace(
+                    candidates=[SimpleNamespace(content=SimpleNamespace(parts=[
+                        SimpleNamespace(inline_data=SimpleNamespace(data=raw_pcm_7s))
+                    ]))]
+                )
+            schema = getattr(config, "response_schema", None)
+            usage = SimpleNamespace(tool_use_prompt_token_count=900, prompt_token_count=200)
+            if schema is None:
+                return SimpleNamespace(text="Smooth continuous take. The camera movement itself is completely silent.", usage_metadata=usage)
+            props = getattr(schema, "properties", None) or {}
+            if "opening_environment_observed" in props:
+                return SimpleNamespace(
+                    text=json.dumps({
+                        "opening_environment_observed": "Sunlit studio.",
+                        "heard_transcript": "Pure botanical radiance.",
+                        "speech_end_sec": 1.2,
+                        "detected_internal_cuts": 0,
+                        "detected_genmedia_issues": [],
+                        "reason": [{"criterion_name": "Continuity", "score": 0.94, "comments": "Good"}],
+                        "score": 0.94,
+                        "verdict": "PASSED",
+                        "feedback": "Clean.",
+                    }),
+                    usage_metadata=usage,
+                )
+            return SimpleNamespace(
+                text=json.dumps({
+                    "seam_observations": [{"seam_index": 1, "window_sec": "0.5s-3.5s", "continuity_score": 0.95, "notes": "Clean"}],
+                    "voice_timbre_consistent": True,
+                    "loudness_continuity_ok": True,
+                    "visual_xfade_smooth": True,
+                    "score": 0.95,
+                    "verdict": "PASSED",
+                    "feedback": "Clean master.",
+                }),
+                usage_metadata=usage,
+            )
+
+    fake_client = SimpleNamespace(interactions=_FakeInteractions(), models=_FakeModels())
+    monkeypatch.setattr(workflow, "evaluate_clip_quality_direct", omni_direct.evaluate_clip_quality_direct)
+    monkeypatch.setattr(workflow, "evaluate_stitched_master_direct", omni_direct.evaluate_stitched_master_direct)
+    monkeypatch.setattr(omni_direct, "analyze_clip_audio_tail", lambda *a, **kw: {
+        "clip_duration_sec": 2.0,
+        "has_audio": True,
+        "mid_rms_db": -18.0,
+        "trailing_rms_db": -42.0,
+        "tail_window_sec": 0.2,
+        "speech_cutoff_detected": False,
+    })
+
+    sb = [
+        workflow.StoryboardEntrySpec(
+            scene_number=1,
+            description="Spokesperson holds amber serum bottle in sunlit loft",
+            camera_angle="medium tracking",
+            evaluation_criteria="Verify identity and lip-sync",
+            spoken_dialogue="Pure botanical radiance.",
+            audio_mode="on_camera",
+            mode_override="reference",
+        ),
+        workflow.StoryboardEntrySpec(
+            scene_number=2,
+            description="Macro bottle on travertine plinth while sunlight shifts",
+            camera_angle="macro orbit",
+            evaluation_criteria="Zero human faces",
+            spoken_dialogue="Cold-pressed botanical clarity.",
+            audio_mode="off_camera_vo",
+            mode_override="reference",
+        ),
+    ]
+    out_dir = tmp_path / "tpvg_out"
+    manifest = asyncio.run(
+        workflow.run_standalone_pipeline_async(
+            prompt="TPVG hybrid test",
+            output_dir=str(out_dir),
+            mode="tpvg_tts",
+            duration=3,
+            reference_paths=[str(anchor)],
+            storyboard_specs=sb,
+            tts_model="gemini-3.8-tts",
+            tts_voice="Aoede",
+            max_attempts=1,
+            auto_approve=True,
+            gen_client=fake_client,
+            rater_client=fake_client,
+        )
+    )
+
+    assert manifest.tts_model == "gemini-3.8-flash-tts"
+    assert manifest.tts_voice == "Aoede"
+    assert len(captured_interactions) == 2
+
+    # Shot 1 (on_camera R2V) must attach type='audio' parts!
+    s1_types = [p["type"] for p in captured_interactions[0]["input"]]
+    assert "audio" in s1_types
+    assert captured_interactions[0]["generation_config"] == {"video_config": {"task": "reference_to_video"}}
+
+    # Shot 2 (off_camera_vo) must NOT pass type='audio' or spoken_dialogue into Omni; it muxes WAV via FFMPEG!
+    s2_types = [p["type"] for p in captured_interactions[1]["input"]]
+    assert "audio" not in s2_types
+    assert "Cold-pressed" not in captured_interactions[1]["input"][0]["text"]
+    assert manifest.shots[0].tts_audio_path and os.path.exists(manifest.shots[0].tts_audio_path)
+    assert manifest.shots[1].tts_audio_path and os.path.exists(manifest.shots[1].tts_audio_path)
+
+    # 3. Standalone untasked V2V dubbing (`dub_omni_clip_direct`)
+    captured_interactions.clear()
+    dub_bytes = omni_direct.dub_omni_clip_direct(
+        video_path_or_bytes=str(sample_mp4),
+        voice_wav_path_or_bytes=manifest.shots[0].tts_audio_path,
+        voice_transcript="Pure botanical radiance.",
+        duration=3,
+        client=fake_client,
+    )
+    assert len(dub_bytes) > 0
+    dub_call = captured_interactions[0]
+    assert "generation_config" not in dub_call  # Untasked TASK_UNSPECIFIED for V2V speech editing
+    assert [p["type"] for p in dub_call["input"]].count("audio") == 3
+    assert [p["type"] for p in dub_call["input"]][1] == "video"
+

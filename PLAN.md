@@ -543,3 +543,111 @@ Use the standalone ADK-free skill (`Skill/vidgen-long-video/`)—extending it na
   - Execute `uv run --no-sync pytest tests/unit tests/integration -v` and confirm `72/72` pass (`100%`), plus inspect `git diff --staged` to verify zero untracked media/secrets.
 - [ ] **Step 3 — Commit with Comprehensive Commit Message & Push to `origin/main`:**
   - Stage all updated skill, test, doc, and workflow files, create a detailed commit (`Done by: gemini-cli`, `TEST=uv run pytest tests/unit tests/integration`, problem & solution summary per `<RULE[user_global]>`), and push cleanly to `origin main`.
+
+
+---
+
+## [2026-11-12 03:24 UTC] Stage 1: Confirmed Final Plan (Run 15) — Upgrade `vidgen-long-video` Skill: `<FIRST_FRAME>` I2V Task Routing, Domain-Neutral Repair Prompts & Per-Shot/Scene Duration Flexibility (`3s–15s`)
+
+### Goal & Scope
+Upgrade the standalone zero-ADK skill (`Skill/vidgen-long-video/` / `.agents/skills/vidgen-long-video`) and its unit test suite (`tests/unit/test_standalone_skill.py`) across three targeted areas while preserving `100%` backwards compatibility and zero ADK/GCS dependencies:
+
+1. **Explicit Single-Image `<FIRST_FRAME>` I2V Task Routing (`scripts/omni_direct.py` & `scripts/run_vidgen_workflow.py`):**
+   - Route single-image `<FIRST_FRAME>` calls (`input_image_b64` provided without `end_image_b64` or `input_video_b64`) explicitly to `effective_task = "image_to_video"` (matching `app/tools/omni_client.py` parity for GA `gemini-omni-1.2-flash`, where `OmniContextBuilder::StripUserControlStrings` strips bracketed `[# Sources <FIRST_FRAME>]` tags).
+   - Pass full `response_format={"type": "video", "aspect_ratio": aspect_ratio, "duration": f"{eff_duration}s", "resolution": norm_resolution}` alongside `generation_config={"video_config": {"task": "image_to_video"}}` (and ensure any other explicit `effective_task` branch also preserves `duration`/`resolution` instead of collapsing to `{"type": "video"}`), while keeping two-frame interpolation (`<FIRST_FRAME> + <LAST_FRAME>`) on `task=None` without `generation_config`.
+   - In `build_omni_control_string`, prepend `"Use this image as the starting frame."` on single-image `<FIRST_FRAME>` inputs and rewrite `"from/in the reference image"` $\rightarrow$ `"from the starting frame"` whenever source media (`<FIRST_FRAME>`, `<LAST_FRAME>`, or `<VIDEO_0>`) is attached.
+2. **Domain-Neutral Boundary Keyframe Fallback Prompts in Interpolation Repair (`scripts/run_vidgen_workflow.py`):**
+   - Replace the hardcoded beauty strings (*`"champagne-ivory satin blazer, and amber serum dropper bottle"`*) in `_repair_scene_shots_with_interpolation` (`Shot 1` opening keyframe & `Shot N` closing keyframe synthesis when `SceneSpec.opening_keyframe_prompt` / `closing_keyframe_prompt` are omitted) with a clean, domain-neutral helper `_build_default_boundary_keyframe_prompt(...)` adapting automatically to `2+` references (`[subject/SKU anchor, scene plate]`), `1` reference (`[subject/SKU anchor]`), or `0` references.
+3. **Per-Shot & Per-Scene Duration Flexibility (`3s–15s` T2V/I2V/R2V, `3s–10s` Extend/Interpolation):**
+   - Add optional `duration_sec: Optional[int] = None` to `StoryboardEntrySpec` (`omni_direct.py`) and `SceneSpec` (`run_vidgen_workflow.py`), plus `duration_sec: int` telemetry on `ShotRecord` (`run_manifest.json`), resolving precedence `shot.duration_sec -> scene.duration_sec -> CLI --duration (default 10)`.
+   - Add `resolve_omni_shot_duration(...)` to enforce GA `gemini-omni-1.2-flash` task limits cleanly: **`3–15s`** for `reference_to_video`, `image_to_video`, and `T2V`, and **`3–10s`** for `video_extend` (`task="extend"`) and `<FIRST_FRAME> + <LAST_FRAME>` interpolation (with dynamic spoken-completion pacing `eff_duration - 2.0s` in prompt optimization & Auto-Rater v2).
+   - Upgrade `evaluate_stitched_master_direct` (`omni_direct.py` + `rate-master` CLI) and `run_vidgen_workflow.py` to accept variable `shot_durations_sec: Optional[List[float]]` + `crossfade_sec` so both variable-duration shots and asymmetric multi-act scenes (`20s + 20s + 30s + 20s`) audit exact cumulative `[t_cut - 1.5s, t_cut + 1.5s]` seam windows and compute exact stitched output filenames.
+
+### Proposed Step-by-Step Plan (COMPLETED)
+- [x] **Step 1 — Upgrade `omni_direct.py` (`image_to_video` Task Routing, Duration Clamping & Variable-Seam Master Critic):**
+  - Update `StoryboardEntrySpec` (`duration_sec`), `resolve_omni_shot_duration`, `build_omni_control_string`, `generate_omni_clip_direct`, `optimize_shot_prompt_direct`, `evaluate_clip_quality_direct`, `evaluate_stitched_master_direct` (`shot_durations_sec`), and the `generate-clip` / `rate-master` CLI flags.
+- [x] **Step 2 — Upgrade `run_vidgen_workflow.py` (Domain-Neutral Keyframe Prompts & Per-Shot/Scene Durations):**
+  - Replace hardcoded beauty fallback prompts with domain-neutral `_build_default_boundary_keyframe_prompt(...)` in `_repair_scene_shots_with_interpolation`, wire `shot.duration_sec` / `scene.duration_sec` across single-scene, `--scenes-json`, `--resume`, and `--draft-mode` flows, and pass exact per-shot / per-scene duration lists into `evaluate_stitched_master_direct`.
+- [x] **Step 3 — Update Skill Documentation (`SKILL.md` & `references/storyboard_spec.md`) & Unit Tests (`tests/unit/test_standalone_skill.py`):**
+  - Document `task="image_to_video"` routing and `duration_sec` (`3–15s` / `3–10s`) in `SKILL.md` and `references/storyboard_spec.md`, add unit tests covering all 3 improvements, and run `uv run --no-sync pytest tests/unit tests/integration -v` to verify `100%` pass.
+
+
+---
+
+## [2026-11-13 12:45 UTC] Stage 1: Confirmed Final Plan (Run 16) — Bake Movie & Art Director Craft, `Plan -> Define -> Execute` Workflow, Dual HITL Gates, 10-Category GenMedia Defect Rubric & `tpvg_tts` (`gemini-3.8-flash-tts` + TPVG) Mode into `vidgen-long-video` & `app/`
+
+### Confirmed Decisions (`ask_question` Rounds 1 & 2)
+- **Human-in-the-Loop (HITL) Checkpoints (`R1-A1`):** **Dual Gate (with `--auto-approve` bypass)** —
+  1. **Gate 1 (Pre-Render Plan & Keyframe/Plate Contact Sheet Review):** Pause after `PLAN` (`director_plan.md` / `VisionProfileSpec`) + `DEFINE` (`storyboard_defined.json` + `--check-spec` validation + `plates_contact_sheet.png`) *before* committing video generation budget.
+  2. **Gate 2 (Post-Retry Escalation Gate):** Automatically retry failing takes via Best-of-$K$ + Defect-Specific Director Prompt Remedies + `<FIRST_FRAME>+<LAST_FRAME>` self-healing; if any shot or seam still falls below threshold (`< quality_threshold`), emit `escalation_report.json` + labeled `qa_contact_sheet.png` and exit with status `HUMAN_REVIEW_REQUIRED` (`exit code 2` unless `--auto-approve` is set) to request human director guidance.
+- **Repository Scope (`R1-A2`):** **Portable Skill (`Skill/vidgen-long-video/`) + Sync GenMedia Defect Rubric & `tpvg_tts` Mode into `app/` (`Hosted ADK 2.0 Web Studio`)**.
+- **Hybrid TPVG + `gemini-3.8-tts` Voice Mode (`R2-A1` — `--mode tpvg_tts` / Mode E):**
+  - Synthesize studio-grade per-shot `24 kHz` WAV voice tracks (`shot_k_tts.wav`) via **`gemini-3.8-flash-tts`** (`--tts-model gemini-3.8-tts` normalized to `gemini-3.8-flash-tts`, configurable `--tts-voice` e.g. `Kore`/`Puck`/`Aoede`/`Charon`/`Fenrir`/`Leda`/`Zephyr` or replicated `voice_...`/`voicekey_...`, `--tts-style`, and `--tts-language`), and slice up to `5 × 3.0s` WAV reference chunks (`split_wav_reference_chunks`) per GRoot/Beyond's `5 × 3s` `kReferenceAudioLabel` contract:
+    1. **On-Camera Spokesperson Shots (`audio_mode="on_camera"` / default):** Pass `[reference_images, reference_audio_chunks]` (`type: "audio"`, `mime_type: "audio/wav"`) into `gemini-omni-1.2-flash` (`task="reference_to_video"`) so Omni natively lip-syncs the character in that exact `gemini-3.8-flash-tts` voice timbre, and extend Shots `2..N` via `5.0s` spoken-voice-intact `<VIDEO_0>` tails (`task="extend"`, unlocked on TPVG-enabled projects without speech-edit takedowns).
+    2. **Off-Camera Narrator / Product Macro Shots (`audio_mode="off_camera_vo"`):** Render pure diegetic foley/ambience on Omni (lips closed, zero baked-in speech) and mix `shot_k_tts.wav` (`-16 LUFS`) onto the clip in `media_ops.py` (`mux-voiceover`) using `1100 Hz` vocal-formant notch filtering (`bandreject=f=1100:width_type=h:w=1800`) + dynamic speech-envelope ducking.
+    3. **Granular TPVG & TTS CLIs:** Add `omni_direct.py synthesize-tts`, `omni_direct.py generate-clip --audio-ref`, `omni_direct.py dub-clip` (untasked `TASK_UNSPECIFIED` V2V speech/voice dubbing `[text, video, tts_wav]`), and `media_ops.py mux-voiceover`.
+- **Live TPVG + `gemini-3.8-flash-tts` Smoke Verification (`R2-A2`):**
+  - Bundle `tpvg_tts` into this run alongside the Movie/Art Director enrichment and execute a live end-to-end `tpvg_tts` smoke test on **`vital-octagon-19612`** (`440790012685`, `GOOGLE_CLOUD_LOCATION=global`).
+
+### Architectural Design
+
+1. **3-Stage Director Workflow (`PLAN -> DEFINE -> EXECUTE & VERIFY`) in `Skill/vidgen-long-video`:**
+   - **Stage 1 — `PLAN` (Creative Brief, Narrative Arc & Art Direction `VisionProfileSpec`):**
+     - Decompose the brief into narrative beats (`Hook -> Build/Hero -> Proof -> CTA/Resolution`), target audience, duration/word budget (`~130 WPM`, finishing `~2s` before clip end), asset/anchor plan, and a structured **`VisionProfileSpec`** (`camera_philosophy`, `primary_focal_lengths_mm`, `lighting_motivation`, `contrast_ratio`, `color_palette`, `forbidden_colors`, `anti_references`, `audio_mode`, `tts_voice`, `tts_style`, and a verbatim 1-paragraph **`style_anchor`** reused across every plate, keyframe, and video clip).
+     - Add `omni_direct.py generate-vision-plan` and `run_vidgen_workflow.py --stage plan` to synthesize `director_plan.json`, `director_plan.md`, and `storyboard_defined.json` directly from a creative brief + optional reference images.
+   - **Stage 2 — `DEFINE` (Cinematographic Shot Grammar, `--check-spec` Validator & Contact Sheet Gate 1):**
+     - Enrich `StoryboardEntrySpec` & `SceneSpec` (100% backwards-compatible defaults) with filmmaker fields: `shot_size` (`WS`/`MWS`/`MS`/`MCU`/`CU`/`ECU`), `focal_length_mm` (`24`/`35`/`50`/`85`/`100`), `lighting_spec`, `blocking_and_temporal_flow`, `audio_mode` (`auto`/`on_camera`/`off_camera_vo`/`diegetic_only`), `tts_voice`, `tts_style`, `fails_if`, and `vision_profile`.
+     - Upgrade `optimize_shot_prompt_direct` to compose shots using the **8-Layer Director Prompt Architecture** (`Camera/Lens/Shot Size -> Frame Role Anchor -> Environment -> Blocking & Micro-Performance -> Temporal Progression -> Motivated Lighting/Palette -> Diegetic Audio/VO/TPVG Route -> Verbatim Style Anchor`, avoiding letterbox triggers and enforcing silent camera mechanics).
+     - Add deterministic `--check-spec` pre-flight validation (`validate_production_spec`) + `media_ops.py contact-sheet` (`--stage plates` generating `plates_contact_sheet.png` for **HITL Gate 1**).
+   - **Stage 3 — `EXECUTE & VERIFY` (Closed-Loop Render, `tpvg_tts` Synthesis/Conditioning/Mix, Defect-Driven Retry, `qa_contact_sheet.png` & HITL Gate 2):**
+     - Execute generation (`--mode {reference,i2v_chaining,video_extend,hybrid,tpvg_tts}`, `--draft-mode` `360p -> AVU -> upscale` or full-res), audit every take + stitched master against the **10-Category GenMedia Defect Taxonomy**, auto-inject defect-specific director remedies into retries, generate `qa_contact_sheet.png`, and enforce **HITL Gate 2** (`escalation_report.json` + exit code `2` when unresolved defects remain unless `--auto-approve` is passed).
+
+2. **10-Category GenMedia Defect Taxonomy & Automatic Retry Remedies (`Skill/` + `app/`):**
+   - Bake `GENMEDIA_DEFECT_TAXONOMY` (`detected_genmedia_issues: List[str]` extracted *before* `score` and `verdict` in `QUALITY_EVALUATION_PROPERTY_ORDER`) and `format_genmedia_remedy_guidance(...)` into **both** `Skill/vidgen-long-video/scripts/omni_direct.py` **and** `app/agents/pipeline.py` + `app/agent.py`:
+     1. `r2v_white_backdrop_echo` (Frame 0 studio `#FFFFFF` bleed)
+     2. `identity_or_sku_drift` (facial/wardrobe/SKU geometry or colorway mutation)
+     3. `text_or_logo_garbling` (warped packaging typography, gibberish signage, hallucinated 3P logos)
+     4. `hand_or_anatomy_morphing` (extra/fused fingers, wrist/grip clipping during object handling)
+     5. `physics_or_gravity_violation` (floating props, unnatural liquid/fabric dynamics, foot sliding)
+     6. `unmotivated_camera_jitter_or_cuts` (internal jump-cuts, mid-shot dissolves, drift on static shots)
+     7. `lighting_or_color_flicker` (exposure/white-balance pumping, vanishing background props)
+     8. `lip_sync_or_speech_mismatch` (lips moving on `off_camera_vo`, frozen lips on `on_camera`, `WER > 0.35`, tail cutoff)
+     9. `unwanted_music_or_audio_collision` (unrequested AI music bed clashing across shot cuts)
+     10. `seam_jump_or_momentum_stall` (cross-shot boundary jump or dead-stop camera stall at Shot `k` start)
+
+3. **Mode E (`tpvg_tts`): `gemini-3.8-flash-tts` + Omni 1.2 TPVG Voice Architecture (`Skill/` + `app/`):**
+   - Pure `google-genai` SDK synthesis (`types.SpeechConfig`, `PrebuiltVoiceConfig` / `ReplicatedVoiceConfig`, canonical `24 kHz` RIFF WAV framing, `<= 3.0s × 5` reference chunking for `task="reference_to_video"`, `type: "audio"` payload wiring in both `omni_direct.py` and `app/tools/omni_client.py`, `-16 LUFS` + `1100 Hz` formant-notched VO duck-mixing for `off_camera_vo`, and `dub-clip` V2V speech replacement).
+
+4. **Expert Filmmaking & GenMedia Reference Manuals (`Skill/vidgen-long-video/`):**
+   - Refactor `SKILL.md` (`< 350` lines) and author `references/director_craft_guide.md`, `references/genmedia_eval_rubric.md`, and updated `references/storyboard_spec.md` (including Mode E `tpvg_tts` & TPVG voice workflows).
+
+### Confirmed Step-by-Step Plan
+- [x] **Step 1 — Author Filmmaker, GenMedia QA & TPVG-TTS Reference Manuals (`SKILL.md`, `director_craft_guide.md`, `genmedia_eval_rubric.md`, `storyboard_spec.md`):**
+  - Restructure `Skill/vidgen-long-video/SKILL.md` around **Plan $\rightarrow$ Define $\rightarrow$ Execute (& Verify / Iterate)** + Dual HITL Gates + Mode E (`tpvg_tts`), and author `references/director_craft_guide.md`, `references/genmedia_eval_rubric.md`, and updated `references/storyboard_spec.md`.
+- [x] **Step 2 — Upgrade Skill Scripts (`media_ops.py`, `omni_direct.py`, `run_vidgen_workflow.py`):**
+  - Add `build_contact_sheet` (`contact-sheet` CLI), `ensure_riff_wav_bytes` + `split_wav_reference_chunks` (`<= 3.0s × 5` chunks), and `mix_voiceover_onto_video` (`mux-voiceover` CLI with `1100 Hz` formant notch + ducking) to `media_ops.py`.
+  - Add `VisionProfileSpec`, cinematographic `StoryboardEntrySpec`, `GENMEDIA_DEFECT_TAXONOMY` + `detected_genmedia_issues` + `format_genmedia_remedy_guidance`, `synthesize_tts_track_direct` (`gemini-3.8-flash-tts` / `gemini-3.8-tts`, `synthesize-tts` CLI), `reference_audio_b64` TPVG R2V conditioning + `dub_omni_clip_direct` (`dub-clip` CLI), and `generate_vision_and_plan_direct` (`generate-vision-plan` CLI) to `omni_direct.py`.
+  - Add `--mode tpvg_tts` (`--tts-model`, `--tts-voice`, `--tts-style`, `--tts-language`), `--stage {plan,plates,execute}`, `--check-spec`, `--vision-json`, `--auto-approve`, `qa_contact_sheet.png`, and `escalation_report.json` (HITL Gate 2) to `run_vidgen_workflow.py`.
+- [x] **Step 3 — Sync 10-Category GenMedia Defect Rubric & `tpvg_tts` Mode into `app/` (`Hosted ADK 2.0 Web Studio`):**
+  - Update `app/config.py` (`TTS_MODEL`), `app/state.py` (`mode` literal adding `"tpvg_tts"` + `tts_voice`/`tts_style`), `app/tools/omni_client.py` (attaching `reference_audio_b64` `type: "audio"` parts + `<AUDIO_REF_i>[Character A]` tags + `tts.py` helper), `app/agents/pipeline.py` (observation-first `detected_genmedia_issues`, defect-remedy retries, and `tpvg_tts` orchestration), and `app/agent.py`.
+- [x] **Step 4 — Unit/Integration Suite + Live `tpvg_tts` Smoke Test on `vital-octagon-19612`:**
+  - Expand `tests/unit/test_standalone_skill.py`, `tests/unit/test_autorater_v2.py`, and `tests/unit/test_omni_client.py`, run `uv run pytest tests/unit tests/integration -v` (`100%` pass), and run a live `tpvg_tts` (`gemini-3.8-flash-tts` $\rightarrow$ `gemini-omni-1.2-flash` TPVG $\rightarrow$ `gemini-3.8-flash` AVU) smoke verification on `vital-octagon-19612`.
+
+---
+
+## [2026-11-16 08:15 UTC] Stage 1: Confirmed Final Plan (Run 17) — End-to-End `tpvg_tts` Commercial Showcase: *Heritage Espresso & Pour-Over Atelier* (`38s`, 4 Shots, `Aoede`, Direct `720p`)
+
+### Confirmed User Decisions (`ask_question`)
+- **Showcase Theme:** **Heritage Espresso & Pour-Over Atelier** (`38s`, 3 Acts / 4 Shots, custom `#FFFFFF` barista+kettle anchor + standalone pour-over carafe `#FFFFFF` anchor).
+- **TTS Voice:** **`Aoede`** (`gemini-3.8-flash-tts`, warm, poised luxury narrator) driving both `on_camera` TPVG R2V/Extend lip-sync and `off_camera_vo` formant-notched VO muxing.
+- **Resolution:** **Direct `720p` (`16:9`)** render (no draft/upscale step).
+
+### Stage 1 -> Stage 2 -> Stage 3 Execution Plan
+- [x] **Step 1 — Stage 1 (`PLAN`) & Custom `#FFFFFF` Hero Anchors (`output/showcase_espresso_tpvg_38s/`):**
+  - Synthesize bespoke `#FFFFFF` studio-white barista + copper gooseneck pour-over kettle anchor (`hero_barista_anchor.png`) and standalone copper kettle + fluted glass server anchor (`carafe_only_anchor.png`) via `gemini-nano-banana-2.1`.
+  - Author `VisionProfileSpec` (`director_plan.json` / `director_plan.md`) locking warm walnut, crema-amber, and brushed copper palette, forbidden neon colors, `4:1` morning window key light, `50mm -> 85mm -> 100mm macro -> 35mm` lens progression, and verbatim `style_anchor`.
+- [x] **Step 2 — Stage 2 (`DEFINE` — `--check-spec` & `--stage plates` HITL Gate 1):**
+  - Author `scenes_espresso_tpvg_38s.json` (3 Acts / 4 Shots: `10s on_camera R2V` -> `8s on_camera video_extend` -> `10s off_camera_vo 100mm macro` -> `10s on_camera R2V` closing terrace).
+  - Run `--check-spec` validation (`WPM <= 2.4`, GA duration bounds, `15°` hard-cut angle variety) and `--stage plates` to generate people-free architectural atelier plates + `plates_contact_sheet.png` for Gate 1 visual approval.
+- [x] **Step 3 — Stage 3 (`EXECUTE & VERIFY` — Mode E `tpvg_tts`, Direct `720p`):**
+  - Upon user `RUN_PIPELINE` confirmation, execute `run_vidgen_workflow.py --scenes-json ... --resolution 720p --max-attempts 3`, inspect `qa_contact_sheet.png` + `run_manifest.json` (`WER`, `AVU_tokens`, `detected_genmedia_issues`, `master_score`), verify `output_master_38s.mp4`, and log telemetry in `ACTION.md`.

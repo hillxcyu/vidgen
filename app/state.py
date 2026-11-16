@@ -27,12 +27,15 @@ class StoryboardEntry(BaseModel):
 class PipelineState(BaseModel):
     original_intent: str
     num_shots: int = Field(default=3, ge=1, le=10)
-    mode: Literal["reference", "i2v_chaining", "video_extend", "hybrid"] = "i2v_chaining"
+    mode: Literal["reference", "i2v_chaining", "video_extend", "hybrid", "tpvg_tts"] = "i2v_chaining"
     aspect_ratio: str = "16:9"
     resolution: str = "720p"
     duration: int = 10
     max_attempts: int = Field(default=2, ge=1, le=5)
     voice_transcript: Optional[str] = None
+    tts_model: str = "gemini-3.8-flash-tts"
+    tts_voice: str = "Kore"
+    tts_style: str = ""
     reference_assets_b64: List[str] = Field(default_factory=list)
     reference_audio_b64: List[str] = Field(default_factory=list)
     screenplay_draft: Optional[str] = None

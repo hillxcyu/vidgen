@@ -19,6 +19,7 @@ and 80ms xfade/acrossfade multi-clip stitching with zero ADK framework dependenc
 import argparse
 import base64
 from collections import Counter
+import io
 import json
 import math
 import os
@@ -715,6 +716,294 @@ def stitch_videos(
     return abs_out
 
 
+def ensure_riff_wav_bytes(
+    audio_bytes: bytes,
+    sample_rate: int = 24000,
+    channels: int = 1,
+    sampwidth: int = 2,
+) -> bytes:
+    """Ensures audio bytes have a valid RIFF/WAVE header (wrapping raw L16 PCM if needed)."""
+    if not audio_bytes:
+        raise ValueError("Cannot wrap empty audio bytes into RIFF WAV.")
+    raw = bytes(audio_bytes)
+    if raw.startswith(b"RIFF") and b"WAVE" in raw[:16]:
+        return raw
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as wf:
+        wf.setnchannels(max(1, int(channels)))
+        wf.setsampwidth(max(1, int(sampwidth)))
+        wf.setframerate(max(8000, int(sample_rate)))
+        wf.writeframes(raw)
+    return buf.getvalue()
+
+
+def get_wav_duration_sec(wav_bytes: bytes, fallback_sample_rate: int = 24000) -> Tuple[float, int]:
+    """Returns `(duration_sec, sample_rate_hz)` for RIFF WAV or raw PCM audio bytes."""
+    riff = ensure_riff_wav_bytes(wav_bytes, sample_rate=fallback_sample_rate)
+    with wave.open(io.BytesIO(riff), "rb") as wf:
+        frames = wf.getnframes()
+        rate = wf.getframerate() or fallback_sample_rate
+        dur = round(frames / float(rate), 3) if rate > 0 else 0.0
+    return dur, int(rate)
+
+
+def split_wav_reference_chunks(
+    wav_bytes: bytes,
+    chunk_sec: float = 3.0,
+    max_chunks: int = 5,
+    min_tail_sec: float = 0.35,
+) -> List[str]:
+    """Slices a WAV track into up to `max_chunks` base64-encoded RIFF WAV clips (`<= chunk_sec` each).
+
+    Gemini Omni Reference-to-Video (`task='reference_to_video'`) accepts up to 5 reference audio
+    clips of up to ~3.0 seconds each (`type='audio'`, `mime_type='audio/wav'`).
+    """
+    riff = ensure_riff_wav_bytes(wav_bytes)
+    with wave.open(io.BytesIO(riff), "rb") as wf:
+        nchannels = wf.getnchannels()
+        sampwidth = wf.getsampwidth()
+        framerate = wf.getframerate() or 24000
+        total_frames = wf.getnframes()
+        all_pcm = wf.readframes(total_frames)
+
+    bytes_per_frame = max(1, nchannels * sampwidth)
+    frames_per_chunk = max(1, int(round(max(0.5, float(chunk_sec)) * framerate)))
+    min_tail_frames = max(1, int(round(max(0.05, float(min_tail_sec)) * framerate)))
+
+    chunks_b64: List[str] = []
+    offset_frames = 0
+    while offset_frames < total_frames and len(chunks_b64) < max(1, int(max_chunks)):
+        end_frames = min(total_frames, offset_frames + frames_per_chunk)
+        seg_frames = end_frames - offset_frames
+        if seg_frames < min_tail_frames and chunks_b64:
+            break
+        byte_start = offset_frames * bytes_per_frame
+        byte_end = end_frames * bytes_per_frame
+        seg_pcm = all_pcm[byte_start:byte_end]
+        buf = io.BytesIO()
+        with wave.open(buf, "wb") as out_wf:
+            out_wf.setnchannels(nchannels)
+            out_wf.setsampwidth(sampwidth)
+            out_wf.setframerate(framerate)
+            out_wf.writeframes(seg_pcm)
+        chunks_b64.append(base64.b64encode(buf.getvalue()).decode("ascii"))
+        offset_frames = end_frames
+    return chunks_b64
+
+
+def mix_voiceover_onto_video(
+    video_path: str,
+    voice_wav_path: str,
+    output_path: str,
+    env_duck_gain: float = 0.28,
+    apply_formant_notch: bool = True,
+) -> str:
+    """Mixes a dry TTS WAV voiceover onto a video clip with 1100 Hz vocal-formant notch & ducking.
+
+    Normalizes voiceover loudness (`-16 LUFS`, `48 kHz` stereo AAC) and locks output duration
+    strictly to `video_path` (`-c:v copy`). Safe when `output_path` equals `video_path`.
+    """
+    if not os.path.exists(video_path):
+        raise FileNotFoundError(f"Video file not found: {video_path}")
+    if not os.path.exists(voice_wav_path):
+        raise FileNotFoundError(f"Voice WAV file not found: {voice_wav_path}")
+
+    abs_vid = os.path.abspath(video_path)
+    abs_wav = os.path.abspath(voice_wav_path)
+    abs_out = os.path.abspath(output_path)
+    os.makedirs(os.path.dirname(abs_out), exist_ok=True)
+
+    vid_dur = max(0.5, get_video_duration(abs_vid))
+    has_env = _has_audio_stream(abs_vid)
+    duck = max(0.0, min(1.0, float(env_duck_gain)))
+
+    vo_chain = (
+        f"[1:a:0]loudnorm=I=-16:TP=-1.5:LRA=11,"
+        f"aresample=48000,pan=stereo|c0=c0|c1=c0,"
+        f"apad,atrim=0:{vid_dur:.3f},asetpts=PTS-STARTPTS"
+    )
+    if has_env:
+        notch = "bandreject=f=1100:width_type=h:w=1800," if apply_formant_notch else ""
+        env_chain = (
+            f"[0:a:0]{notch}volume={duck:.3f},"
+            f"aresample=48000,aformat=channel_layouts=stereo,"
+            f"apad,atrim=0:{vid_dur:.3f},asetpts=PTS-STARTPTS[env]"
+        )
+        filter_complex = (
+            f"{env_chain};{vo_chain}[vo];"
+            f"[env][vo]amix=inputs=2:duration=first:dropout_transition=0.08:normalize=0[aout]"
+        )
+    else:
+        filter_complex = f"{vo_chain}[aout]"
+
+    in_place = abs_out == abs_vid
+    tmp_out = abs_out + ".mux_tmp.mp4" if in_place else abs_out
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-i",
+        abs_vid,
+        "-i",
+        abs_wav,
+        "-filter_complex",
+        filter_complex,
+        "-map",
+        "0:v:0",
+        "-map",
+        "[aout]",
+        "-c:v",
+        "copy",
+        "-c:a",
+        "aac",
+        "-ar",
+        "48000",
+        "-ac",
+        "2",
+        "-b:a",
+        "192k",
+        "-movflags",
+        "+faststart",
+        tmp_out,
+    ]
+    try:
+        subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+        if in_place:
+            os.replace(tmp_out, abs_out)
+    finally:
+        if in_place and os.path.exists(tmp_out):
+            os.remove(tmp_out)
+    return abs_out
+
+
+def _read_media_tile_bgr(path: str, tile_w: int, tile_h: int) -> np.ndarray:
+    """Loads an image or MP4 midpoint frame and center-crops/resizes to `(tile_h, tile_w, 3)` BGR."""
+    img: Optional[np.ndarray] = None
+    if path and os.path.exists(path):
+        ext = os.path.splitext(path)[1].lower()
+        if ext in (".mp4", ".mov", ".webm", ".mkv", ".avi"):
+            cap = cv2.VideoCapture(path)
+            total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+            if total > 2:
+                cap.set(cv2.CAP_PROP_POS_FRAMES, total // 2)
+            ok, frame = cap.read()
+            if not ok or frame is None:
+                cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                ok, frame = cap.read()
+            cap.release()
+            if ok and frame is not None:
+                img = frame
+        else:
+            loaded = cv2.imread(path, cv2.IMREAD_COLOR)
+            if loaded is not None:
+                img = loaded
+
+    if img is None or img.size == 0:
+        canvas = np.full((tile_h, tile_w, 3), (43, 29, 20), dtype=np.uint8)
+        cv2.putText(
+            canvas,
+            "MISSING ASSET",
+            (max(16, tile_w // 4), tile_h // 2),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            (180, 190, 210),
+            2,
+            cv2.LINE_AA,
+        )
+        return canvas
+
+    src_h, src_w = img.shape[:2]
+    scale = max(tile_w / float(max(1, src_w)), tile_h / float(max(1, src_h)))
+    resized_w = max(tile_w, int(round(src_w * scale)))
+    resized_h = max(tile_h, int(round(src_h * scale)))
+    resized = cv2.resize(img, (resized_w, resized_h), interpolation=cv2.INTER_AREA)
+    x0 = max(0, (resized_w - tile_w) // 2)
+    y0 = max(0, (resized_h - tile_h) // 2)
+    return resized[y0:y0 + tile_h, x0:x0 + tile_w].copy()
+
+
+def build_contact_sheet(
+    items: List[Dict[str, Any]],
+    output_path: str,
+    cols: int = 3,
+    tile_w: int = 480,
+    tile_h: int = 270,
+    gutter: int = 8,
+) -> str:
+    """Renders a labeled multi-tile PNG contact sheet for HITL Gate 1 (plates) and Gate 2 (QA).
+
+    Each item dict accepts: `path` (image or MP4 path), `label` (str), optional `score` (float),
+    and optional `status` ('PASSED', 'ESCALATED', 'PLATE', etc.).
+    """
+    if not items:
+        raise ValueError("build_contact_sheet requires at least one item.")
+    cols = max(1, min(int(cols), len(items)))
+    rows = (len(items) + cols - 1) // cols
+    tile_w = max(160, int(tile_w))
+    tile_h = max(90, int(tile_h))
+    gutter = max(2, int(gutter))
+
+    sheet_w = cols * tile_w + (cols + 1) * gutter
+    sheet_h = rows * tile_h + (rows + 1) * gutter
+    sheet = np.full((sheet_h, sheet_w, 3), (28, 20, 15), dtype=np.uint8)
+
+    for idx, item in enumerate(items):
+        r = idx // cols
+        c = idx % cols
+        tile = _read_media_tile_bgr(str(item.get("path") or ""), tile_w, tile_h)
+
+        # Top translucent HUD bar
+        bar_h = min(36, max(26, tile_h // 8))
+        overlay = tile.copy()
+        cv2.rectangle(overlay, (0, 0), (tile_w, bar_h), (18, 18, 22), -1)
+        cv2.addWeighted(overlay, 0.76, tile, 0.24, 0, tile)
+
+        score = item.get("score")
+        status = str(item.get("status") or "").upper()
+        if score is not None:
+            try:
+                sc_f = float(score)
+                accent_bgr = (94, 197, 34) if sc_f >= 0.80 else (68, 85, 239)
+            except (TypeError, ValueError):
+                accent_bgr = (235, 145, 55)
+        elif status in ("PASSED", "OK", "APPROVED"):
+            accent_bgr = (94, 197, 34)
+        elif status in ("ESCALATED", "FAILED", "REATTEMPT_REQUIRED", "HUMAN_REVIEW_REQUIRED"):
+            accent_bgr = (68, 85, 239)
+        else:
+            accent_bgr = (235, 145, 55)
+
+        cv2.rectangle(tile, (0, 0), (6, bar_h), accent_bgr, -1)
+        raw_label = str(item.get("label") or f"Tile {idx + 1}")
+        if score is not None and f"{score}" not in raw_label:
+            try:
+                raw_label = f"{raw_label} | {float(score):.2f}"
+            except (TypeError, ValueError):
+                pass
+        if status and status not in raw_label.upper():
+            raw_label = f"{raw_label} [{status}]"
+        clean_ascii = raw_label.encode("ascii", errors="ignore").decode("ascii")[:52]
+        cv2.putText(
+            tile,
+            clean_ascii,
+            (14, int(bar_h * 0.70)),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.48,
+            (248, 250, 252),
+            1,
+            cv2.LINE_AA,
+        )
+
+        y_off = gutter + r * (tile_h + gutter)
+        x_off = gutter + c * (tile_w + gutter)
+        sheet[y_off:y_off + tile_h, x_off:x_off + tile_w] = tile
+
+    abs_out = os.path.abspath(output_path)
+    os.makedirs(os.path.dirname(abs_out), exist_ok=True)
+    if not cv2.imwrite(abs_out, sheet):
+        raise RuntimeError(f"Failed to write contact sheet PNG to {abs_out}")
+    return abs_out
+
+
 def _build_cli_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Standalone OpenCV + FFMPEG media utilities for multi-shot video generation."
@@ -762,6 +1051,31 @@ def _build_cli_parser() -> argparse.ArgumentParser:
     p_stitch.add_argument("--videos", nargs="+", required=True, help="Ordered MP4 clip paths.")
     p_stitch.add_argument("--output", required=True, help="Output stitched master MP4 path.")
     p_stitch.add_argument("--crossfade", type=float, default=0.08, help="Crossfade seconds (0 to hard-cut).")
+
+    p_mux = sub.add_parser(
+        "mux-voiceover",
+        help="Mix a dry TTS WAV voiceover onto an MP4 clip with 1100 Hz vocal-formant notch & ducking.",
+    )
+    p_mux.add_argument("--video", required=True, help="Input MP4 path.")
+    p_mux.add_argument("--voice", required=True, help="Input TTS WAV path.")
+    p_mux.add_argument("--output", required=True, help="Output MP4 path (may equal --video).")
+    p_mux.add_argument("--duck-gain", type=float, default=0.28, help="Environmental bed gain (default: 0.28).")
+    p_mux.add_argument("--no-formant-notch", action="store_true", help="Disable 1100 Hz bandreject notch filter.")
+
+    p_cs = sub.add_parser("contact-sheet", help="Render a labeled multi-tile PNG contact sheet for plates or QA.")
+    p_cs.add_argument("--inputs", nargs="+", required=True, help="Ordered PNG/JPG/MP4 paths.")
+    p_cs.add_argument("--labels", nargs="*", default=None, help="Optional per-tile label strings.")
+    p_cs.add_argument("--scores", nargs="*", type=float, default=None, help="Optional per-tile numeric scores.")
+    p_cs.add_argument("--cols", type=int, default=3, help="Grid columns (default: 3).")
+    p_cs.add_argument("--tile-width", type=int, default=480)
+    p_cs.add_argument("--tile-height", type=int, default=270)
+    p_cs.add_argument("--output", required=True, help="Output PNG contact sheet path.")
+
+    p_chunk = sub.add_parser("chunk-wav", help="Slice a WAV file into <= 3.0s RIFF WAV chunks for Omni R2V audio refs.")
+    p_chunk.add_argument("--audio", required=True, help="Input WAV path.")
+    p_chunk.add_argument("--chunk-sec", type=float, default=3.0)
+    p_chunk.add_argument("--max-chunks", type=int, default=5)
+    p_chunk.add_argument("--output-dir", default=None, help="Optional directory to write chunk_k.wav files.")
 
     return parser
 
@@ -840,6 +1154,66 @@ def main(argv: Optional[List[str]] = None) -> int:
             "output": out,
             "duration_sec": round(get_video_duration(out), 3),
             "clips_count": len(args.videos),
+        }))
+        return 0
+
+    if args.command == "mux-voiceover":
+        out = mix_voiceover_onto_video(
+            video_path=args.video,
+            voice_wav_path=args.voice,
+            output_path=args.output,
+            env_duck_gain=args.duck_gain,
+            apply_formant_notch=not bool(args.no_formant_notch),
+        )
+        print(json.dumps({
+            "status": "ok",
+            "output": out,
+            "duration_sec": round(get_video_duration(out), 3),
+        }))
+        return 0
+
+    if args.command == "contact-sheet":
+        labels = args.labels or []
+        scores = args.scores or []
+        items = []
+        for idx, inp in enumerate(args.inputs):
+            lbl = labels[idx] if idx < len(labels) else os.path.basename(inp)
+            sc = scores[idx] if idx < len(scores) else None
+            items.append({"path": inp, "label": lbl, "score": sc})
+        out = build_contact_sheet(
+            items=items,
+            output_path=args.output,
+            cols=args.cols,
+            tile_w=args.tile_width,
+            tile_h=args.tile_height,
+        )
+        print(json.dumps({"status": "ok", "output": out, "tiles": len(items)}))
+        return 0
+
+    if args.command == "chunk-wav":
+        with open(args.audio, "rb") as fp:
+            raw_wav = fp.read()
+        dur_sec, sr = get_wav_duration_sec(raw_wav)
+        chunks_b64 = split_wav_reference_chunks(
+            raw_wav,
+            chunk_sec=args.chunk_sec,
+            max_chunks=args.max_chunks,
+        )
+        written_files: List[str] = []
+        if args.output_dir:
+            abs_dir = os.path.abspath(args.output_dir)
+            os.makedirs(abs_dir, exist_ok=True)
+            for idx, b64_c in enumerate(chunks_b64):
+                cp = os.path.join(abs_dir, f"chunk_{idx + 1}.wav")
+                with open(cp, "wb") as fp:
+                    fp.write(base64.b64decode(b64_c))
+                written_files.append(cp)
+        print(json.dumps({
+            "status": "ok",
+            "duration_sec": dur_sec,
+            "sample_rate_hz": sr,
+            "chunks_count": len(chunks_b64),
+            "chunk_files": written_files,
         }))
         return 0
 

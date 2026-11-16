@@ -1,125 +1,145 @@
-# Pre-Structured Storyboard JSON Schema & Continuity Choreography
+# Storyboard, Vision Profile & Multi-Scene JSON Schemas
 
-Pass `--storyboard-json path/to/storyboard.json` to `scripts/run_vidgen_workflow.py` whenever you want deterministic control over per-shot framing, spoken dialogue, quality criteria, or `mode="hybrid"` act-break transitions.
+Use `--storyboard-json` (single-scene) or `--scenes-json` (multi-scene `60s–120s+`) together with optional `--vision-json` to control every cinematographic, audio/TTS, and evaluation detail deterministically.
 
 ---
 
-## 1. JSON Schema (`List[StoryboardEntrySpec]`)
+## 1. Vision Profile Schema (`VisionProfileSpec` / `--vision-json`)
 
-`storyboard.json` is a JSON array of shot objects (`1..N`):
+Generated automatically during `--stage plan` (`director_plan.json`) or authored manually:
+
+```json
+{
+  "project_title": "Aurora Botanical Serum — Morning Ritual",
+  "emotional_arc": "Crisp sunlit awakening -> tactile golden-drop intimacy -> poised all-day radiance",
+  "camera_philosophy": "Companion eye-level prime camera moving gently with subject breath; locked 100mm macro on product hero beats.",
+  "primary_focal_lengths_mm": [35, 85, 100],
+  "lighting_motivation": "5200K directional morning sunlight through tall linen curtains, 2:1 soft fill, warm 3400K rim bounce.",
+  "contrast_ratio": "2:1 high-key natural luxury",
+  "color_palette": ["warm travertine ivory", "champagne satin", "burnished amber gold", "soft sage"],
+  "forbidden_colors": ["neon cyan", "oversaturated magenta", "harsh pure-white cyclorama"],
+  "anti_references": ["shaky handheld vlog", "letterbox black bars", "floating CGI text"],
+  "audio_mode": "tpvg_tts",
+  "tts_voice": "Kore",
+  "tts_style": "Warm, poised, intimate luxury skincare narrator",
+  "style_anchor": "Shot on large-format digital cinema sensor with vintage prime lenses, natural skin micro-texture, soft highlight roll-off, warm travertine and amber-gold palette, zero text overlays."
+}
+```
+
+---
+
+## 2. Shot Schema (`StoryboardEntrySpec` / `--storyboard-json`)
+
+`storyboard.json` is a JSON array of shot objects (`1..N`). All new cinematographic fields are optional and 100% backwards-compatible:
 
 ```json
 [
   {
     "scene_number": 1,
-    "description": "An East Asian woman in a terracotta linen trench coat walks briskly along a sunlit Parisian limestone colonnade, golden morning light catching the fabric drape.",
-    "camera_angle": "smooth medium tracking",
-    "evaluation_criteria": "Verify exact terracotta trench coat lapel, button count, and belt buckle match the #FFFFFF reference anchor; zero white studio background echo on Frame 0.",
+    "description": "An East Asian woman in a terracotta linen trench coat walks briskly along a sunlit Parisian limestone colonnade, morning light catching the fabric drape.",
+    "camera_angle": "eye-level tracking",
+    "shot_size": "MS",
+    "focal_length_mm": 35,
+    "lighting_spec": "5200K directional morning sun from camera-left through colonnade arches, 2:1 soft bounce fill",
+    "blocking_and_temporal_flow": "Subject enters from left third at steady pace, pauses gently at colonnade pillar as breeze lifts coat lapel",
+    "audio_mode": "on_camera",
+    "tts_voice": "Kore",
+    "tts_style": "Warm, poised editorial confidence",
+    "evaluation_criteria": "Verify exact terracotta trench coat lapel, button count, and belt buckle match the #FFFFFF reference anchor.",
+    "fails_if": "Frame 0 shows white studio backdrop, coat color shifts, or extra buttons appear.",
     "spoken_dialogue": "Tailored linen designed to move effortlessly through morning light.",
-    "mode_override": "reference"
+    "mode_override": "reference",
+    "duration_sec": 10
   },
   {
     "scene_number": 2,
-    "description": "Continuing seamlessly down the same sunlit colonnade, she turns slightly toward camera as the breeze lifts the trench hem in one unbroken single-take tracking shot.",
-    "camera_angle": "continuous medium close-up dolly",
-    "evaluation_criteria": "Seamless continuation from Shot 1's terminal frame with zero jump cuts, identical limestone colonnade lighting, and matching voice timbre.",
+    "description": "Macro showcase of the woven terracotta linen belt buckle and lapel stitching resting on sunlit limestone.",
+    "camera_angle": "low-angle slow push-in",
+    "shot_size": "ECU",
+    "focal_length_mm": 100,
+    "lighting_spec": "Raking golden morning sun highlighting linen weave texture",
+    "blocking_and_temporal_flow": "Zero human presence; camera glides 15cm forward focusing across stitched lapel edge",
+    "audio_mode": "off_camera_vo",
+    "evaluation_criteria": "100% product-only macro frame with zero human hands/faces and crisp linen weave.",
+    "fails_if": "Any human hand or face appears, or camera jump-cuts.",
     "spoken_dialogue": "Breathable structure meets timeless modern craft.",
-    "mode_override": "video_extend"
-  },
-  {
-    "scene_number": 3,
-    "description": "Inside a warm minimalist architectural loft with travertine shelving, she pauses beside a sunlit floor-to-ceiling window showcasing the full terracotta trench silhouette.",
-    "camera_angle": "slow cinematic push-in",
-    "evaluation_criteria": "Clean act-break scene opening in the loft while re-locking exact garment color, texture, and facial identity to the #FFFFFF reference anchor.",
-    "spoken_dialogue": "Crafted for every chapter of your day.",
-    "mode_override": "reference"
+    "mode_override": "reference",
+    "duration_sec": 8
   }
 ]
 ```
 
 ### Field Reference
-| Field | Type | Required | Description |
-| :--- | :--- | :---: | :--- |
+| Field | Type | Req | Description |
+| :--- | :--- | :-: | :--- |
 | `scene_number` | `int` | Yes | `1`-based shot index (`1`, `2`, `3`, ...). |
-| `description` | `str` | Yes | Visual setting, subject action, lighting, and material detail. Keep to **one continuous camera movement** with zero internal scene cuts. |
-| `camera_angle` | `str` | Yes | Camera motion descriptor (e.g., `"smooth medium tracking"`, `"slow macro push-in"`, `"continuous orbital dolly"`). |
+| `description` | `str` | Yes | Visual setting, subject action, and material detail (single unbroken camera take). |
+| `camera_angle` | `str` | Yes | Angle + movement descriptor (e.g., `"eye-level smooth dolly-in"`, `"low-angle lateral tracking"`). |
+| `shot_size` | `str \| null` | No | Framing scale: `"WS"`, `"MWS"`, `"MS"`, `"MCU"`, `"CU"`, or `"ECU"`. |
+| `focal_length_mm` | `int \| null` | No | Prime lens focal length in mm (e.g., `24`, `35`, `50`, `85`, `100`). |
+| `lighting_spec` | `str \| null` | No | Motivated key light source, Kelvin temperature, and contrast ratio. |
+| `blocking_and_temporal_flow` | `str \| null` | No | Beat-by-beat physical progression from `t=0s` to `duration_sec`. |
+| `audio_mode` | `str \| null` | No | `"auto"` (default), `"on_camera"` (lip-synced speech), `"off_camera_vo"` (closed lips + ducked VO mix in `tpvg_tts`), or `"diegetic_only"` (no speech). |
+| `tts_voice` / `tts_style` | `str \| null` | No | Per-shot override for `--mode tpvg_tts` (`gemini-3.8-flash-tts` voice name & acting style). |
 | `evaluation_criteria` | `str` | Yes | Shot-specific checklist passed to Auto-Rater v2 (`gemini-3.8-flash` AVU). |
-| `spoken_dialogue` | `str \| null` | No | Verbatim spoken line (`<= 12` words for a `10s` clip so speech finishes cleanly before `8.0s`). Omit or set `null` for ambient/instrumental audio. |
-| `mode_override` | `str \| null` | No | Per-shot override (`"reference"`, `"i2v_chaining"`, or `"video_extend"`). Used when `--mode hybrid` choreographs multi-act commercials. |
+| `fails_if` | `str \| null` | No | Concrete observable failure condition appended to the Auto-Rater v2 rubric. |
+| `spoken_dialogue` | `str \| null` | No | Verbatim spoken line (paced `<= 2.2 words/sec` so speech finishes `~2s` before `duration_sec`). |
+| `mode_override` | `str \| null` | No | Per-shot override: `"reference"`, `"i2v_chaining"`, `"video_extend"`, or `"tpvg_tts"`. |
+| `duration_sec` | `int \| null` | No | Per-shot duration (`3–15s` for R2V/I2V/T2V; auto-clamped to `3–10s` for `video_extend` and two-frame interpolation). |
 
 ---
 
-## 2. Prompting & Continuity Rules by Mode
+## 3. Continuity & Voice Modes (`--mode`)
 
-### Mode A (`reference` — Parallel `#FFFFFF` Reference-to-Video)
-- **Best for:** Multi-location brand montages (e.g., street -> studio -> rooftop) where every shot shares the same hero person or product SKU.
-- **Anchor prep:** Isolate the subject/SKU on a clean `#FFFFFF` studio background. In 60-clip benchmarks, `#FFFFFF` isolation + `task="reference_to_video"` raised complex garment/SKU lock from `0.45` to `0.95` with zero relighting halos.
-- **Stitching:** `run_vidgen_workflow.py` automatically uses `0.0s` hard-cuts (`--crossfade 0.0`) when all shots are `reference` to avoid `80ms` cross-dissolve pose ghosting across disparate locations.
-
-### Mode B (`i2v_chaining` — Shot 1 R2V + Shots 2..N `<FIRST_FRAME>`)
-- **Best for:** Controlled camera progressions where Shot `k` begins from the exact pixel state of Shot `k-1`'s extracted `last_frame.png`.
-- **Critical tag rule:** `omni_direct.py` automatically strips `reference_images_b64` (`# References`) and `"Character A"` tags whenever `<FIRST_FRAME>` is attached. Combining `# References` and `<FIRST_FRAME>` causes Omni to prioritize R2V and ignore the starting frame (`MAE` jumps from `~2.5` to `55–99`).
-
-### Mode C (`video_extend` — Shot 1 R2V + Shots 2..N `5.0s` Audio-Intact `task="extend"`)
-- **Best for:** Unbroken `20s–30s` single-take hero commercials with continuous motion momentum, room tone, musical bed, and speaker voice timbre.
-- **Physical space constraint:** Shots `2..N` **must** remain inside the **same physical room/environment** as Shot `k-1`. Requesting a new location during `task="extend"` forces an abrupt post-seam jump-cut (`peak_early_mae > 28.0`), which `detect_seam_jump_cut()` penalizes and retries.
-- **TPVG speech guardrail:** Avoid aggressive brand-endorsement slogans (e.g., `"Buy BrandX today!"`) in spoken lines on person clips to prevent TPVG endorsement takedowns; use descriptive storytelling copy (`<= 12` words/shot).
-
-### Mode D (`hybrid` — Per-Shot `mode_override`)
-- Combine `video_extend` for unbroken within-scene motion (e.g., Shot 1 `reference` -> Shot 2 `video_extend`) with `reference` on act-break location changes (e.g., Shot 3 `reference` re-anchoring on `#FFFFFF` in a new setting).
+| Mode (`--mode`) | Visual & Voice Conditioning | Best Use Case |
+| :--- | :--- | :--- |
+| **`reference`** *(Mode A)* | Concurrent `#FFFFFF` `task="reference_to_video"` (`3s–15s`, `0.0s` hard-cuts) | Fast multi-location montages (`~3x` wall-clock speed) |
+| **`i2v_chaining`** *(Mode B)* | Shot 1 R2V → Shots `2..N` `<FIRST_FRAME>` `task="image_to_video"` (`3s–15s`) | Controlled sequential camera progressions |
+| **`video_extend`** *(Mode C)* | Shot 1 R2V → Shots `2..N` `5.0s` `<VIDEO_0>` tail `task="extend"` (`3s–10s`) | Same-room unbroken single-take commercials |
+| **`hybrid`** *(Mode D)* | Per-shot `mode_override` mixing `reference` act breaks + `video_extend` | Multi-act commercials across distinct rooms |
+| **`tpvg_tts`** *(Mode E)* | **`gemini-3.8-flash-tts` (`gemini-3.8-tts`)** synthesizes `shot_k_tts.wav` first → **`on_camera`** shots pass `<= 3.0s × 5` WAV chunks as TPVG `type: "audio"` R2V voice refs (lip-synced in exact TTS voice) + TPVG-unlocked `video_extend`; **`off_camera_vo`** shots render pure diegetic video and mux `-16 LUFS` TTS WAV with `1100 Hz` formant notch + ducking | Studio-grade consistent voice acting, multilingual/accent control, custom replicated voices, and hybrid spokesperson + product-macro ads |
 
 ---
 
-## 3. Hierarchical Multi-Scene Schema (`--scenes-json` for `60s–120s+` Videos)
-
-For `60s–90s+` multi-scene commercials, pass `--scenes-json path/to/scenes_storyboard.json`. Each scene runs its own `3 × 10s = 30s` sequence (`Shot 1` R2V with `[hero_anchor.png, scene_i_ref.png]` -> `Shots 2..3` `video_extend`), runs Auto-Rater v2 + Scene Seam Critic (`gemini-3.8-flash` AVU), repairs any `< 0.80` shot via `<FIRST_FRAME> + <LAST_FRAME>` interpolation (`gemini-omni-1.2-flash`), and stitches `output_master_90s.mp4`:
+## 4. Hierarchical Multi-Scene Schema (`--scenes-json` for `60s–120s+`)
 
 ```json
 {
-  "original_intent": "90s 3-scene luxury botanical serum commercial from morning sanctuary to golden-hour terrace",
+  "original_intent": "90s 4-act botanical serum commercial combining spokesperson chapters and product-only macro showcase",
+  "vision_profile": {
+    "project_title": "Aurora Botanical Serum",
+    "primary_focal_lengths_mm": [35, 85, 100],
+    "color_palette": ["warm travertine ivory", "champagne satin", "amber gold"],
+    "forbidden_colors": ["neon cyan", "harsh magenta"],
+    "tts_voice": "Kore",
+    "tts_style": "Warm, poised luxury skincare narrator",
+    "style_anchor": "Shot on large-format cinema sensor with vintage prime lenses, soft natural daylight, warm travertine and amber-gold palette, zero text overlays."
+  },
   "scenes": [
     {
-      "scene_id": "scene_1",
-      "title": "Morning Sanctuary: Sunlit Travertine Bathroom",
-      "mode": "video_extend",
+      "scene_id": "act_1_hook",
+      "title": "Act 1 — Morning Sanctuary Hook",
+      "mode": "tpvg_tts",
+      "duration_sec": 10,
+      "scene_plate_prompt": "Sunlit beige travertine spa bathroom vanity with tall linen curtains, 16:9 architectural interior, zero people, zero text",
       "reference_paths": [
-        "output/beauty_90s/refs/uc3_beauty_anchor.png",
-        "output/beauty_90s/refs/scene1_travertine_sanctuary_ref.png"
+        "output/beauty_90s/refs/hero_anchor.png",
+        "output/beauty_90s/refs/act1_plate.png"
       ],
       "shots": [
         {
           "scene_number": 1,
-          "description": "Spokesperson stands beside sunlit travertine vanity releasing one golden drop from the amber serum bottle.",
-          "camera_angle": "smooth medium close-up",
-          "evaluation_criteria": "Verify exact spokesperson, satin blazer, and amber serum bottle in sunlit travertine bathroom; zero white studio backdrop.",
+          "shot_size": "MCU",
+          "focal_length_mm": 50,
+          "camera_angle": "eye-level slow dolly-in",
+          "audio_mode": "on_camera",
+          "description": "Spokesperson holds the closed amber dropper bottle beside sunlit travertine vanity.",
+          "evaluation_criteria": "Exact spokesperson, satin blazer, and closed amber bottle in sunlit travertine room.",
+          "fails_if": "White studio backdrop appears or bottle cap detaches.",
           "spoken_dialogue": "Every morning begins with one luminous golden drop."
-        },
-        {
-          "scene_number": 2,
-          "description": "Continuous slow push-in inside the travertine bathroom as she warms the golden oil on her fingertips.",
-          "camera_angle": "continuous close-up push-in",
-          "evaluation_criteria": "Seamless single-take continuation from Shot 1 inside the exact travertine bathroom.",
-          "spoken_dialogue": "Silky botanicals melt weightlessly into morning light."
-        },
-        {
-          "scene_number": 3,
-          "description": "Smooth orbital close-up as she holds the amber bottle beside her radiant cheek.",
-          "camera_angle": "smooth orbital close-up",
-          "evaluation_criteria": "Unbroken single-take motion, exact bottle & garment lock, clean speech finish before 8s.",
-          "spoken_dialogue": "Pure hydration that awakens natural skin clarity."
         }
       ]
     }
   ]
 }
 ```
-
-
----
-
-## 4. Draft Mode (`--draft-mode`: `360p` Draft → Agentic Loop → Standalone Upscale)
-
-When iterating on multi-shot or `90s+` multi-scene commercials, pass `--draft-mode` (`--draft-resolution 360p --resolution 720p` or `1080p`) to `scripts/run_vidgen_workflow.py`:
-- **Candidate Drafting & Closed-Loop QA at `360p` (`$0.02/s`):** All `reference_to_video`, `image_to_video`, `extend`, and `<FIRST_FRAME> + <LAST_FRAME>` interpolation candidates execute on the fast `360p` LDM (`$0.20` per `10s` take), and failed takes (`< 0.80` on `gemini-3.8-flash` AVU) are discarded cheaply.
-- **Concurrent Zero-Reasoning Promotion (`task="upscale"`):** Once a scene's `10s` prefix-trimmed shots pass the Agentic Loop, `_upscale_manifest_shots_async` archives `shot_k_draft_360p.mp4` and upscales all winning `10s` clips in parallel (`--max-parallel-upscales 3`, `total_input_tokens: 0`, `2,896` output tok/s for `360p -> 720p`, `5,792` tok/s for `360p -> 1080p`) before `80ms` scene and master stitching.
-- **Supported Resolution Pairs:** `360p -> 720p | 1080p` and `720p -> 1080p | 4k` (`<= 15s` per clip; single-hop `360p -> 4k` is rejected upfront by `validate_upscale_transition`).
