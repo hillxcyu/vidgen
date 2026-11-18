@@ -1,16 +1,19 @@
 # Storyboard, Vision Profile & Multi-Scene JSON Schemas
 
-Use `--storyboard-json` (single-scene) or `--scenes-json` (multi-scene `60s–120s+`) together with optional `--vision-json` to control every cinematographic, audio/TTS, and evaluation detail deterministically.
+Use `--storyboard-json` (single-scene) or `--scenes-json` (multi-scene
+`60s-120s+`) together with optional `--vision-json` to control every
+cinematographic, audio/TTS, and evaluation detail deterministically.
 
----
+--------------------------------------------------------------------------------
 
 ## 1. Vision Profile Schema (`VisionProfileSpec` / `--vision-json`)
 
-Generated automatically during `--stage plan` (`director_plan.json`) or authored manually:
+Generated automatically during `--stage plan` (`director_plan.json`) or authored
+manually:
 
 ```json
 {
-  "project_title": "Aurora Botanical Serum — Morning Ritual",
+  "project_title": "Aurora Botanical Serum - Morning Ritual",
   "emotional_arc": "Crisp sunlit awakening -> tactile golden-drop intimacy -> poised all-day radiance",
   "camera_philosophy": "Companion eye-level prime camera moving gently with subject breath; locked 100mm macro on product hero beats.",
   "primary_focal_lengths_mm": [35, 85, 100],
@@ -26,11 +29,12 @@ Generated automatically during `--stage plan` (`director_plan.json`) or authored
 }
 ```
 
----
+--------------------------------------------------------------------------------
 
 ## 2. Shot Schema (`StoryboardEntrySpec` / `--storyboard-json`)
 
-`storyboard.json` is a JSON array of shot objects (`1..N`). All new cinematographic fields are optional and 100% backwards-compatible:
+`storyboard.json` is a JSON array of shot objects (`1..N`). All new
+cinematographic fields are optional and 100% backwards-compatible:
 
 ```json
 [
@@ -70,38 +74,39 @@ Generated automatically during `--stage plan` (`director_plan.json`) or authored
 ```
 
 ### Field Reference
-| Field | Type | Req | Description |
-| :--- | :--- | :-: | :--- |
-| `scene_number` | `int` | Yes | `1`-based shot index (`1`, `2`, `3`, ...). |
-| `description` | `str` | Yes | Visual setting, subject action, and material detail (single unbroken camera take). |
-| `camera_angle` | `str` | Yes | Angle + movement descriptor (e.g., `"eye-level smooth dolly-in"`, `"low-angle lateral tracking"`). |
-| `shot_size` | `str \| null` | No | Framing scale: `"WS"`, `"MWS"`, `"MS"`, `"MCU"`, `"CU"`, or `"ECU"`. |
-| `focal_length_mm` | `int \| null` | No | Prime lens focal length in mm (e.g., `24`, `35`, `50`, `85`, `100`). |
-| `lighting_spec` | `str \| null` | No | Motivated key light source, Kelvin temperature, and contrast ratio. |
-| `blocking_and_temporal_flow` | `str \| null` | No | Beat-by-beat physical progression from `t=0s` to `duration_sec`. |
-| `audio_mode` | `str \| null` | No | `"auto"` (default), `"on_camera"` (lip-synced speech), `"off_camera_vo"` (closed lips + ducked VO mix in `tpvg_tts`), or `"diegetic_only"` (no speech). |
-| `tts_voice` / `tts_style` | `str \| null` | No | Per-shot override for `--mode tpvg_tts` (`gemini-3.8-flash-tts` voice name & acting style). |
-| `evaluation_criteria` | `str` | Yes | Shot-specific checklist passed to Auto-Rater v2 (`gemini-3.8-flash` AVU). |
-| `fails_if` | `str \| null` | No | Concrete observable failure condition appended to the Auto-Rater v2 rubric. |
-| `spoken_dialogue` | `str \| null` | No | Verbatim spoken line (paced `<= 2.2 words/sec` so speech finishes `~2s` before `duration_sec`). |
-| `mode_override` | `str \| null` | No | Per-shot override: `"reference"`, `"i2v_chaining"`, `"video_extend"`, or `"tpvg_tts"`. |
-| `duration_sec` | `int \| null` | No | Per-shot duration (`3–15s` for R2V/I2V/T2V; auto-clamped to `3–10s` for `video_extend` and two-frame interpolation). |
 
----
+Field                        | Type          | Req | Description
+:--------------------------- | :------------ | :-: | :----------
+`scene_number`               | `int`         | Yes | `1`-based shot index (`1`, `2`, `3`, ...).
+`description`                | `str`         | Yes | Visual setting, subject action, and material detail (single unbroken camera take).
+`camera_angle`               | `str`         | Yes | Angle + movement descriptor (e.g., `"eye-level smooth dolly-in"`, `"low-angle lateral tracking"`).
+`shot_size`                  | `str \| null` | No  | Framing scale: `"WS"`, `"MWS"`, `"MS"`, `"MCU"`, `"CU"`, or `"ECU"`.
+`focal_length_mm`            | `int \| null` | No  | Prime lens focal length in mm (e.g., `24`, `35`, `50`, `85`, `100`).
+`lighting_spec`              | `str \| null` | No  | Motivated key light source, Kelvin temperature, and contrast ratio.
+`blocking_and_temporal_flow` | `str \| null` | No  | Beat-by-beat physical progression from `t=0s` to `duration_sec`.
+`audio_mode`                 | `str \| null` | No  | `"auto"` (default), `"on_camera"` (lip-synced speech), `"off_camera_vo"` (closed lips + ducked VO mix in `tpvg_tts`), or `"diegetic_only"` (no speech).
+`tts_voice` / `tts_style`    | `str \| null` | No  | Per-shot override for `--mode tpvg_tts` (`gemini-3.8-flash-tts` voice name & acting style).
+`evaluation_criteria`        | `str`         | Yes | Shot-specific checklist passed to Auto-Rater v2 (`gemini-3.8-flash` AVU).
+`fails_if`                   | `str \| null` | No  | Concrete observable failure condition appended to the Auto-Rater v2 rubric.
+`spoken_dialogue`            | `str \| null` | No  | Verbatim spoken line (paced `<= 2.2 words/sec` so speech finishes `~2s` before `duration_sec`).
+`mode_override`              | `str \| null` | No  | Per-shot override: `"reference"`, `"i2v_chaining"`, `"video_extend"`, or `"tpvg_tts"`.
+`duration_sec`               | `int \| null` | No  | Per-shot duration (`3-15s` for R2V/I2V/T2V; auto-clamped to `3-10s` for `video_extend` and two-frame interpolation).
+
+--------------------------------------------------------------------------------
 
 ## 3. Continuity & Voice Modes (`--mode`)
 
-| Mode (`--mode`) | Visual & Voice Conditioning | Best Use Case |
-| :--- | :--- | :--- |
-| **`reference`** *(Mode A)* | Concurrent `#FFFFFF` `task="reference_to_video"` (`3s–15s`, `0.0s` hard-cuts) | Fast multi-location montages (`~3x` wall-clock speed) |
-| **`i2v_chaining`** *(Mode B)* | Shot 1 R2V → Shots `2..N` `<FIRST_FRAME>` `task="image_to_video"` (`3s–15s`) | Controlled sequential camera progressions |
-| **`video_extend`** *(Mode C)* | Shot 1 R2V → Shots `2..N` `5.0s` `<VIDEO_0>` tail `task="extend"` (`3s–10s`) | Same-room unbroken single-take commercials |
-| **`hybrid`** *(Mode D)* | Per-shot `mode_override` mixing `reference` act breaks + `video_extend` | Multi-act commercials across distinct rooms |
-| **`tpvg_tts`** *(Mode E)* | **`gemini-3.8-flash-tts` (`gemini-3.8-tts`)** synthesizes `shot_k_tts.wav` first → **`on_camera`** shots pass `<= 3.0s × 5` WAV chunks as TPVG `type: "audio"` R2V voice refs (lip-synced in exact TTS voice) + TPVG-unlocked `video_extend`; **`off_camera_vo`** shots render pure diegetic video and mux `-16 LUFS` TTS WAV with `1100 Hz` formant notch + ducking | Studio-grade consistent voice acting, multilingual/accent control, custom replicated voices, and hybrid spokesperson + product-macro ads |
+Mode (`--mode`)               | Visual & Voice Conditioning                                                                                                                                                                                                                                                                                                                                          | Best Use Case
+:---------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :------------
+**`reference`** *(Mode A)*    | Concurrent `#FFFFFF` `task="reference_to_video"` (`3s-15s`, `0.0s` hard-cuts)                                                                                                                                                                                                                                                                                        | Fast multi-location montages (`~3x` wall-clock speed)
+**`i2v_chaining`** *(Mode B)* | Shot 1 R2V → Shots `2..N` `<FIRST_FRAME>` `task="image_to_video"` (`3s-15s`)                                                                                                                                                                                                                                                                                         | Controlled sequential camera progressions
+**`video_extend`** *(Mode C)* | Shot 1 R2V → Shots `2..N` `5.0s` `<VIDEO_0>` tail `task="extend"` (`3s-10s`)                                                                                                                                                                                                                                                                                         | Same-room unbroken single-take commercials
+**`hybrid`** *(Mode D)*       | Per-shot `mode_override` mixing `reference` act breaks + `video_extend`                                                                                                                                                                                                                                                                                              | Multi-act commercials across distinct rooms
+**`tpvg_tts`** *(Mode E)*     | **`gemini-3.8-flash-tts` (`gemini-3.8-tts`)** synthesizes `shot_k_tts.wav` first → **`on_camera`** shots pass `<= 3.0s × 5` WAV chunks as TPVG `type: "audio"` R2V voice refs (lip-synced in exact TTS voice) + TPVG-unlocked `video_extend`; **`off_camera_vo`** shots render pure diegetic video and mux `-16 LUFS` TTS WAV with `1100 Hz` formant notch + ducking | Studio-grade consistent voice acting, multilingual/accent control, custom replicated voices, and hybrid spokesperson + product-macro ads
 
----
+--------------------------------------------------------------------------------
 
-## 4. Hierarchical Multi-Scene Schema (`--scenes-json` for `60s–120s+`)
+## 4. Hierarchical Multi-Scene Schema (`--scenes-json` for `60s-120s+`)
 
 ```json
 {
@@ -118,7 +123,7 @@ Generated automatically during `--stage plan` (`director_plan.json`) or authored
   "scenes": [
     {
       "scene_id": "act_1_hook",
-      "title": "Act 1 — Morning Sanctuary Hook",
+      "title": "Act 1 - Morning Sanctuary Hook",
       "mode": "tpvg_tts",
       "duration_sec": 10,
       "scene_plate_prompt": "Sunlit beige travertine spa bathroom vanity with tall linen curtains, 16:9 architectural interior, zero people, zero text",
