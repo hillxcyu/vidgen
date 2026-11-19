@@ -637,8 +637,8 @@ def deploy_to_x20():
     subprocess.run(["chmod", "-R", "a+rX", str(X20_DIR)], check=True)
     print(f"Set world-readable permissions on {X20_DIR}")
     
-    # Verify curl
-    url = "https://x20web.corp.google.com/~xcyu/reports/r2v_omini_flash_1_1/"
+    # Verify output
+    url = os.getenv("REPORT_URL", "http://localhost:8080/reports/r2v_omni_flash/")
     print(f"\n🎉 Deployment complete! Live URL:\n{url}\n")
 
 

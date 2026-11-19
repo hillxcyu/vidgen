@@ -29,8 +29,8 @@ SUITE_DIR = Path("benchmarks/suite")
 DATA_FILE = OUTPUT_DIR / "studio_benchmark_data.json"
 HTML_FILE = OUTPUT_DIR / "index.html"
 
-X20_TARGET = Path("/google/data/rw/users/xc/xcyu/www/reports/r2v_omini_flash_1_1/studio_bg_comparison")
-REPORT_URL = "https://x20web.corp.google.com/~xcyu/reports/r2v_omini_flash_1_1/studio_bg_comparison/"
+X20_TARGET = Path(os.getenv("REPORT_OUTPUT_DIR", "benchmarks/studio_bg/published"))
+REPORT_URL = os.getenv("REPORT_URL", "http://localhost:8080/reports/studio_bg_comparison/")
 
 
 def get_client() -> genai.Client:

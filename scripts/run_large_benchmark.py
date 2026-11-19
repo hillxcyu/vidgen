@@ -910,7 +910,7 @@ def deploy_to_x20() -> None:
     subprocess.run(["chmod", "-R", "a+rX", str(X20_DIR)], check=True)
     print(f"Applied world-readable permissions on {X20_DIR}")
     print("\n🎉 Live Report URL:")
-    print("https://x20web.corp.google.com/~xcyu/reports/r2v_omini_flash_1_1/\n")
+    print(os.getenv("REPORT_URL", "http://localhost:8080/reports/r2v_omni_flash/") + "\n")
 
 
 def run_suite() -> None:
