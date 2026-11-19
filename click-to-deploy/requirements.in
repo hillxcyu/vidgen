@@ -1,0 +1,16 @@
+google-adk[gcp,otel-gcp]>=2.6.0,<=2.7.1
+google-cloud-aiplatform[agent-engines]>=1.156.0
+opentelemetry-resourcedetector-gcp<=1.12.0a0
+gcsfs>=2024.11.0
+a2a-sdk[http-server]>=1.0,<2
+aiohttp>=3.10.0
+google-cloud-logging>=3.12.0,<4.0.0
+google-genai>=2.21.0
+google-cloud-storage>=2.10.0
+pydantic>=2.0.0
+opencv-python-headless>=4.8.0
+fastapi>=0.110.0
+uvicorn>=0.28.0
+jinja2>=3.1.0
+python-multipart>=0.0.9
+python-dotenv>=1.0.0

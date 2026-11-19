@@ -1,0 +1,50 @@
+file_type: demo
+type: application
+title: Multi-Act Commercial Video Studio with Gemini Omni and ADK
+thumbnail_summary: Produce continuity-locked 30s to 90s+ multi-act commercials using Gemini Omni 1.2 Flash, Gemini 3.8 Flash Agentic Video Understanding, and 360p Draft Mode upscaling.
+purpose: |
+  Built for **Chief Marketing Officers, Brand Creative Directors, and Retail Media Teams**, this interactive studio demonstrates how to break the 15-second generative video ceiling without losing character, product, or audio continuity.
+
+  During a live customer pitch, sellers walk buyers through pinned 90-second multi-act retail commercials or launch a new production from a creative brief. Viewers watch a multi-agent Google ADK 2.0 pipeline lock a studio-white product anchor, chain audio-intact video extensions, automatically heal weak shots via Gemini 3.8 Flash quality gating, and upscale winning clips from 360p drafts to 720p or 1080p.
+business_value: |
+  * **Cut Generative Retry Waste by 3.5x to 5x:** Runs creative iterations, quality scoring, and self-healing in 360p Draft Mode before concurrently upscaling only winning clips to 720p, 1080p, or 4K.
+  * **Eliminate Multi-Shot Production Bottlenecks:** Automates 30s to 90s+ multi-act commercials with locked product packaging and consistent spokesperson voiceovers, compressing studio turnaround from weeks to minutes.
+  * **Guarantee Brand-Ready Quality at Scale:** Enforces automated multimodal scoring and spoken-dialogue accuracy checks before human review, reducing manual QA and post-production re-edits.
+technical_value: |
+  * **Unified Gemini Omni Continuity Engine:** Combines studio-white Reference-to-Video, 5-second audio-intact Video Extension, and zero-reasoning Upscale tasks on Vertex AI with deterministic OpenCV prefix trimming to eliminate VAE drift.
+  * **Agentic Video Understanding Quality Gate:** Uses Gemini 3.8 Flash with server-side Agentic Video Understanding, high-resolution keyframes, and audio tail analysis to trigger autonomous first-and-last frame self-healing when scores fall below threshold.
+  * **Serverless Multi-Agent Runtime:** Built on Google ADK 2.0 and FastAPI with real-time SSE trajectory streaming, deployed on Cloud Run behind Identity-Aware Proxy with Cloud Storage showcase persistence.
+owner: xcyu
+team_owner: 1670033130013
+demo_guide: https://docs.google.com/document/d/1C-o1E5FQK6urQYhxo_8rrmjd_ttvCn8V7tong7WVxiw/edit
+products:
+  - generative_ai_on_vertex_ai
+  - vertex_ai_agent_engine
+  - cloud_run
+  - cloud_storage
+industries:
+  - retail
+  - media_entertainment
+artifacts:
+  - title: Live Interactive Demo Application
+
+    type: live_application
+
+    link: https://vidgen-frontend-440790012685.asia-east1.run.app
+
+  - title: Customer Pitch Deck & GTM Showcase
+
+    type: slide_deck
+
+    link: https://docs.google.com/presentation/d/1b5jlgCWk3Q2LFr5tDYAZZps6Pw_N2_EaIfbAwk9M_3A/edit
+
+  - title: GitHub Source Repository
+
+    type: code_repo
+
+    link: https://github.com/hillxcyu/vidgen
+featured_artifact_title: Live Interactive Demo Application
+# images: Upload hero card and screenshots via the go/demos editor or a GCS bucket (https://storage.cloud.google.com/...), then uncomment:
+#   - https://storage.cloud.google.com/<bucket>/<hero-card>.png
+# click_to_deploy_path: Uncomment after go/demos assigns your Demo ID (<ID>-<slug>/tree/main/click-to-deploy):
+#   <DEMO_ID>-vidgen-omni/tree/main/click-to-deploy

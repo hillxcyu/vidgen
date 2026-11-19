@@ -1,0 +1,8 @@
+{
+  "compute_require_shielded_vm": "true",
+  "compute_vm_external_ip_access": "true",
+  "iam_allowed_policy_member_domains": "true",
+  "run_allowed_ingress": "true",
+  "storage_public_access_prevention": "true",
+  "storage_uniform_bucket_level_access": "true"
+}
