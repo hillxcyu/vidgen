@@ -3,6 +3,7 @@ venv/
 .env
 adc.json
 .agents/
+.google-agents-cli/
 PLAN.md
 DEFINE.md
 ACTION.md

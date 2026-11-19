@@ -23,14 +23,14 @@ from app.config import Config, get_genai_client
 from app.tools.omni_client import generate_omni_clip, build_omni_control_string
 from app.tools.video_parser import create_agentic_video_part
 
-BENCHMARK_DIR = Path("/usr/local/google/home/xcyu/projects/reusable/vidgen/benchmarks")
+BENCHMARK_DIR = Path("benchmarks")
 BENCHMARK_DIR.mkdir(parents=True, exist_ok=True)
 
-REF_IMG_PATH = BENCHMARK_DIR / "reference_xcyu.png"
+REF_IMG_PATH = BENCHMARK_DIR / "reference_portrait.png"
 VIDEO_OPT_PATH = BENCHMARK_DIR / "video_pipeline_optimized.mp4"
 VIDEO_SMP_PATH = BENCHMARK_DIR / "video_simple_prompt.mp4"
 REPORT_PATH = BENCHMARK_DIR / "index.html"
-X20_DIR = Path("/google/data/rw/users/xc/xcyu/www/reports/r2v_omini_flash_1_1")
+X20_DIR = Path(os.getenv("REPORT_OUTPUT_DIR", "benchmarks/published"))
 
 
 def generate_reference_image(client: genai.Client) -> bytes:

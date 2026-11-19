@@ -27,7 +27,7 @@ from app.config import get_genai_client
 from scripts.benchmark_cases import BENCHMARK_CASES
 
 OUTPUT_DIR = Path("benchmarks/suite")
-X20_DIR = Path("/google/data/rw/users/xc/xcyu/www/reports/r2v_omini_flash_1_1")
+X20_DIR = Path(os.getenv("REPORT_OUTPUT_DIR", "benchmarks/published"))
 DATA_FILE = OUTPUT_DIR / "benchmark_data.json"
 
 
