@@ -44,7 +44,6 @@ artifacts:
 
     link: https://github.com/hillxcyu/vidgen
 featured_artifact_title: Live Interactive Demo Application
-# images: Upload hero card and screenshots via the go/demos editor or a GCS bucket (https://storage.cloud.google.com/...), then uncomment:
-#   - https://storage.cloud.google.com/<bucket>/<hero-card>.png
-# click_to_deploy_path: Uncomment after go/demos assigns your Demo ID (<ID>-<slug>/tree/main/click-to-deploy):
-#   <DEMO_ID>-vidgen-omni/tree/main/click-to-deploy
+images:
+  - https://screenshot.googleplex.com/tpBJaMnUg5AA7sJ.png
+click_to_deploy_path: 2376-multi-act-commercial-video-studio-with-gemini-omni-and-adk/tree/main/click-to-deploy
